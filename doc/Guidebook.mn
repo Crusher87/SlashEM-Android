@@ -783,6 +783,10 @@ Sit down.
 .lp #technique
 Perform a role or race specific technique. A menu showing the techniques
 available to your character will be displayed.
+.lp #terrain
+Show the known map without monsters, objects, and traps, so that
+what they cover can be seen.  A menu lets you keep the traps, or the
+traps and the objects.
 .lp #turn
 Turn undead.
 .lp #twoweapon

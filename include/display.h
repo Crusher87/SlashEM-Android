@@ -423,4 +423,9 @@
 #define memory_is_invisible(x,y) glyph_is_invisible(levl[x][y].glyph)
 #define remembered_object(x,y) glyph_to_obj(levl[x][y].glyph)
 #endif
+/* reveal_terrain() (#terrain) subsets of the map to show */
+#define TER_MAP		0x01
+#define TER_TRP		0x02
+#define TER_OBJ		0x04
+
 #endif /* DISPLAY_H */

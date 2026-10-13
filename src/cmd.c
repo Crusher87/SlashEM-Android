@@ -167,6 +167,7 @@ STATIC_DCL int NDECL(wiz_port_debug);
 #  endif
 # endif
 STATIC_PTR int NDECL(enter_explore_mode);
+STATIC_PTR int NDECL(doterrain);
 STATIC_PTR int NDECL(doattributes);
 STATIC_PTR int NDECL(doconduct); /**/
 STATIC_PTR boolean NDECL(minimal_enlightenment);
@@ -546,6 +547,79 @@ enter_explore_mode()
 		}
 	}
 	return 0;
+}
+
+/* #terrain command -- show known map, inspired by crawl's '|' command */
+STATIC_PTR int
+doterrain()
+{
+	winid men;
+	menu_item *sel;
+	anything any;
+	int n;
+	int which;
+
+	/*
+	 * normal play: choose between known map without mons, obj, and traps
+	 *  (to see underlying terrain only), or
+	 *  known map without mons and objs (to see traps under mons and objs), or
+	 *  known map without mons (to see objects under monsters);
+	 * explore mode: normal choices plus full map (w/o mons, objs, traps).
+	 */
+	men = create_nhwindow(NHW_MENU);
+	start_menu(men);
+	any.a_void = 0;
+	any.a_int = 1;
+	add_menu(men, NO_GLYPH, &any, 0, 0, ATR_NONE,
+		 "known map without monsters, objects, and traps",
+		 MENU_SELECTED);
+	any.a_int = 2;
+	add_menu(men, NO_GLYPH, &any, 0, 0, ATR_NONE,
+		 "known map without monsters and objects",
+		 MENU_UNSELECTED);
+	any.a_int = 3;
+	add_menu(men, NO_GLYPH, &any, 0, 0, ATR_NONE,
+		 "known map without monsters",
+		 MENU_UNSELECTED);
+	if (discover || wizard) {
+	    any.a_int = 4;
+	    add_menu(men, NO_GLYPH, &any, 0, 0, ATR_NONE,
+		     "full map without monsters, objects, and traps",
+		     MENU_UNSELECTED);
+	}
+	end_menu(men, "View which?");
+
+	n = select_menu(men, PICK_ONE, &sel);
+	destroy_nhwindow(men);
+	/*
+	 * n <  0: player used ESC to cancel;
+	 * n == 0: preselected entry was explicitly chosen and got toggled off;
+	 * n == 1: preselected entry was implicitly chosen via <space>|<enter>;
+	 * n == 2: another entry was explicitly chosen, so skip preselected one.
+	 */
+	which = (n < 0) ? -1 : (n == 0) ? 1 : sel[0].item.a_int;
+	if (n > 1 && which == 1)
+	    which = sel[1].item.a_int;
+	if (n > 0)
+	    free((genericptr_t) sel);
+
+	switch (which) {
+	case 1:	/* known map */
+	    reveal_terrain(0, TER_MAP);
+	    break;
+	case 2:	/* known map with known traps */
+	    reveal_terrain(0, TER_MAP | TER_TRP);
+	    break;
+	case 3:	/* known map with known traps and objects */
+	    reveal_terrain(0, TER_MAP | TER_TRP | TER_OBJ);
+	    break;
+	case 4:	/* full map */
+	    reveal_terrain(1, TER_MAP);
+	    break;
+	default:
+	    break;
+	}
+	return 0;	/* no time elapses */
 }
 
 
@@ -2261,6 +2335,7 @@ struct ext_func_tab extcmdlist[] = {
 	{"shout", "say something loud", doyell, TRUE}, /* jrn */
 #endif
 	{"technique", "perform a technique", dotech, TRUE},
+	{"terrain", "show map without obstructions", doterrain, TRUE},
 	{"turn", "turn undead", doturn, TRUE},
 	{"twoweapon", "toggle two-weapon combat", dotwoweapon, FALSE},
 	{"untrap", "untrap something", dountrap, FALSE},

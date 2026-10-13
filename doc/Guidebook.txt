@@ -1035,6 +1035,11 @@
                the  techniques  available  to  your  character will be dis-
                played.
 
+          #terrain
+               Show the known map without monsters, objects, and traps,  so
+               that  what  they cover can be seen.  A menu lets you keep the
+               traps, or the traps and the objects.
+
           #turn
                Turn undead.
 

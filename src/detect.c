@@ -17,6 +17,7 @@ STATIC_DCL boolean FDECL(check_map_spot, (int,int,CHAR_P,unsigned));
 STATIC_DCL boolean FDECL(clear_stale_map, (CHAR_P,unsigned));
 STATIC_DCL void FDECL(sense_trap, (struct trap *,XCHAR_P,XCHAR_P,int));
 STATIC_DCL void FDECL(show_map_spot, (int,int));
+STATIC_DCL int FDECL(terrain_glyph, (int,int,int,int,int));
 STATIC_PTR void FDECL(findone,(int,int,genericptr_t));
 STATIC_PTR void FDECL(openone,(int,int,genericptr_t));
 
@@ -1318,6 +1319,95 @@ int
 dosearch()
 {
 	return(dosearch0(0));
+}
+
+/* the glyph that #terrain shows at x,y */
+STATIC_OVL int
+terrain_glyph(x, y, full, which_subset, default_glyph)
+int x, y, full, which_subset, default_glyph;
+{
+	struct rm *lev = &levl[x][y];
+	int glyph;
+	uchar seenv;
+
+	if (full) {
+	    /* the actual terrain, as if every spot had been seen */
+	    seenv = lev->seenv;
+	    lev->seenv = SVALL;
+	    glyph = back_to_glyph(x, y);
+	    lev->seenv = seenv;
+	} else if (!level.flags.hero_memory) {
+	    glyph = cansee(x, y) ? back_to_glyph(x, y) : default_glyph;
+	} else {
+#ifdef DISPLAY_LAYERS
+	    /* the map memory keeps background, trap and object apart, so
+	       we can show the remembered terrain under remembered things;
+	       a remembered unseen monster ('I') is never shown */
+	    if ((which_subset & TER_OBJ) && lev->mem_obj)
+		glyph = lev->mem_corpse ? body_to_glyph(lev->mem_obj - 1)
+				: objnum_to_glyph(lev->mem_obj - 1);
+	    else if ((which_subset & TER_TRP) && lev->mem_trap)
+		glyph = cmap_to_glyph(lev->mem_trap - 1 + MAXDCHARS);
+	    else
+		glyph = cmap_to_glyph(lev->mem_bg);
+#else
+	    struct trap *t;
+
+	    glyph = lev->glyph;
+	    if (((glyph_is_object(glyph) && !(which_subset & TER_OBJ))
+		    || glyph_is_invisible(glyph))
+		    && (which_subset & TER_TRP) && !covers_traps(x, y)
+		    && (t = t_at(x, y)) != 0 && t->tseen)
+		glyph = trap_to_glyph(t);
+	    if ((glyph_is_object(glyph) && !(which_subset & TER_OBJ))
+		    || (glyph_is_trap(glyph) && !(which_subset & TER_TRP))
+		    || glyph_is_invisible(glyph))
+		glyph = lev->seenv ? back_to_glyph(x, y) : default_glyph;
+#endif
+	}
+	return glyph;
+}
+
+/* idea from crawl; show known portion of map without any monsters,
+   objects, or traps occluding the view of the underlying terrain */
+void
+reveal_terrain(full, which_subset)
+int full;		/* wizard|explore modes allow player to request full map */
+int which_subset;	/* when not full, whether to suppress objs and/or traps */
+{
+	int x, y, default_glyph;
+	char buf[BUFSZ];
+	/* there is a TER_MAP bit too; we always show map regardless of it */
+	boolean keep_traps = (which_subset & TER_TRP) != 0,
+		keep_objs = (which_subset & TER_OBJ) != 0;
+
+	if ((Hallucination || Stunned || Confusion) && !full) {
+	    You("are too disoriented for this.");
+	    return;
+	}
+	default_glyph = cmap_to_glyph(level.flags.arboreal ? S_tree : S_stone);
+
+	/* this also covers up the view of being engulfed, underwater or
+	   buried, which docrt() will restore below */
+	for (x = 1; x < COLNO; x++)
+	    for (y = 0; y < ROWNO; y++)
+		show_glyph(x, y, terrain_glyph(x, y, full, which_subset,
+					       default_glyph));
+
+	/* hero's location is not highlighted, but the cursor is there */
+	flush_screen(1);
+	if (full) {
+	    Strcpy(buf, "underlying terrain");
+	} else {
+	    Strcpy(buf, "known terrain");
+	    if (keep_traps)
+		Sprintf(eos(buf), "%s traps", keep_objs ? "," : " and");
+	    if (keep_objs)
+		Strcat(buf, " and objects");
+	}
+	pline("Showing %s only...", buf);
+	display_nhwindow(WIN_MAP, TRUE);	/* wait */
+	docrt();	/* redraw the screen, restoring regular map */
 }
 
 /*detect.c*/
