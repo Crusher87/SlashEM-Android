@@ -3080,6 +3080,7 @@ struct obj *obj;
 			You_cant("see through all the sticky goop on your %s.",
 				body_part(FACE));
 	}
+	setnotworn(obj);	/* it might be wielded */
 	if (obj->unpaid) {
 		verbalize("You used it, you bought it!");
 		bill_dummy_object(obj);

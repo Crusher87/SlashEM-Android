@@ -214,7 +214,8 @@ const char *verb;
 		    map_background(x, y, 0);
 		    newsym(x, y);
 		}
-		water_damage(obj, FALSE, FALSE);
+		/* a potion of acid explodes and is gone */
+		if (water_damage(obj, FALSE, FALSE)) return TRUE;
 	} else if (u.ux == x && u.uy == y &&
 		(!u.utrap || u.utraptype != TT_PIT) &&
 		(t = t_at(x,y)) != 0 && t->tseen &&
@@ -1343,8 +1344,16 @@ boolean at_stairs, falling, portal;
 		mnexto(mtmp);
 
 	    if ((mtmp = m_at(u.ux, u.uy)) != 0) {
-		impossible("mnexto failed (do.c)?");
-		(void) rloc(mtmp, FALSE);
+		/* there used to be an unconditional impossible("mnexto
+		   failed") here, but it's not impossible and we're prepared
+		   to cope with the situation, so only say something when
+		   debugging */
+#ifdef WIZARD
+		if (wizard) pline("(monster in hero's way)");
+#endif
+		if (!rloc(mtmp, TRUE) || (mtmp = m_at(u.ux, u.uy)) != 0)
+		    /* no room to move it; send it away, to return later */
+		    m_into_limbo(mtmp);
 	    }
 	}
 

@@ -153,8 +153,16 @@ in_trouble()
 	if(near_capacity() >= EXT_ENCUMBER && AMAX(A_STR)-ABASE(A_STR) > 3)
 		return(TROUBLE_COLLAPSING);
 
+	/* surrounded by impassible rock, regardless of the state of your
+	   own location (for example, inside a doorless closet, or inside
+	   solid rock after wall-phasing ran out); secret doors and
+	   corridors can be found by searching, so they don't count */
 	for (i= -1; i<=1; i++) for(j= -1; j<=1; j++) {
-		if (!isok(u.ux+i, u.uy+j) || IS_ROCK(levl[u.ux+i][u.uy+j].typ)
+		if (!i && !j) continue;
+		if (!isok(u.ux+i, u.uy+j) ||
+		    (IS_ROCK(levl[u.ux+i][u.uy+j].typ) &&
+		     levl[u.ux+i][u.uy+j].typ != SDOOR &&
+		     levl[u.ux+i][u.uy+j].typ != SCORR)
 		    || (blocked_boulder(i,j) && !throws_rocks(youmonst.data)))
 			count++;
 	}
@@ -340,9 +348,22 @@ register int trouble;
 		    flags.botl = 1;
 		    break;
 	    case TROUBLE_STUCK_IN_WALL:
-		    Your("surroundings change.");
 		    /* no control, but works on no-teleport levels */
-		    (void) safe_teleds(FALSE);
+		    if (safe_teleds(FALSE)) {
+			Your("surroundings change.");
+		    } else {
+			/* safe_teleds() couldn't find a safe place; perhaps
+			   the level is completely full.  As a last resort,
+			   confer intrinsic wall/rock-phazing.  Hero might get
+			   stuck again fairly soon....
+			   Without something like this, fix_all_troubles can
+			   get stuck in an infinite loop trying to fix
+			   STUCK_IN_WALL and repeatedly failing. */
+			set_itimeout(&HPasses_walls, (long)(d(4,4) + 4));
+			/* how else could you move between packed rocks or
+			   among lattice forming "solid" rock? */
+			You_feel("much slimmer.");
+		    }
 		    break;
 	    case TROUBLE_CURSED_LEVITATION:
 		    if (Cursed_obj(uarmf, LEVITATION_BOOTS)) {
@@ -837,6 +858,14 @@ pleased(g_align)
 	/* don't use p_trouble, worst trouble may get fixed while praying */
 	int trouble = in_trouble();	/* what's your worst difficulty? */
 	int pat_on_head = 0, kick_on_butt;
+	/* Negative luck is normally impossible here (can_pray() forces
+	   prayer failure in that situation), but it's possible for Luck
+	   to drop during the period of prayer occupation and become
+	   negative by the time we get here (e.g. a delayed killing of a
+	   peaceful by a stinking cloud).  We don't bother remembering
+	   start-of-prayer luck, just make sure it's at least -1 so that
+	   the random numbers below never get a range of zero or less. */
+	int prayer_luck = max(Luck, -1);
 
 	You_feel("that %s is %s.", align_gname(g_align),
 	    u.ualign.record >= DEVOUT ?
@@ -868,7 +897,8 @@ pleased(g_align)
 	    /* if hero was in trouble, but got better, no special favor */
 	    if (p_trouble == 0) pat_on_head = 1;
 	} else {
-	    int action = rn1(Luck + (on_altar() ? 3 + on_shrine() : 2), 1);
+	    int action = rn1(prayer_luck + (on_altar() ? 3 + on_shrine() : 2), 1);
+	    int tryct = 0;
 
 	    if (!on_altar()) action = min(action, 3);
 	    if (u.ualign.record < STRIDENT)
@@ -885,7 +915,8 @@ pleased(g_align)
 		    break;
 
 	    case 3: fix_worst_trouble(trouble);
-	    case 2: while ((trouble = in_trouble()) > 0)
+	    case 2: /* arbitrary number of tries */
+		    while ((trouble = in_trouble()) > 0 && (++tryct < 10))
 		    fix_worst_trouble(trouble);
 		    break;
 
@@ -898,7 +929,7 @@ pleased(g_align)
        fixed or there were no troubles to begin with; hallucination
        won't be in effect so special handling for it is superfluous */
     if(pat_on_head)
-	switch(rn2((Luck + 6)>>1)) {
+	switch(rn2((prayer_luck + 6)>>1)) {
 	case 0:	break;
 	case 1:
 	    if (uwep && (welded(uwep) || uwep->oclass == WEAPON_CLASS ||

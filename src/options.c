@@ -3365,7 +3365,9 @@ doset()
 			getlin(buf, buf2);
 			if (buf2[0] == '\033')
 			    continue;
-			Sprintf(buf, "%s:%s", compopt[opt_indx].name, buf2);
+			Sprintf(buf, "%s:", compopt[opt_indx].name);
+			(void) strncat(eos(buf), buf2,
+				       (sizeof buf - 1 - strlen(buf)));
 			/* pass the buck */
 			parseoptions(buf, setinitial, fromfile);
 		    }
@@ -3705,7 +3707,7 @@ boolean setinitial,setfromfile;
 	int totalapes = 0, numapes[2] = {0,0};
 	menu_item *pick_list = (menu_item *)0;
 	anything any;
-	char apebuf[BUFSZ];
+	char apebuf[2 + BUFSZ]; /* so &apebuf[1] is BUFSZ long for getlin() */
 	struct autopickup_exception *ape;
 	static const char *action_titles[] = {
 		"a", "add new autopickup exception",

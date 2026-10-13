@@ -1497,7 +1497,9 @@ register struct monst *mon;
 
 	if (fmon == (struct monst *)0)  panic ("relmon: no fmon available.");
 
-	remove_monster(mon->mx, mon->my);
+	/* a monster which failed to arrive on this level isn't on the map */
+	if (level.monsters[mon->mx][mon->my] == mon)
+	    remove_monster(mon->mx, mon->my);
 
 	if(mon == fmon) fmon = fmon->nmon;
 	else {
@@ -2284,6 +2286,16 @@ mnexto(mtmp)	/* Make monster mtmp next to you (if possible) */
 	return;
 }
 
+/* A monster could not be placed on the current level (it's full):
+   take it off the level and send it back here, to arrive the next
+   time the hero comes to this level, instead of losing it. */
+void
+m_into_limbo(mtmp)
+struct monst *mtmp;
+{
+	migrate_to_level(mtmp, ledger_no(&u.uz), MIGR_APPROX_XY, (coord *)0);
+}
+
 /* mnearto()
  * Put monster near (or at) location if possible.
  * Returns:
@@ -2307,6 +2319,7 @@ boolean move_other;	/* make sure mtmp gets to x, y! so move m_at(x, y) */
 			remove_worm(othermon);
 		else
 			remove_monster(x, y);
+		othermon->mx = othermon->my = 0; /* 'othermon' is off the map */
 	}
 
 	newx = x;
@@ -2317,15 +2330,23 @@ boolean move_other;	/* make sure mtmp gets to x, y! so move m_at(x, y) */
 		 * migrating_mons that need to be placed will cause
 		 * no end of trouble.
 		 */
-		if (!enexto(&mm, newx, newy, mtmp->data)) return(FALSE);
+		if (!enexto(&mm, newx, newy, mtmp->data)) {
+		    /* don't leave othermon in limbo on the monster list */
+		    if (othermon) m_into_limbo(othermon);
+		    return(FALSE);
+		}
 		newx = mm.x; newy = mm.y;
 	}
 
 	rloc_to(mtmp, newx, newy);
 
 	if (move_other && othermon) {
-	    othermon->mx = othermon->my = 0;
 	    (void) mnearto(othermon, x, y, FALSE);
+	    if (!othermon->mx) {
+		/* no room left for it here */
+		m_into_limbo(othermon);
+		return(TRUE);
+	    }
 	    if ((othermon->mx != x) || (othermon->my != y))
 		return(TRUE);
 	}

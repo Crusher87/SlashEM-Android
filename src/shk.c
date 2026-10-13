@@ -1717,7 +1717,7 @@ proceed:
 		    else Strcat(sbuf,
 			   "for gold picked up and the use of merchandise.");
 		} else Strcat(sbuf, "for the use of merchandise.");
-		pline(sbuf);
+		pline("%s", sbuf);
 #ifndef GOLDOBJ
 		if (u.ugold + eshkp->credit < dtmp) {
 		    pline("But you don't%s have enough gold%s.",
@@ -4303,7 +4303,10 @@ getcad:
 	if (Invis) Your("invisibility does not fool %s!", shkname(shkp));
 	Sprintf(qbuf,"\"Cad!  You did %ld %s worth of damage!\"  Pay? ",
 		 cost_of_damage, currency(cost_of_damage));
-	if(yn(qbuf) != 'n') {
+	/* only an explicit 'n' refuses; <esc> (hidden 'q') pays, since
+	   refusing angers the shopkeeper and the Android port answers
+	   an open prompt with <esc> when it saves */
+	if(yn_function(qbuf, "yn\033q", 'y') != 'n') {
 		cost_of_damage = check_credit(cost_of_damage, shkp);
 #ifndef GOLDOBJ
 		u.ugold -= cost_of_damage;

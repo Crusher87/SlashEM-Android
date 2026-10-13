@@ -593,11 +593,15 @@ do_mname()
 	}
 	/* special case similar to the one in lookat() */
 	(void) distant_monnam(mtmp, ARTICLE_THE, buf);
-	Sprintf(qbuf, "What do you want to call %s?", buf);
+	Sprintf(qbuf, "What do you want to call %s?",
+		safe_qbuf("", sizeof "What do you want to call ?",
+			  buf, "it", "it"));
 	getlin(qbuf,buf);
 	if(!*buf || *buf == '\033') return(0);
 	/* strip leading and trailing spaces; unnames monster if all spaces */
 	(void)mungspaces(buf);
+	/* names are limited to PL_PSIZ (christen_monst() would chop it) */
+	if (strlen(buf) >= PL_PSIZ) buf[PL_PSIZ - 1] = '\0';
 
 	if (mtmp->data->geno & G_UNIQ)
 	    pline("%s doesn't like being called names!", Monnam(mtmp));
@@ -619,12 +623,17 @@ register struct obj *obj;
 	const char *aname;
 	short objtyp;
 
-	Sprintf(qbuf, "What do you want to name %s %s?",
-		is_plural(obj) ? "these" : "this", xname(obj));
+	Sprintf(qbuf, "What do you want to name %s ",
+		is_plural(obj) ? "these" : "this");
+	Sprintf(eos(qbuf), "%s?", safe_qbuf(qbuf, sizeof "?", xname(obj),
+		is_plural(obj) ? "things" : "thing",
+		is_plural(obj) ? "things" : "thing"));
 	getlin(qbuf, buf);
 	if(!*buf || *buf == '\033')	return;
 	/* strip leading and trailing spaces; unnames item if all spaces */
 	(void)mungspaces(buf);
+	/* names are limited to PL_PSIZ (oname() would chop it) */
+	if (strlen(buf) >= PL_PSIZ) buf[PL_PSIZ - 1] = '\0';
 
 	if (obj->oartifact) {
 		pline_The("artifact seems to resist the attempt.");
@@ -841,10 +850,14 @@ register struct obj *obj;
 	    Sprintf(qbuf,"Call a stream of %s fluid:",
 		    OBJ_DESCR(objects[otemp.otyp]));
 	else
-	    Sprintf(qbuf, "Call %s:", an(xname(&otemp)));
+	    Sprintf(qbuf, "Call %s:", safe_qbuf("", sizeof "Call :",
+				an(xname(&otemp)), "it", "it"));
 	getlin(qbuf, buf);
 	if(!*buf || *buf == '\033')
 		return;
+	/* type names are limited to PL_PSIZ, like other player-given names;
+	   a longer one could overflow the buffers used by xname() */
+	if (strlen(buf) >= PL_PSIZ) buf[PL_PSIZ - 1] = '\0';
 
 	/* clear old name */
 	str1 = &(objects[obj->otyp].oc_uname);

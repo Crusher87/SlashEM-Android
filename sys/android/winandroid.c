@@ -1286,6 +1286,18 @@ char and_yn_function(const char *question, const char *choices, CHAR_P def)
 		destroy_jobject(jb);
 
 		ch = and_nhgetch();
+		/* <esc> (also sent when the app aborts an open prompt to save)
+		   must give the same answer as in the non-popup path below:
+		   callers only expect one of the choices */
+		if(ch == '\033')
+		{
+			if(index(choices, 'q'))
+				ch = 'q';
+			else if(index(choices, 'n'))
+				ch = 'n';
+			else
+				ch = def;
+		}
 		return ch;
 	}
 

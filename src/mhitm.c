@@ -2010,8 +2010,18 @@ int mdead;
 		    if (!rn2(4)) tmp = 127;
 		    if (magr->mcansee && haseyes(madat) && mdef->mcansee &&
 			(perceives(madat) || !mdef->minvis)) {
-			Sprintf(buf, "%s gaze is reflected by %%s %%s.",
-				s_suffix(mon_nam(mdef)));
+			const char *p;
+			char *q;
+
+			/* buf will be used as a format string by
+			   mon_reflects(); the name might be player-given
+			   and contain '%', so double any of those */
+			for (p = s_suffix(mon_nam(mdef)), q = buf;
+				*p && q < &buf[BUFSZ - 40]; p++) {
+			    if (*p == '%') *q++ = '%';
+			    *q++ = *p;
+			}
+			Strcpy(q, " gaze is reflected by %s %s.");
 			if (mon_reflects(magr,
 					 canseemon(magr) ? buf : (char *)0))
 				return(mdead|mhit);
