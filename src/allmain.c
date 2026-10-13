@@ -171,6 +171,7 @@ moveloop()
 
 		    if (flags.bypasses) clear_bypasses();
 		    if(Glib) glibr();
+		    legacy_turn();	/* Slash'EM Legacy feats */
 		    nh_timeout();
 		    run_regions();
 
@@ -616,7 +617,7 @@ newgame()
 	 */
 
 	if(MON_AT(u.ux, u.uy)) mnexto(m_at(u.ux, u.uy));
-	(void) makedog();
+	legacy_newgame(makedog());	/* Slash'EM Legacy: Lineage */
 
 	docrt();
 
@@ -631,6 +632,7 @@ newgame()
 
 	/* Success! */
 	welcome(TRUE);
+	legacy_welcome();
 	return;
 }
 

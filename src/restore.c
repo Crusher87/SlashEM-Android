@@ -484,6 +484,7 @@ unsigned int *stuckid, *steedid;	/* STEED */
 	restore_artifacts(fd);
 	restore_oracles(fd);
 	restore_gamelog(fd);
+	legacy_restore_run_fd(fd);	/* Slash'EM Legacy */
 	if (u.ustuck)
 		mread(fd, (genericptr_t) stuckid, sizeof (*stuckid));
 #ifdef STEED

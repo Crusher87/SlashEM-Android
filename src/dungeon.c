@@ -2206,6 +2206,7 @@ recalc_mapseen()
 		livelog_printf(LL_MINORAC | LL_DUMP,
 			       "completed %d%s Sokoban level",
 			       sokonum, ordin(sokonum));
+		legacy_soko_solved(sokonum);
 	    }
 	    mptr->flags.sokosolved = 1;
 	} else

@@ -778,7 +778,19 @@ validrole(rolenum)
 int
 randrole()
 {
-	return (rn2(SIZE(roles)-1));
+	int i, n = 0;
+
+	/* Legacy: only the roles this profile has opened */
+	for (i = 0; i < SIZE(roles)-1; i++)
+	    if (!legacy_role_locked(i))
+		n++;
+	if (n == SIZE(roles)-1 || !n)
+	    return (rn2(SIZE(roles)-1));
+	n = rn2(n);
+	for (i = 0; i < SIZE(roles)-1; i++)
+	    if (!legacy_role_locked(i) && !n--)
+		break;
+	return i;
 }
 
 
@@ -839,7 +851,7 @@ randrace(rolenum)
 	/* Count the number of valid races */
 	for (i = 0; races[i].noun; i++)
 /*	    if (roles[rolenum].allow & races[i].allow & ROLE_RACEMASK)*/
-	    if (validrace(rolenum,i))
+	    if (validrace(rolenum,i) && !legacy_race_locked(i))
 	    	n++;
 
 	/* Pick a random race */
@@ -847,7 +859,7 @@ randrace(rolenum)
 	if (n) n = rn2(n*100)/100;
 	for (i = 0; races[i].noun; i++)
 /*	    if (roles[rolenum].allow & races[i].allow & ROLE_RACEMASK) {*/
-	    if (validrace(rolenum,i)) {
+	    if (validrace(rolenum,i) && !legacy_race_locked(i)) {
 	    	if (n) n--;
 	    	else return (i);
 	    }
@@ -1053,6 +1065,8 @@ int rolenum, racenum, gendnum, alignnum;
     short allow;
 
     if (rolenum >= 0 && rolenum < SIZE(roles)-1) {
+	if (legacy_role_locked(rolenum))
+	    return FALSE;	/* not opened yet in this Legacy profile */
 	allow = roles[rolenum].allow;
 
 	if (racenum >= 0 && racenum < SIZE(races)-1)
@@ -1070,6 +1084,8 @@ int rolenum, racenum, gendnum, alignnum;
 	return TRUE;
     } else {
 	for (i = 0; i < SIZE(roles)-1; i++) {
+	    if (legacy_role_locked(i))
+		continue;
 	    allow = roles[i].allow;
 	    if (racenum >= 0 && racenum < SIZE(races)-1)
 		allow &= races[racenum].allow;
@@ -1125,6 +1141,8 @@ int rolenum, racenum, gendnum, alignnum;
     short allow;
 
     if (racenum >= 0 && racenum < SIZE(races)-1) {
+	if (legacy_race_locked(racenum))
+	    return FALSE;	/* not opened yet in this Legacy profile */
 	allow = races[racenum].allow;
 
 	if (rolenum >= 0 && rolenum < SIZE(roles)-1)
@@ -1142,6 +1160,8 @@ int rolenum, racenum, gendnum, alignnum;
 	return TRUE;
     } else {
 	for (i = 0; i < SIZE(races)-1; i++) {
+	    if (legacy_race_locked(i))
+		continue;
 	    allow = races[i].allow;
 	    if (rolenum >= 0 && rolenum < SIZE(roles)-1)
 		allow &= roles[rolenum].allow;

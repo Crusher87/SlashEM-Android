@@ -387,6 +387,13 @@ void and_player_selection()
 
 		if(result <= 0)
 		{
+		    /* Slash'EM Legacy: back out to the Hall */
+		    if(legacy_hall_active())
+		    {
+			flags.initrole = flags.initrace = ROLE_NONE;
+			flags.initgend = flags.initalign = ROLE_NONE;
+			return;
+		    }
 		    clearlocks();
 		    and_exit_nhwindows("bye");
 		    terminate(EXIT_SUCCESS);

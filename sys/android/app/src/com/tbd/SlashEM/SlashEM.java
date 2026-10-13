@@ -1,10 +1,14 @@
 package com.tbd.SlashEM;
 
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Insets;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.WindowInsets;
+
+import java.io.File;
 
 import com.tbd.forkfront.ForkFront;
 
@@ -18,6 +22,7 @@ public class SlashEM extends ForkFront
 	public void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
+		addRestartHook();
 
 		// Apps targeting Android 15+ are drawn edge to edge, behind the status
 		// bar, navigation bar and keyboard. Pad the game's root view so nothing
@@ -54,5 +59,45 @@ public class SlashEM extends ForkFront
 			result.onGranted();
 		else
 			super.ensureReadWritePermissions(result);
+	}
+
+	private static boolean sRestartHook;
+
+	// The game closes the app when a game ends. If the player picked "Play
+	// again" (or "New character", or "Hall"), the game leaves a marker file
+	// behind; when it is there, open the game again as the app closes.
+	private void addRestartHook()
+	{
+		if(sRestartHook)
+			return;
+		sRestartHook = true;
+		final Context app = getApplicationContext();
+		Runtime.getRuntime().addShutdownHook(new Thread()
+		{
+			@Override
+			public void run()
+			{
+				if(!restartPending(app))
+					return;
+				try
+				{
+					Intent i = new Intent(app, RestartActivity.class);
+					i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+					i.putExtra(RestartActivity.EXTRA_PID, android.os.Process.myPid());
+					app.startActivity(i);
+				}
+				catch(Exception e)
+				{
+				}
+			}
+		});
+	}
+
+	private static boolean restartPending(Context app)
+	{
+		File ext = app.getExternalFilesDir(null);
+		if(ext != null && new File(ext, "legacy.restart").exists())
+			return true;
+		return new File(app.getFilesDir(), "legacy.restart").exists();
 	}
 }

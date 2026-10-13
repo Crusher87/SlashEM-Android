@@ -13,8 +13,8 @@ android {
     // Play Protect warns about apps targeting more than two versions below
     // the device's Android version, so keep this on the latest release.
     targetSdk 36
-    versionName '0.0.7E7F3-3'
-    versionCode 103
+    versionName '0.0.7E7F3-legacy1'
+    versionCode 104
   }
 
   // A fixed debug key, so every CI build can be installed over the previous

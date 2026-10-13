@@ -415,6 +415,8 @@ register int fd, mode;
 	save_artifacts(fd);
 	save_oracles(fd, mode);
 	save_gamelog(fd, mode);
+	if (perform_bwrite(mode))
+	    legacy_save_run_fd(fd);	/* Slash'EM Legacy */
 	if(ustuck_id)
 	    bwrite(fd, (genericptr_t) &ustuck_id, sizeof ustuck_id);
 #ifdef STEED

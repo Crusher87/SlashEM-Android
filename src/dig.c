@@ -810,8 +810,10 @@ boolean pit_only;
 		/* finally we get to make a hole */
 		if (nohole || pit_only)
 			digactualhole(u.ux, u.uy, BY_YOU, PIT);
-		else
+		else {
+			legacy_feat(F_DIG);	/* opens the Archeologist */
 			digactualhole(u.ux, u.uy, BY_YOU, HOLE);
+		}
 
 		return TRUE;
 	}

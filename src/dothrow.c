@@ -1297,7 +1297,9 @@ int thrown;
 		}
 		(void) snuff_candle(obj);
 		notonhead = (bhitpos.x != mon->mx || bhitpos.y != mon->my);
+		legacy_throwing = TRUE;	/* for the Rogue's feat */
 		obj_gone = thitmonst(mon, obj, thrown);
+		legacy_throwing = FALSE;
 		/* Monster may have been tamed; this frees old mon */
 		mon = m_at(bhitpos.x, bhitpos.y);
 
