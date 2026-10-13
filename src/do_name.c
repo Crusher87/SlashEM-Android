@@ -303,23 +303,33 @@ register struct obj *obj;
 	/* strip leading and trailing spaces; unnames item if all spaces */
 	(void)mungspaces(buf);
 
-	/* relax restrictions over proper capitalization for artifacts */
-	if ((aname = artifact_name(buf, &objtyp)) != 0 && objtyp == obj->otyp)
-		Strcpy(buf, aname);
-
 	if (obj->oartifact) {
 		pline_The("artifact seems to resist the attempt.");
 		return;
-	} else if (restrict_name(obj, buf) || exist_artifact(obj->otyp, buf)) {
-		int n = rn2((int)strlen(buf));
+	}
+
+	/* relax restrictions over proper capitalization for artifacts;
+	   check the canonical spelling whatever the object's type, so that
+	   a name which only matches after capitalization can't be used to
+	   tell whether an unidentified object is the artifact's type */
+	if ((aname = artifact_name(buf, &objtyp)) != 0 &&
+		(restrict_name(obj, aname) || exist_artifact(obj->otyp, aname))) {
+		int n;
 		register char c1, c2;
 
+		/* substitute canonical spelling before slippage */
+		Strcpy(buf, aname);
+		n = rn2((int)strlen(buf));
 		c1 = lowc(buf[n]);
 		do c2 = 'a' + rn2('z'-'a'); while (c1 == c2);
 		buf[n] = (buf[n] == c1) ? c2 : highc(c2);  /* keep same case */
 		pline("While engraving your %s slips.", body_part(HAND));
 		display_nhwindow(WIN_MESSAGE, FALSE);
 		You("engrave: \"%s\".",buf);
+	} else if (aname && objtyp == obj->otyp) {
+		/* naming will turn obj into this artifact, so use the
+		   canonical capitalization (Sting or Orcrist) */
+		Strcpy(buf, aname);
 	}
 	obj = oname(obj, buf);
 }

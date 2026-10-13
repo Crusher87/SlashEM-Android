@@ -202,6 +202,60 @@ register char oclass;
 #endif
 }
 
+/* find the range of objects whose descriptions shuffle_all() shuffles
+   together with otyp (keep this in sync with shuffle_all() below) */
+void
+obj_shuffle_range(otyp, lo_p, hi_p)
+int otyp;		/* input: representative item */
+int *lo_p, *hi_p;	/* output: range that item belongs among */
+{
+	int i, ocls = objects[otyp].oc_class;
+
+	/* default is just the object itself */
+	*lo_p = *hi_p = otyp;
+
+	switch (ocls) {
+	case ARMOR_CLASS:
+	    if (otyp >= HELMET && otyp <= HELM_OF_TELEPATHY)
+		*lo_p = HELMET, *hi_p = HELM_OF_TELEPATHY;
+	    else if (otyp >= LEATHER_GLOVES && otyp <= GAUNTLETS_OF_DEXTERITY)
+		*lo_p = LEATHER_GLOVES, *hi_p = GAUNTLETS_OF_DEXTERITY;
+	    else if (otyp >= ROBE && otyp <= ROBE_OF_WEAKNESS)
+		*lo_p = ROBE, *hi_p = ROBE_OF_WEAKNESS;
+	    else if (otyp >= CLOAK_OF_PROTECTION &&
+		    otyp <= CLOAK_OF_DISPLACEMENT)
+		*lo_p = CLOAK_OF_PROTECTION, *hi_p = CLOAK_OF_DISPLACEMENT;
+	    else if (otyp >= SPEED_BOOTS && otyp <= LEVITATION_BOOTS)
+		*lo_p = SPEED_BOOTS, *hi_p = LEVITATION_BOOTS;
+	    break;
+	case TOOL_CLASS:
+	case WEAPON_CLASS:
+	case GEM_CLASS:
+	    break;
+	default:
+	    i = bases[ocls];
+	    if (!OBJ_DESCR(objects[i])) break;
+	    *lo_p = i;
+	    while (i < NUM_OBJECTS && objects[i].oc_class == ocls) i++;
+	    i--;
+	    if (ocls == POTION_CLASS)
+		/* water and following have fixed descriptions */
+		i = POT_WATER - 1;
+	    else if (ocls == AMULET_CLASS || ocls == SCROLL_CLASS ||
+		    ocls == SPBOOK_CLASS) {
+		while (!objects[i].oc_magic || objects[i].oc_unique)
+		    i--;
+	    }
+	    *hi_p = i;
+	    break;
+	}
+
+	/* artifact checking might ask about item which isn't part of any range
+	   but fell within the classes that do have ranges specified above */
+	if (otyp < *lo_p || otyp > *hi_p)
+	    *lo_p = *hi_p = otyp;
+}
+
 STATIC_OVL void
 shuffle_all()
 {
