@@ -787,6 +787,9 @@ available to your character will be displayed.
 Show the known map without monsters, objects, and traps, so that
 what they cover can be seen.  A menu lets you keep the traps, or the
 traps and the objects.
+.lp #tip
+Tip over a container (bag or box) to pour out its contents.
+Default key is `M-T'.
 .lp #turn
 Turn undead.
 .lp #twoweapon

@@ -4405,7 +4405,8 @@ boolean altusage; /* some items have an "alternate" use with different cost */
 	} else if(otmp->otyp == BAG_OF_TRICKS ||	 /* 1 - 20 */
 		  otmp->otyp == MEDICAL_KIT ||                  
 		  otmp->otyp == HORN_OF_PLENTY) {
-		tmp /= 5L;
+		/* altusage: emptying of all the contents at once (#tip) */
+		if (!altusage || otmp->otyp == MEDICAL_KIT) tmp /= 5L;
 	} else if(otmp->otyp == CRYSTAL_BALL ||		 /* 1 - 5 */
 		  /*otmp->otyp == ORB_OF_ENCHANTMENT ||                  
 		  otmp->otyp == ORB_OF_CHARGING ||*/

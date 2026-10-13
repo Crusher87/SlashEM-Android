@@ -74,6 +74,7 @@ extern int NDECL(dowhatdoes); /**/
 extern int NDECL(dohelp); /**/
 extern int NDECL(dohistory); /**/
 extern int NDECL(doloot); /**/
+extern int NDECL(dotip); /**/
 extern int NDECL(dodrink); /**/
 #ifdef ANDROID
 extern int NDECL(dodrink_thisplace); /**/
@@ -2250,6 +2251,7 @@ static const struct func_tab cmdlist[] = {
 	{'T', FALSE, dotakeoff},
 /*	{M('t'), TRUE, doturn},*/
 	{M('t'), TRUE, dotech},
+	{M('T'), FALSE, dotip},
 /*	'u', 'U' : go ne */
 	{'u', FALSE, dountrap}, /* if number_pad is on */
 	{M('u'), FALSE, dountrap},
@@ -2336,6 +2338,7 @@ struct ext_func_tab extcmdlist[] = {
 #endif
 	{"technique", "perform a technique", dotech, TRUE},
 	{"terrain", "show map without obstructions", doterrain, TRUE},
+	{"tip", "empty a container", dotip, FALSE},
 	{"turn", "turn undead", doturn, TRUE},
 	{"twoweapon", "toggle two-weapon combat", dotwoweapon, FALSE},
 	{"untrap", "untrap something", dountrap, FALSE},

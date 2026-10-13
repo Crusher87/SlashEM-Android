@@ -28,6 +28,7 @@ E void FDECL(welcome, (BOOLEAN_P));
 
 /* ### apply.c ### */
 
+E int FDECL(hornoplenty, (struct obj *,BOOLEAN_P));
 E int NDECL(doapply);
 E int NDECL(dorub);
 E int NDECL(dojump);
@@ -1045,7 +1046,7 @@ E void FDECL(mimic_hit_msg, (struct monst *, SHORT_P));
 #ifdef GOLDOBJ
 E void FDECL(mkmonmoney, (struct monst *, long));
 #endif
-E void FDECL(bagotricks, (struct obj *));
+E int FDECL(bagotricks, (struct obj *,BOOLEAN_P,int *));
 E boolean FDECL(propagate, (int, BOOLEAN_P,BOOLEAN_P));
 
 /* ### mapglyph.c ### */
@@ -1623,6 +1624,7 @@ E int FDECL(query_objlist, (const char *, struct obj *, int,
 E struct obj *FDECL(pick_obj, (struct obj *));
 E int NDECL(encumber_msg);
 E int NDECL(doloot);
+E int NDECL(dotip);
 E boolean FDECL(container_gone, (int (*)(OBJ_P)));
 E int FDECL(use_container, (struct obj **,int));
 E int FDECL(loot_mon, (struct monst *,int *,boolean *));

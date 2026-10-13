@@ -1333,6 +1333,11 @@ struct obj *otmp;
 		      (otmp->dknown && objects[OIL_LAMP].oc_name_known))))
 		|| (!strcmp(word, "untrap with") &&
 		    (otmp->oclass == TOOL_CLASS && otyp != CAN_OF_GREASE))
+		|| (!strcmp(word, "tip") &&
+		    (!Is_container(otmp) || otyp == MEDICAL_KIT) &&
+		    /* include horn of plenty if sufficiently discovered */
+		    (otyp != HORN_OF_PLENTY || !otmp->dknown ||
+		     !objects[HORN_OF_PLENTY].oc_name_known))
 		|| (!strcmp(word, "charge") && !is_chargeable(otmp))
 		|| (!strcmp(word, "poison") && !is_poisonable(otmp))
 		|| ((!strcmp(word, "draw blood with") ||

@@ -1040,6 +1040,9 @@
                that  what  they cover can be seen.  A menu lets you keep the
                traps, or the traps and the objects.
 
+          #tip Tip over a container (bag or box) to pour out its contents.
+               Default key is `M-T'.
+
           #turn
                Turn undead.
 
