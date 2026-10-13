@@ -1198,8 +1198,13 @@ long timeout;
 			}
 		    }
 		    end_burn(obj, FALSE);	/* turn off light source */
-		    obj_extract_self(obj);
-		    obfree(obj, (struct obj *)0);
+		    if (carried(obj)) {
+			/* may be wielded or quivered */
+			useupall(obj);
+		    } else {
+			obj_extract_self(obj);
+			obfree(obj, (struct obj *)0);
+		    }
 		    obj = (struct obj *) 0;
 		    break;
 		    
@@ -1385,8 +1390,13 @@ long timeout;
 			if (menorah) {
 			    obj->spe = 0;
 			} else {
-			    obj_extract_self(obj);
-			    obfree(obj, (struct obj *)0);
+			    if (carried(obj)) {
+				/* may be wielded or quivered */
+				useupall(obj);
+			    } else {
+				obj_extract_self(obj);
+				obfree(obj, (struct obj *)0);
+			    }
 			    obj = (struct obj *) 0;
 			}
 			break;
