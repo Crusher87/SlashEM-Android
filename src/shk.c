@@ -2589,6 +2589,13 @@ register boolean dummy;
 		return;
 	}
 
+	/* normally bill_p gets set up whenever you enter the shop, but obj
+	   might be going onto the bill because hero just snagged it with
+	   a grappling hook from outside without ever having been inside */
+	if (!ESHK(shkp)->bill_p ||
+		ESHK(shkp)->bill_p == (struct bill_x *) -1000)
+	    ESHK(shkp)->bill_p = &(ESHK(shkp)->bill[0]);
+
 	bct = ESHK(shkp)->billct;
 	bp = &(ESHK(shkp)->bill_p[bct]);
 	bp->bo_id = obj->o_id;

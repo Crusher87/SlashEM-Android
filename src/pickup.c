@@ -1386,30 +1386,47 @@ struct obj *
 pick_obj(otmp)
 struct obj *otmp;
 {
+	struct obj *result;
+	xchar ox = otmp->ox, oy = otmp->oy;
+	boolean robshop = (!u.uswallow && otmp != uball &&
+			   costly_spot(ox, oy));
+
 	obj_extract_self(otmp);
-	if (!u.uswallow && otmp != uball && costly_spot(otmp->ox, otmp->oy)) {
+	newsym(ox, oy);
+
+	/* for shop items, addinv() needs to be after addtobill() (so that
+	   object merger can take otmp->unpaid into account) but before
+	   remote_burglary() (which calls rob_shop() which calls setpaid()
+	   after moving costs of unpaid items to shop debt; setpaid()
+	   calls clear_unpaid() for lots of object chains, but 'otmp' isn't
+	   on any of those between obj_extract_self() and addinv(), so it
+	   used to remain flagged as an unpaid item in inventory and
+	   trigger impossible() every time inventory was examined) */
+	if (robshop) {
 	    char saveushops[5], fakeshop[2];
 
 	    /* addtobill cares about your location rather than the object's;
 	       usually they'll be the same, but not when using telekinesis
 	       (if ever implemented) or a grappling hook */
 	    Strcpy(saveushops, u.ushops);
-	    fakeshop[0] = *in_rooms(otmp->ox, otmp->oy, SHOPBASE);
+	    fakeshop[0] = *in_rooms(ox, oy, SHOPBASE);
 	    fakeshop[1] = '\0';
 	    Strcpy(u.ushops, fakeshop);
 	    /* sets obj->unpaid if necessary */
 	    addtobill(otmp, TRUE, FALSE, FALSE);
 	    Strcpy(u.ushops, saveushops);
-	    /* if you're outside the shop, make shk notice */
-	    if (!index(u.ushops, *fakeshop))
-		remote_burglary(otmp->ox, otmp->oy);
+	    robshop = otmp->unpaid && !index(u.ushops, *fakeshop);
 	}
 	if (otmp->no_charge)	/* only applies to objects outside invent */
 	    otmp->no_charge = 0;
 	if (otmp->was_thrown)	/* likewise */
 	    otmp->was_thrown = 0;
-	newsym(otmp->ox, otmp->oy);
-	return addinv(otmp);	/* might merge it with other objects */
+	result = addinv(otmp);	/* might merge it with other objects */
+	/* if you're taking a shop item from outside the shop, make shk notice */
+	if (robshop)
+	    remote_burglary(ox, oy);
+
+	return result;
 }
 
 /*
