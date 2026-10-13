@@ -184,20 +184,16 @@ boolean force;		/* Force the loss of an experience level */
 		/* no drainer or lifesaved */
 		u.uexp = 0;
 	}
-	num = newhp();
+	/* take back exactly what was gained for this level, rather than a
+	   new random amount (which could be used to farm HP and Pw) */
+	num = (int) u.uhpinc[u.ulevel];
 	u.uhpmax -= num;
 	if (u.uhpmax < 1) u.uhpmax = 1;
 	u.uhp -= num;
 	if (u.uhp < 1) u.uhp = 1;
 	else if (u.uhp > u.uhpmax) u.uhp = u.uhpmax;
 
-	if (u.ulevel < urole.xlev)
-	    num = rn1((int)ACURR(A_WIS)/2 + urole.enadv.lornd + urace.enadv.lornd,
-			urole.enadv.lofix + urace.enadv.lofix);
-	else
-	    num = rn1((int)ACURR(A_WIS)/2 + urole.enadv.hirnd + urace.enadv.hirnd,
-			urole.enadv.hifix + urace.enadv.hifix);
-	num = enermod(num);		/* M. Stephenson */
+	num = (int) u.ueninc[u.ulevel];
 	u.uenmax -= num;
 	if (u.uenmax < 0) u.uenmax = 0;
 	u.uen -= num;
@@ -282,6 +278,8 @@ boolean incr;	/* true iff via incremental experience growth */
 	num = newhp();
 	u.uhpmax += num;
 	u.uhp += num;
+	/* remember the gain so that losing this level takes back exactly it */
+	if (u.ulevel < MAXULEV) u.uhpinc[u.ulevel] = (short) num;
 	if (Upolyd) {
 	    num = rnd(8);
 	    u.mhmax += num;
@@ -296,6 +294,7 @@ boolean incr;	/* true iff via incremental experience growth */
 	num = enermod(num);	/* M. Stephenson */
 	u.uenmax += num;
 	u.uen += num;
+	if (u.ulevel < MAXULEV) u.ueninc[u.ulevel] = (short) num;
 	
 	if(u.ulevel < MAXULEV) {
 	    if (incr) {
