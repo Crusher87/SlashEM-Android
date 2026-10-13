@@ -2802,7 +2802,8 @@ xchar x, y;
     return retval;
 }
 
-void
+/* returns TRUE if any object was destroyed (only potions of acid are) */
+boolean
 water_damage(obj, force, here)
 register struct obj *obj;
 register boolean force, here;
@@ -2810,6 +2811,7 @@ register boolean force, here;
 	/* Dips in the Lethe are a very poor idea */
 	int luckpenalty = level.flags.lethe? 7 : 0;
 	struct obj *otmp;
+	boolean destroyed = FALSE;
 
 	/* Scrolls, spellbooks, potions, weapons and
 	   pieces of armor may get affected by the water */
@@ -2868,9 +2870,14 @@ register boolean force, here;
 			break;
 		    case POTION_CLASS:
 			if (obj->otyp == POT_ACID) {
+				boolean update = carried(obj);
+
 				/* damage player/monster? */
 				pline("A potion explodes!");
+				setnotworn(obj);	/* might be wielded */
 				delobj(obj);
+				if (update) update_inventory();
+				destroyed = TRUE;
 				continue;
 			} else
 			/* Potions turn to water or amnesia... */
@@ -2967,6 +2974,7 @@ register boolean force, here;
 		    }
 		}
 	}
+	return destroyed;
 }
 
 /*
