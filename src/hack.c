@@ -1349,7 +1349,10 @@ domove()
 			y = u.uy + u.dy;
 		}
 		if(!isok(x, y)) {
+			/* at the edge of the map; failing to move farther
+			   doesn't use up a turn */
 			nomul(0);
+			flags.move = 0;
 			return;
 		}
 		if (((trap = t_at(x, y)) && trap->tseen) ||
