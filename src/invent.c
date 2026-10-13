@@ -488,8 +488,11 @@ const char *drop_fmt, *drop_arg, *hold_msg;
 	    int prev_encumbr = near_capacity();	/* before addinv() */
 
 	    /* encumbrance only matters if it would now become worse
-	       than max( current_value, stressed ) */
-	    if (prev_encumbr < MOD_ENCUMBER) prev_encumbr = MOD_ENCUMBER;
+	       than max( current_value, pickup_burden ); this used to use
+	       hardcoded stressed instead of the 'pickup_burden' option
+	       (which defaults to stressed) */
+	    if (prev_encumbr < flags.pickup_burden)
+		prev_encumbr = flags.pickup_burden;
 	    /* addinv() may redraw the entire inventory, overwriting
 	       drop_arg when it comes from something like doname() */
 	    if (drop_arg) drop_arg = strcpy(buf, drop_arg);
@@ -509,8 +512,29 @@ const char *drop_fmt, *drop_arg, *hold_msg;
 			    ammo_and_launcher(obj, uswapwep)))
 		    setuqwep(obj);
 		if (hold_msg || drop_fmt) prinv(hold_msg, obj, oquan);
+		/* obj made it into inventory and is staying there */
+		(void) encumber_msg();
 	    }
 	}
+	return obj;
+}
+
+/* hold_another_object() for something which the hero was carrying a
+   moment ago (split off from a carried stack, transformed, or written
+   on); prev_cap is her encumbrance from before it was taken out of
+   inventory, so that 'pickup_burden' won't make her drop it */
+struct obj *
+hold_returned_object(obj, prev_cap, drop_fmt, drop_arg, hold_msg)
+struct obj *obj;
+int prev_cap;
+const char *drop_fmt, *drop_arg, *hold_msg;
+{
+	int save_pickup_burden = flags.pickup_burden;
+
+	if (flags.pickup_burden < prev_cap)
+	    flags.pickup_burden = prev_cap;
+	obj = hold_another_object(obj, drop_fmt, drop_arg, hold_msg);
+	flags.pickup_burden = save_pickup_burden;
 	return obj;
 }
 

@@ -2669,7 +2669,7 @@ dodip()
 	uchar here;
 	char allowall[2], qbuf[QBUFSZ], Your_buf[BUFSZ];
 	short mixture;
-	int res;
+	int res, cap;
 
 	allowall[0] = ALL_CLASSES; allowall[1] = '\0';
 	if(!(obj = getobj(allowall, "dip")))
@@ -3179,8 +3179,9 @@ dodip()
 			docall(&fakeobj);
 		    }
 		}
+		cap = near_capacity();	/* before removal from invent */
 		obj_extract_self(singlepotion);
-		singlepotion = hold_another_object(singlepotion,
+		singlepotion = hold_returned_object(singlepotion, cap,
 					"You juggle and drop %s!",
 					doname(singlepotion), (const char *)0);
 		update_inventory();

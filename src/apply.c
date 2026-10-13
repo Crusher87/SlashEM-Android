@@ -1209,10 +1209,11 @@ struct obj *obj;
 		    if (obj->quan > 1L && (yn(qbuf) == 'n')) {
 			/* Check if player wants to light all the candles */
 			struct obj *rest;	     /* the remaining candles */
+			int cap = near_capacity();
 			rest = splitobj(obj, obj->quan - 1L);
 			obj_extract_self(rest);	     /* free from inv */
 			obj->spe++;	/* this prevents merging */
-			(void)hold_another_object(rest, "You drop %s!",
+			(void)hold_returned_object(rest, cap, "You drop %s!",
 					  doname(rest), (const char *)0);
 			obj->spe--;
 		    }
@@ -1325,12 +1326,14 @@ light_cocktail(obj)
 #endif
 
 	if (obj->quan > 1L) {
+	    int cap = near_capacity();
+
 	    obj = splitobj(obj, 1L);
 	    begin_burn(obj, FALSE);	/* burn before free to get position */
 	    obj_extract_self(obj);	/* free from inv */
 
 	    /* shouldn't merge */
-	    obj = hold_another_object(obj, "You drop %s!",
+	    obj = hold_returned_object(obj, cap, "You drop %s!",
 				      doname(obj), (const char *)0);
 	} else
 	    begin_burn(obj, FALSE);
