@@ -19,6 +19,11 @@ STATIC_DCL void FDECL(move_update, (BOOLEAN_P));
 
 static boolean door_opened;	/* set to true if door was opened during test_move */
 
+/* a monster that running and travel needn't stop for when passing by */
+#define is_safemon(mon) ((mon)->mtame || ((mon)->mpeaceful && \
+			canspotmon(mon) && !Confusion && !Hallucination && \
+			!Stunned))
+
 #define IS_SHOP(x)	(rooms[x].rtype >= SHOPBASE)
 
 #ifdef OVL2
@@ -887,7 +892,7 @@ int third_last_hit = 0;
 int repeat_hit = 0;
 
 /* return TRUE if (dx,dy) is an OK place to move
- * mode is one of DO_MOVE, TEST_MOVE or TEST_TRAV
+ * mode is one of DO_MOVE, TEST_MOVE, TEST_TRAV, or TEST_TRAP
  */
 boolean 
 test_move(ux, uy, dx, dy, mode)
@@ -983,7 +988,8 @@ int mode;
 			    }
 			} else pline("That door is closed.");
 		    }
-		} else if (mode == TEST_TRAV) goto testdiag;
+		} else if (mode == TEST_TRAV || mode == TEST_TRAP)
+		    goto testdiag;
 		return FALSE;
 	    }
 	} else {
@@ -1030,8 +1036,10 @@ int mode;
 	    (!Levitation && !Flying &&
 	     !is_clinger(youmonst.data) &&
 	     (is_pool(x, y) || is_lava(x, y)) && levl[x][y].seenv))
-	    return FALSE;
+	    return (mode == TEST_TRAP);
     }
+
+    if (mode == TEST_TRAP) return FALSE;	/* do not move through traps */
 
     ust = &levl[ux][uy];
 
@@ -1078,6 +1086,14 @@ int mode;
 }
 
 /*
+ * Squares the hero has stepped from during the current travel command.
+ * If travel ever wants to step back onto one of them it is going around
+ * in circles (usually while guessing at an unreachable destination), so
+ * it stops instead of oscillating until something interrupts it.
+ */
+static char travelmap[COLNO][ROWNO];
+
+/*
  * Find a path from the destination (u.tx,u.ty) back to (u.ux,u.uy).
  * A shortest path is returned.  If guess is TRUE, consider various
  * inaccessible locations as valid intermediate path points.
@@ -1087,8 +1103,14 @@ static boolean
 findtravelpath(guess)
 boolean guess;
 {
+    /* a new travel command starts with an empty map of visited squares */
+    if (iflags.travel1 && !guess)
+	(void) memset((genericptr_t)travelmap, 0, sizeof(travelmap));
+
     /* if travel to adjacent, reachable location, use normal movement rules */
-    if (!guess && iflags.travel1 && distmin(u.ux, u.uy, u.tx, u.ty) == 1) {
+    if (!guess && iflags.travel1 && distmin(u.ux, u.uy, u.tx, u.ty) == 1
+	    /* grid bugs can't take a diagonal step */
+	    && !(u.ux != u.tx && u.uy != u.ty && u.umonnum == PM_GRID_BUG)) {
 	flags.run = 0;
 	if (test_move(u.ux, u.uy, u.tx-u.ux, u.ty-u.uy, TEST_MOVE)) {
 	    u.dx = u.tx-u.ux;
@@ -1134,21 +1156,35 @@ boolean guess;
 		static int ordered[] = { 0, 2, 4, 6, 1, 3, 5, 7 };
 		/* no diagonal movement for grid bugs */
 		int dirmax = u.umonnum == PM_GRID_BUG ? 4 : 8;
+		boolean alreadyrepeated = FALSE;
 
 		for (dir = 0; dir < dirmax; ++dir) {
 		    int nx = x+xdir[ordered[dir]];
 		    int ny = y+ydir[ordered[dir]];
 
-		    if (!isok(nx, ny)) continue;
+		    /*
+		     * When guessing, only spaces that could be picked as the
+		     * guessed target (ones the hero could see) are added to
+		     * the matrix of hero-reachable spaces.  Otherwise travel
+		     * can pick a spot that it stops wanting once it has moved
+		     * a step towards it, and walk back and forth forever in
+		     * some configurations of sight-blocking obstacles.
+		     */
+		    if (!isok(nx, ny) || (guess && !couldsee(nx, ny)))
+			continue;
 		    if ((!Passes_walls && !can_ooze(&youmonst) &&
-			closed_door(x, y)) || sobj_at(BOULDER, x, y)) {
+			closed_door(x, y)) || sobj_at(BOULDER, x, y) ||
+			test_move(x, y, nx-x, ny-y, TEST_TRAP)) {
 			/* closed doors and boulders usually
 			 * cause a delay, so prefer another path */
 			if (travel[x][y] > radius-3) {
-			    travelstepx[1-set][nn] = x;
-			    travelstepy[1-set][nn] = y;
-			    /* don't change travel matrix! */
-			    nn++;
+			    if (!alreadyrepeated) {
+				travelstepx[1-set][nn] = x;
+				travelstepy[1-set][nn] = y;
+				/* don't change travel matrix! */
+				nn++;
+				alreadyrepeated = TRUE;
+			    }
 			    continue;
 			}
 		    }
@@ -1156,14 +1192,21 @@ boolean guess;
 			(levl[nx][ny].seenv || (!Blind && couldsee(nx, ny)))) {
 			if (nx == ux && ny == uy) {
 			    if (!guess) {
+				boolean visited = travelmap[x][y];
+
 				u.dx = x-ux;
 				u.dy = y-uy;
-				if (x == u.tx && y == u.ty) {
+				if ((x == u.tx && y == u.ty) || visited) {
 				    nomul(0);
 				    /* reset run so domove run checks work */
 				    flags.run = 8;
-				    iflags.travelcc.x = iflags.travelcc.y = -1;
+				    if (visited)
+					You("stop, unsure which way to go.");
+				    else
+					iflags.travelcc.x =
+					    iflags.travelcc.y = -1;
 				}
+				travelmap[u.ux][u.uy] = 1;
 				return TRUE;
 			    }
 			} else if (!travel[nx][ny]) {
@@ -1185,24 +1228,27 @@ boolean guess;
 	if (guess) {
 	    int px = tx, py = ty;	/* pick location */
 	    int dist, nxtdist, d2, nd2;
+	    int ctrav, ptrav = COLNO*ROWNO;
 
 	    dist = distmin(ux, uy, tx, ty);
 	    d2 = dist2(ux, uy, tx, ty);
 	    for (tx = 1; tx < COLNO; ++tx)
 		for (ty = 0; ty < ROWNO; ++ty)
-		    if (travel[tx][ty]) {
+		    if (couldsee(tx, ty) && (ctrav = travel[tx][ty]) > 0) {
 			nxtdist = distmin(ux, uy, tx, ty);
-			if (nxtdist == dist && couldsee(tx, ty)) {
+			if (nxtdist == dist && ctrav < ptrav) {
 			    nd2 = dist2(ux, uy, tx, ty);
 			    if (nd2 < d2) {
 				/* prefer non-zigzag path */
 				px = tx; py = ty;
 				d2 = nd2;
+				ptrav = ctrav;
 			    }
-			} else if (nxtdist < dist && couldsee(tx, ty)) {
+			} else if (nxtdist < dist) {
 			    px = tx; py = ty;
 			    dist = nxtdist;
 			    d2 = dist2(ux, uy, tx, ty);
+			    ptrav = ctrav;
 			}
 		    }
 
@@ -1210,8 +1256,10 @@ boolean guess;
 		/* no guesses, just go in the general direction */
 		u.dx = sgn(u.tx - u.ux);
 		u.dy = sgn(u.ty - u.uy);
-		if (test_move(u.ux, u.uy, u.dx, u.dy, TEST_MOVE))
+		if (test_move(u.ux, u.uy, u.dx, u.dy, TEST_MOVE)) {
+		    travelmap[u.ux][u.uy] = 1;
 		    return TRUE;
+		}
 		goto found;
 	    }
 	    tx = px;
@@ -1409,8 +1457,9 @@ domove()
 		}
 
 		mtmp = m_at(x,y);
-		if (mtmp) {
+		if (mtmp && !is_safepet(mtmp)) {
 			/* Don't attack if you're running, and can see it */
+			/* It's fine to displace pets, though */
 			/* We should never get here if forcefight */
 			if (flags.run &&
 			    ((!Blind && mon_visible(mtmp) &&
@@ -1431,7 +1480,11 @@ domove()
 	tmpr = &levl[x][y];
 	/* attack monster */
 	if(mtmp) {
-	    nomul(0);
+	    /* don't stop travel when displacing pets; if the
+	       displace fails for some reason, attack() in uhitm.c
+	       will stop travel rather than domove */
+	    if (!is_safepet(mtmp) || flags.forcefight)
+		nomul(0);
 	    /* only attack if we know it's there */
 	    /* or if we used the 'F' command to fight blindly */
 	    /* or if it hides_under, in which case we call attack() to print
@@ -1446,7 +1499,7 @@ domove()
 	     * invisible monster--then, we fall through to attack() and
 	     * attack_check(), which still wastes a turn, but prints a
 	     * different message and makes the player remember the monster.		     */
-	    if(flags.nopick &&
+	    if(flags.nopick && !flags.travel &&
 		  (canspotmon(mtmp) || memory_is_invisible(x, y))){
 		if(mtmp->m_ap_type && !Protection_from_shape_changers
 						    && !sensemon(mtmp))
@@ -1757,13 +1810,21 @@ domove()
 		    sobj_at(BOULDER, trap->tx, trap->ty)) {
 		/* can't swap places with pet pinned in a pit by a boulder */
 		u.ux = u.ux0,  u.uy = u.uy0;	/* didn't move after all */
+#ifdef STEED
+		if (u.usteed) u.usteed->mx = u.ux, u.usteed->my = u.uy;
+#endif
+		nomul(0);	/* stop running or travelling */
 	    } else if (u.ux0 != x && u.uy0 != y &&
 		       bad_rock(mtmp, x, u.uy0) &&
 		       bad_rock(mtmp, u.ux0, y) &&
 		       (bigmonst(mtmp->data) || (curr_mon_load(mtmp) > 600))) {
 		/* can't swap places when pet won't fit thru the opening */
 		u.ux = u.ux0,  u.uy = u.uy0;	/* didn't move after all */
+#ifdef STEED
+		if (u.usteed) u.usteed->mx = u.ux, u.usteed->my = u.uy;
+#endif
 		You("stop.  %s won't fit through.", upstart(y_monnam(mtmp)));
+		nomul(0);
 	    } else {
 		char pnambuf[BUFSZ];
 
@@ -2422,8 +2483,10 @@ lookaround()
 		    mtmp->m_ap_type != M_AP_FURNITURE &&
 		    mtmp->m_ap_type != M_AP_OBJECT &&
 		    (!mtmp->minvis || See_invisible) && !mtmp->mundetected) {
-	    if((flags.run != 1 && !mtmp->mtame)
-					|| (x == u.ux+u.dx && y == u.uy+u.dy))
+	    /* stop for a monster that might be hostile, or for any
+	       monster in our way unless travel can step around it */
+	    if((flags.run != 1 && !is_safemon(mtmp))
+		    || (x == u.ux+u.dx && y == u.uy+u.dy && !flags.travel))
 		goto stop;
 	}
 
@@ -2438,7 +2501,10 @@ lookaround()
 		  (mtmp->mappearance == S_hcdoor ||
 		   mtmp->mappearance == S_vcdoor))) {
 	    if(x != u.ux && y != u.uy) continue;
-	    if(flags.run != 1) goto stop;
+	    /* travel passes doors it isn't going through, e.g. when
+	       walking along a room wall */
+	    if(flags.run != 1 && !flags.travel) goto stop;
+	    /* orthogonal to a closed door, consider it a corridor */
 	    goto bcorr;
 	} else if (levl[x][y].typ == CORR) {
 bcorr:

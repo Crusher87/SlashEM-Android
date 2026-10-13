@@ -1074,6 +1074,9 @@ boolean at_stairs, falling, portal;
 	fd = currentlevel_rewrite();
 	if (fd < 0) return;
 
+	/* discard context which applies to the level we're leaving */
+	iflags.travelcc.x = iflags.travelcc.y = -1;	/* travel destination */
+
 	if (falling) /* assuming this is only trap door or hole */
 	    impact_drop((struct obj *)0, u.ux, u.uy, newlevel->dlevel);
 
