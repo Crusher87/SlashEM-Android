@@ -3,6 +3,7 @@
 /* NetHack may be freely redistributed.  See license for details. */
 
 #include "hack.h"
+#include "eshk.h"
 
 STATIC_DCL boolean FDECL(known_hitum, (struct monst *,int,int *,struct attack *));
 STATIC_DCL void FDECL(steal_it, (struct monst *, struct attack *));
@@ -230,6 +231,14 @@ boolean barehanded;
 			return retval;
 		}
 		if (canspotmon(mtmp)) {
+			/* walking into a shopkeeper you owe money to offers
+			   to pay the bill instead of attacking */
+			if (mtmp->isshk && !flags.forcefight &&
+				!flags.run && !flags.travel && inhishop(mtmp) &&
+				(ESHK(mtmp)->billct || ESHK(mtmp)->debit)) {
+				flags.move = dopay() ? 1 : 0;
+				return 0;
+			}
 			Sprintf(qbuf, "Really attack %s?", mon_nam(mtmp));
 			if (yn(qbuf) != 'y') {
 				/* Stormbringer is not tricked so easily */
