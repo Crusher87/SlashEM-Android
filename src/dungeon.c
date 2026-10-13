@@ -2198,7 +2198,18 @@ recalc_mapseen()
 			mptrtmp->flags.unreachable = 0;
 	    }
 	}
-	mptr->flags.sokosolved = sokoban_puzzle_solved();
+	if (sokoban_puzzle_solved()) {
+	    if (!mptr->flags.sokosolved) {
+		/* #chronicle; levels are counted from the entrance */
+		int sokonum = dungeons[u.uz.dnum].entry_lev - dunlev(&u.uz) + 1;
+
+		livelog_printf(LL_MINORAC | LL_DUMP,
+			       "completed %d%s Sokoban level",
+			       sokonum, ordin(sokonum));
+	    }
+	    mptr->flags.sokosolved = 1;
+	} else
+	    mptr->flags.sokosolved = 0;
 	/* mptr->flags.bigroom retains previous value when hero can't see */
 	if (!Blind)
 	    mptr->flags.bigroom = Is_bigroom(&u.uz);

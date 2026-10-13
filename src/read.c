@@ -1754,6 +1754,7 @@ do_class_genocide()
 	menu_item *selected;
 
 	int i, j, immunecnt, gonecnt, goodcnt, class, feel_dead = 0;
+	int wiped = 0, prevgenos = 0;
 	char buf[BUFSZ];
 	boolean gameover = FALSE;	/* true iff killed self */
 
@@ -1769,7 +1770,11 @@ do_class_genocide()
 		} while (buf[0]=='\033' || !buf[0]);
 		/* choosing "none" preserves genocideless conduct */
 		if (!strcmpi(buf, "none") ||
-		    !strcmpi(buf, "nothing")) return;
+		    !strcmpi(buf, "nothing")) {
+		    livelog_printf(LL_GENOCIDE,
+				   "declined to perform class genocide");
+		    return;
+		}
 
 		if (strlen(buf) == 1) {
 		    /*WAC adding "help" for those who use graphical displays*/
@@ -1859,6 +1864,8 @@ do_class_genocide()
 			/* This check must be first since player monsters might
 			 * have G_GENOD or !G_GENO.
 			 */
+			    if (!wiped++)
+				prevgenos = num_genocides();
 			    mvitals[i].mvflags |= (G_GENOD|G_NOCORPSE);
 			    reset_rndmonst(i);
 			    kill_genocided_monsters();
@@ -1915,6 +1922,15 @@ do_class_genocide()
 			}
 		    }
 		}
+		if (wiped) {	/* #chronicle */
+		    if (!prevgenos)
+			livelog_printf(LL_CONDUCT | LL_GENOCIDE,
+				       "performed %s first genocide (class %c)",
+				       uhis(), def_monsyms[class]);
+		    else
+			livelog_printf(LL_GENOCIDE, "genocided class %c",
+				       def_monsyms[class]);
+		}
 		if (gameover || u.uhp == -1) {
 		    killer_format = KILLED_BY_AN;
 		    killer = "scroll of genocide";
@@ -1963,7 +1979,11 @@ int how;
 			if (!ptr) return; /* no message, like normal case */
 			mndx = monsndx(ptr);
 			break;		/* remaining checks don't apply */
-		    } else return;
+		    } else {
+			livelog_printf(LL_GENOCIDE,
+				       "declined to perform genocide");
+			return;
+		    }
 		}
 
 		mndx = name_to_mon(buf);
@@ -2014,6 +2034,14 @@ int how;
 		which = !type_is_pname(ptr) ? "the " : "";
 	}
 	if (how & REALLY) {
+	    /* #chronicle */
+	    if (!num_genocides())
+		livelog_printf(LL_CONDUCT | LL_GENOCIDE,
+			       "performed %s first genocide (%s)", uhis(),
+			       makeplural(ptr->mname));
+	    else
+		livelog_printf(LL_GENOCIDE, "genocided %s",
+			       makeplural(ptr->mname));
 	    /* setting no-corpse affects wishing and random tin generation */
 	    mvitals[mndx].mvflags |= (G_GENOD | G_NOCORPSE);
 	    pline("Wiped out %s%s.", which,

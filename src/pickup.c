@@ -1989,6 +1989,8 @@ register struct obj *obj;
 			if (rot_alarm) obj->norevive = 1;
 		}
 	} else if (Is_mbag(current_container) && mbag_explodes(obj, 0)) {
+		livelog_printf(LL_ACHIEVE, "just blew up %s %s", uhis(),
+			       simple_typename(current_container->otyp));
 		/* explicitly mention what item is triggering the explosion */
 		pline(
 	      "As you put %s inside, you are blasted by a magical explosion!",

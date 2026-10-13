@@ -379,6 +379,7 @@ register int fd, mode;
 			sizeof(struct tech) * (MAXTECH + 1));
 	save_artifacts(fd);
 	save_oracles(fd, mode);
+	save_gamelog(fd, mode);
 	if(ustuck_id)
 	    bwrite(fd, (genericptr_t) &ustuck_id, sizeof ustuck_id);
 #ifdef STEED
@@ -1143,6 +1144,7 @@ freedynamicdata()
      /* freelevchn();	[folded into free_dungeons()] */
 	free_animals();
 	free_oracles();
+	free_gamelog();
 	freefruitchn();
 	freenames();
 	free_waterlevel();

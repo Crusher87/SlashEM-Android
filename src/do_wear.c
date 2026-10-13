@@ -336,6 +336,8 @@ Helmet_on()
 		    u.ualign.type = rn2(2) ? A_CHAOTIC : A_LAWFUL;
 		else u.ualign.type = -(u.ualign.type);
 		u.ublessed = 0; /* lose your god's protection */
+		livelog_printf(LL_ALIGNMENT, "used a helm to turn %s",
+			       align_str(u.ualign.type));
 	     /* makeknown(uarmh->otyp);   -- moved below, after xname() */
 		/*FALLTHRU*/
 	case DUNCE_CAP:
@@ -403,6 +405,8 @@ Helmet_off()
 	case HELM_OF_OPPOSITE_ALIGNMENT:
 	    u.ualign.type = u.ualignbase[A_CURRENT];
 	    u.ublessed = 0; /* lose the other god's protection */
+	    livelog_printf(LL_ALIGNMENT, "took off a helm and became %s again",
+			   align_str(u.ualign.type));
 	    flags.botl = 1;
 	    break;
 	default: impossible(unknown_type, c_helmet, uarmh->otyp);

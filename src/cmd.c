@@ -1828,6 +1828,7 @@ static const struct menu_tab discover_menu[] = {
 	{'d', TRUE, dodiscovered, "Items already discovered [\\]"},             /* Robert Viduya */
 	{'o', TRUE, dooverview, "Dungeon overview [^O]"},
 	{'a', TRUE, donamelevel, "Annotate current level"},
+	{'c', TRUE, do_gamelog, "Chronicle of major events"},
 	{'C', TRUE, do_mname, "Name a monster"},
 	{0,0,0,0},
 };
@@ -2238,6 +2239,7 @@ struct ext_func_tab extcmdlist[] = {
 	{"annotate", "name current level", donamelevel, TRUE},
 	{"borrow", "steal from monsters", playersteal, FALSE},  /* jla */        
 	{"chat", "talk to someone", dotalk, TRUE},	/* converse? */
+	{"chronicle", "show a log of the major events of the game", do_gamelog, TRUE},
 	{"conduct", "list which challenges you have adhered to", doconduct, TRUE},
 	{"dip", "dip an object into something", dodip, FALSE},
 	{"enhance", "advance or check weapons skills", enhance_weapon_skill,

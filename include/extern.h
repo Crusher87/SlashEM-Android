@@ -1659,6 +1659,15 @@ E const char *FDECL(align_str, (ALIGNTYP_P));
 E void FDECL(mstatusline, (struct monst *));
 E void NDECL(ustatusline);
 E void NDECL(self_invis_message);
+E void FDECL(gamelog_add, (long,long,const char *));
+E void VDECL(livelog_printf, (long,const char *,...)) PRINTF_F(2,3);
+E boolean FDECL(gamelog_first, (long));
+E void NDECL(gamelog_conduct);
+E int NDECL(do_gamelog);
+E void FDECL(show_gamelog, (int));
+E void FDECL(save_gamelog, (int,int));
+E void NDECL(free_gamelog);
+E void FDECL(restore_gamelog, (int));
 
 /* ### polyself.c ### */
 

@@ -579,6 +579,9 @@ struct obj *instr;
 		    for(x=u.ux-1;x<=u.ux+1;x++)
 			if(isok(x,y))
 			if(find_drawbridge(&x,&y)) {
+			    if (u.uevent.uheard_tune < 2)
+				livelog_printf(LL_MINORAC,
+					"learned the castle drawbridge's tune");
 			    u.uevent.uheard_tune = 2; /* tune now fully known */
 			    if(levl[x][y].typ == DRAWBRIDGE_DOWN)
 				close_drawbridge(x,y);
@@ -633,7 +636,11 @@ struct obj *instr;
 			/* could only get `gears == 5' by playing five
 			   correct notes followed by excess; otherwise,
 			   tune would have matched above */
-			if (gears == 5) u.uevent.uheard_tune = 2;
+			if (gears == 5 && u.uevent.uheard_tune < 2) {
+			    u.uevent.uheard_tune = 2;
+			    livelog_printf(LL_MINORAC,
+					"learned the castle drawbridge's tune");
+			}
 		    }
 		}
 	    }

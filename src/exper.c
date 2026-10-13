@@ -171,6 +171,8 @@ boolean force;		/* Force the loss of an experience level */
 	if (!force && Drain_resistance) return;
 
 	if (u.ulevel > 1) {
+		livelog_printf(LL_MINORAC, "lost experience level %d",
+			       u.ulevel);
 		pline("%s level %d.", Goodbye(), u.ulevel--);
 		/* remove intrinsic abilities */
 		adjabil(u.ulevel + 1, u.ulevel);
@@ -305,6 +307,18 @@ boolean incr;	/* true iff via incremental experience growth */
 		u.uexp = newuexp(u.ulevel);
 	    }
 	    ++u.ulevel;
+	    /* #chronicle: new titles are achievements, other levels minor */
+	    if (u.ulevelmax < u.ulevel
+		    && xlev_to_rank(u.ulevel) > xlev_to_rank(u.ulevel - 1))
+		livelog_printf((u.ulevel >= 14) ? LL_ACHIEVE
+				: (LL_MINORAC | LL_DUMP),
+			       "attained the rank of %s (level %d)",
+			       rank_of(u.ulevel, Role_switch, flags.female),
+			       u.ulevel);
+	    else
+		livelog_printf(LL_MINORAC, "%sgained experience level %d",
+			       (u.ulevel <= u.ulevelmax) ? "re" : "",
+			       u.ulevel);
 	    if (u.ulevelmax < u.ulevel) u.ulevelmax = u.ulevel;
 	    pline("Welcome to experience level %d.", u.ulevel);
 	    adjabil(u.ulevel - 1, u.ulevel);	/* give new intrinsics */

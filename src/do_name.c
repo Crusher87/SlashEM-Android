@@ -322,6 +322,10 @@ register struct obj *obj;
 		You("engrave: \"%s\".",buf);
 	}
 	obj = oname(obj, buf);
+	if (obj && obj->oartifact)	/* #chronicle */
+	    livelog_printf(LL_ARTIFACT, "chose %s to be named \"%s\"",
+			   an(simple_typename(obj->otyp)),
+			   artiname(obj->oartifact));
 }
 
 /*

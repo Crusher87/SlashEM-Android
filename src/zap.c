@@ -4878,15 +4878,17 @@ int damage, tell;
 void
 makewish()
 {
-	char buf[BUFSZ];
+	char buf[BUFSZ], bufcpy[BUFSZ];
 	struct obj *otmp, nothing;
 	int tries = 0;
+	long oldwisharti = u.uconduct.wisharti;
 
 	nothing = zeroobj;  /* lint suppression; only its address matters */
 	if (flags.verbose) You("may wish for an object.");
 retry:
 	getlin("For what do you wish?", buf);
 	if(buf[0] == '\033') buf[0] = 0;
+	Strcpy(bufcpy, buf);	/* readobjnam() modifies buf */
 	/*
 	 *  Note: if they wished for and got a non-object successfully,
 	 *  otmp == &zeroobj.  That includes gold, or an artifact that
@@ -4900,14 +4902,27 @@ retry:
 	    pline(thats_enough_tries);
 	    otmp = readobjnam((char *)0, (struct obj *)0, TRUE);
 	    if (!otmp) return;	/* for safety; should never happen */
+	    Strcpy(bufcpy, "a random object");
 	} else if (otmp == &nothing) {
 	    /* explicitly wished for "nothing", presumeably attempting
 	       to retain wishless conduct */
+	    livelog_printf(LL_WISH, "declined to make a wish");
 	    return;
 	}
 
 	/* KMH, conduct */
-	u.uconduct.wishes++;
+	(void) mungspaces(bufcpy);
+	if (!u.uconduct.wishes++ && gamelog_first(GLF_WISH))
+	    livelog_printf(LL_CONDUCT | LL_WISH
+			   | (u.uconduct.wisharti ? LL_ARTIFACT : 0L),
+			   "made %s first wish - %s", uhis(), bufcpy);
+	else if (!oldwisharti && u.uconduct.wisharti)
+	    livelog_printf(LL_CONDUCT | LL_WISH | LL_ARTIFACT,
+			   "made %s first artifact wish - %s", uhis(), bufcpy);
+	else
+	    livelog_printf(LL_WISH | (u.uconduct.wisharti > oldwisharti
+				      ? LL_ARTIFACT : 0L),
+			   "wished for %s", bufcpy);
 
 	if (otmp != &zeroobj) {
 	    /* The(aobjnam()) is safe since otmp is unidentified -dlc */

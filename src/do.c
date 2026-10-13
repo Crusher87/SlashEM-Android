@@ -23,6 +23,7 @@ STATIC_DCL int FDECL(menu_drop, (int));
 #ifdef OVL2
 STATIC_DCL int NDECL(currentlevel_rewrite);
 STATIC_DCL void NDECL(final_level);
+STATIC_DCL void FDECL(log_new_level, (BOOLEAN_P));
 /* static boolean FDECL(badspot, (XCHAR_P,XCHAR_P)); */
 #endif
 
@@ -1003,6 +1004,7 @@ boolean at_stairs, falling, portal;
 		was_in_W_tower = In_W_tower(u.ux, u.uy, &u.uz),
 		familiar = FALSE;
 	boolean new = FALSE;	/* made a new level? */
+	boolean newbranch;	/* first visit to this dungeon branch? */
 	struct monst *mtmp;
 	char whynot[BUFSZ];
 	char *annotation;
@@ -1134,6 +1136,7 @@ boolean at_stairs, falling, portal;
 	 */
 	if ((at_stairs || falling || portal) && (u.uz.dnum != newlevel->dnum))
 		recbranch_mapseen(&u.uz, newlevel);
+	newbranch = (dunlev_reached(newlevel) == 0);
 	assign_level(&u.uz0, &u.uz);
 	assign_level(&u.uz, newlevel);
 	assign_level(&u.utolev, newlevel);
@@ -1416,6 +1419,9 @@ boolean at_stairs, falling, portal;
 		    if (!DEADMONSTER(mtmp) && mtmp->msleeping) mtmp->msleeping = 0;
 	}
 
+	if (new)
+	    log_new_level(newbranch);	/* #chronicle */
+
 	if (on_level(&u.uz, &astral_level))
 	    final_level();
 	else
@@ -1432,6 +1438,51 @@ boolean at_stairs, falling, portal;
 	/* assume this will always return TRUE when changing level */
 	(void) in_out_region(u.ux, u.uy);
 	(void) pickup(1);
+}
+
+/* #chronicle: the hero has arrived on a level for the first time */
+STATIC_OVL void
+log_new_level(newbranch)
+boolean newbranch;	/* also the first level visited in its dungeon */
+{
+	char dname[BUFSZ];
+	s_level *slev;
+
+	Strcpy(dname, dungeons[u.uz.dnum].dname);
+	if (!strncmp(dname, "The ", 4))
+	    *dname = 't';
+
+	if (In_endgame(&u.uz)) {
+	    if (newbranch)
+		livelog_printf(LL_ACHIEVE, "entered the Elemental Planes");
+	    livelog_printf(LL_ACHIEVE, "entered the %s",
+			   Is_astralevel(&u.uz) ? "Astral Plane" :
+			   Is_earthlevel(&u.uz) ? "Plane of Earth" :
+			   Is_airlevel(&u.uz) ? "Plane of Air" :
+			   Is_firelevel(&u.uz) ? "Plane of Fire" :
+			   Is_waterlevel(&u.uz) ? "Plane of Water" :
+			   "End Game");
+	    return;
+	}
+	/* Gehennom, the Mines, Sokoban, the quest, Ludios, Vlad's Tower and
+	   Slash'EM's extra branches */
+	if (newbranch)
+	    livelog_printf(LL_ACHIEVE, "entered %s", dname);
+	if (Is_bigroom(&u.uz))
+	    livelog_printf(LL_ACHIEVE, "entered the Big Room");
+	else if ((slev = Is_special(&u.uz)) != 0 && slev->flags.town)
+	    livelog_printf(LL_ACHIEVE, "reached %s",
+			   In_mines(&u.uz) ? "Minetown" : "the Mall");
+	/* every quest level is listed among the major events: it shows how
+	   far into the quest the hero got */
+	if (In_quest(&u.uz))
+	    livelog_printf(LL_ACHIEVE, "entered %s, home %d", dname,
+			   dunlev(&u.uz));
+	else if (Is_knox(&u.uz))
+	    ;	/* "entered Fort Ludios" is enough */
+	else
+	    livelog_printf(LL_DEBUG, "entered %s, level %d", dname,
+			   depth(&u.uz));
 }
 
 STATIC_OVL void

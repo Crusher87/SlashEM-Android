@@ -353,6 +353,42 @@ extern int repeat_hit;
 #define RAW_STAT_HALLUCINATION	0x00000040
 #define RAW_STAT_SLIMED		0x00000080
 
+/* #chronicle (pline.c): kinds of logged events, from NetHack 5.0 */
+#define LL_NONE       0x0000L /* nothing in particular */
+#define LL_WISH       0x0001L /* wishes */
+#define LL_ACHIEVE    0x0002L /* achievements, new branches, invocation */
+#define LL_UMONST     0x0004L /* killed a unique monster */
+#define LL_DIVINEGIFT 0x0008L /* sacrifice gifts, crowning */
+#define LL_LIFESAVE   0x0010L /* death averted */
+#define LL_CONDUCT    0x0020L /* first violation of a conduct */
+#define LL_ARTIFACT   0x0040L /* artifact bestowed, found or made */
+#define LL_GENOCIDE   0x0080L /* genocides */
+#define LL_KILLEDPET  0x0100L /* killed a tame monster */
+#define LL_ALIGNMENT  0x0200L /* changed alignment */
+#define LL_MINORAC    0x1000L /* minor achievements */
+#define LL_SPOILER    0x2000L /* reveals something: not shown in-game
+				 (except in wizard mode) */
+#define LL_DUMP       0x4000L /* none of the above but show at end */
+#define LL_DEBUG      0x8000L /* other details, like each new level */
+
+/* #chronicle events logged only the first time (gamelog_first()) */
+#define GLF_FOOD	  0x00000001L	/* conducts */
+#define GLF_UNVEGAN	  0x00000002L
+#define GLF_UNVEGETARIAN  0x00000004L
+#define GLF_GNOSTIC	  0x00000008L
+#define GLF_WEAPHIT	  0x00000010L
+#define GLF_KILLER	  0x00000020L
+#define GLF_LITERATE	  0x00000040L
+#define GLF_POLYPILE	  0x00000080L
+#define GLF_POLYSELF	  0x00000100L
+#define GLF_WISH	  0x00000200L
+#define GLF_CELIBACY	  0x00000400L
+#define GLF_AMULET	  0x00001000L	/* invocation items and such */
+#define GLF_BELL	  0x00002000L
+#define GLF_CANDELABRUM	  0x00004000L
+#define GLF_BOOK	  0x00008000L
+#define GLF_QUESTART	  0x00010000L
+
 /* The function argument to qsort() requires a particular
  * calling convention under WINCE which is not the default
  * in that environment.

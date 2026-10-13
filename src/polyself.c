@@ -259,6 +259,10 @@ dead: /* we come directly here if their experience level went to 0 or less */
 	polyman("feel like a new %s!",
 		(flags.female && urace.individual.f) ? urace.individual.f :
 		(urace.individual.m) ? urace.individual.m : urace.noun);
+	livelog_printf(LL_MINORAC, "became experience level %d as a new %s",
+		       u.ulevel,
+		       (flags.female && urace.individual.f) ? urace.individual.f :
+		       (urace.individual.m) ? urace.individual.m : urace.noun);
 	if (Slimed) {
 		Your("body transforms, but there is still slime on you.");
 		Slimed = 10L;
@@ -457,7 +461,13 @@ int	mntmp;
 	}
 
 	/* KMH, conduct */
-	u.uconduct.polyselfs++;
+	if (!u.uconduct.polyselfs++ && gamelog_first(GLF_POLYSELF))
+	    livelog_printf(LL_CONDUCT,
+			   "changed form for the first time, becoming %s",
+			   an(mons[mntmp].mname));
+	else
+	    livelog_printf(LL_MINORAC, "polymorphed into %s",
+			   an(mons[mntmp].mname));
 
 	if (!Upolyd) {
 		/* Human to monster; save human stats */

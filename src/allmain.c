@@ -358,6 +358,7 @@ moveloop()
 	/****************************************/
 
 	find_ac();
+	gamelog_conduct();	/* #chronicle: note newly broken conducts */
 	if(!flags.mv || Blind) {
 	    /* redo monsters if hallu or wearing a helm of telepathy */
 	    if (Hallucination) {	/* update screen randomly */
@@ -546,6 +547,7 @@ newgame()
 #endif
 
 	flags.ident = 1;
+	free_gamelog();		/* empty #chronicle */
 
 	for (i = 0; i < NUMMONS; i++)
 		mvitals[i].mvflags = mons[i].geno & G_NOCORPSE;
@@ -635,10 +637,15 @@ boolean new_game;	/* false => restoring an old game */
 	  Hello((struct monst *) 0), plname, buf, urace.adj,
 	  (currentgend && urole.name.f) ? urole.name.f : urole.name.m);
 #endif
-    if (new_game) pline("%s %s, welcome to %s!  You are a%s %s %s.",
+    if (new_game) {
+	pline("%s %s, welcome to %s!  You are a%s %s %s.",
 	  Hello((struct monst *) 0), plname, DEF_GAME_NAME, buf, urace.adj,
 	  (currentgend && urole.name.f) ? urole.name.f : urole.name.m);
-    else pline("%s %s, the%s %s %s, welcome back to %s!",
+	/* #chronicle; this way the list of major events is never empty */
+	livelog_printf(LL_ACHIEVE, "%s the%s %s %s entered the dungeon",
+	  plname, buf, urace.adj,
+	  (currentgend && urole.name.f) ? urole.name.f : urole.name.m);
+    } else pline("%s %s, the%s %s %s, welcome back to %s!",
 	  Hello((struct monst *) 0), plname, buf, urace.adj,
 	  (currentgend && urole.name.f) ? urole.name.f : urole.name.m, 
 	  DEF_GAME_NAME);

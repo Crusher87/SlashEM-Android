@@ -2796,7 +2796,10 @@ register struct monst *mon;
 	pline("Time stands still while you and %s lie in each other's arms...",
 		noit_mon_nam(mon));
 	/* Well,  IT happened ... */
-	u.uconduct.celibacy++;
+	if (!u.uconduct.celibacy++ && gamelog_first(GLF_CELIBACY))
+	    livelog_printf(LL_CONDUCT, "gave up celibacy with %s",
+			   x_monnam(mon, ARTICLE_A, (char *)0, EXACT_NAME,
+				    FALSE));
 	
 	if (rn2(35) > ACURR(A_CHA) + ACURR(A_INT)) {
 		/* Don't bother with mspec_used here... it didn't get tired! */
