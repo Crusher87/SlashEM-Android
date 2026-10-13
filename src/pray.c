@@ -1924,6 +1924,14 @@ turn_undead()
 	struct monst *mtmp, *mtmp2;
 	int once, range, xlev;
 
+	/* turning undead involves chanting a formula */
+	if (!can_chant(&youmonst)) {
+	    You("are %s upon %s to turn aside evilness.",
+		Strangled ? "not able to call" : "incapable of calling",
+		u_gname());
+	    return(0);
+	}
+
 	u.uconduct.gnostic++;
 
 	if ((u.ualign.type != A_CHAOTIC &&

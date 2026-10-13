@@ -275,6 +275,18 @@ struct permonst *mptr;
 		      (slithy(mptr) && !bigmonst(mptr)));
 }
 
+/* TRUE if monster can speak an incantation (for casting spells) */
+boolean
+can_chant(mtmp)
+struct monst *mtmp;
+{
+    if ((mtmp == &youmonst && Strangled) ||
+	    is_silent(mtmp->data) || !has_head(mtmp->data) ||
+	    mtmp->data->msound == MS_BUZZ || mtmp->data->msound == MS_BURBLE)
+	return FALSE;
+    return TRUE;
+}
+
 #endif /* OVL0 */
 #ifdef OVL1
 

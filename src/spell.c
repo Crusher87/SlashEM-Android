@@ -818,6 +818,12 @@ boolean atme;
 	skill = spell_skilltype(spellid(spell));
 	role_skill = P_SKILL(skill);
 
+	/* spells need to be spoken */
+	if (!can_chant(&youmonst)) {
+	    You("are unable to chant the incantation.");
+	    return(0);	/* no time elapses */
+	}
+
 	/*
 	 * Spell casting no longer affects knowledge of the spell. A
 	 * decrement of spell knowledge is done every turn.
