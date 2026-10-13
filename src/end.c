@@ -39,9 +39,13 @@ STATIC_DCL void FDECL(get_valuables, (struct obj *));
 STATIC_DCL void FDECL(sort_valuables, (struct valuable_data *,int));
 STATIC_DCL void FDECL(artifact_score, (struct obj *,BOOLEAN_P,winid));
 STATIC_DCL void FDECL(savelife, (int));
+STATIC_PTR int FDECL(CFDECLSPEC vanqsort_cmp, (const genericptr,
+					      const genericptr));
+STATIC_DCL int NDECL(set_vanq_order);
 STATIC_DCL boolean FDECL(list_vanquished, (CHAR_P, BOOLEAN_P));
-STATIC_DCL void FDECL(list_genocided, (CHAR_P, BOOLEAN_P));
 STATIC_DCL boolean FDECL(should_query_disclose_option, (int,char *));
+
+extern const int monstr[];
 
 #if defined(__BEOS__) || defined(MICRO) || defined(WIN32) || defined(OS2) || defined(ANDROID)
 extern void FDECL(nethack_exit,(int));
@@ -1034,65 +1038,244 @@ int status;
 	nethack_exit(status);
 }
 
+/* sort orders for the vanquished monsters list (and genocided species) */
+enum vanq_order_modes {
+	VANQ_MLVL_MNDX = 0,
+	VANQ_MSTR_MNDX,
+	VANQ_ALPHA_SEP,
+	VANQ_ALPHA_MIX,
+	VANQ_MCLS_HTOL,
+	VANQ_MCLS_LTOH,
+	VANQ_COUNT_H_L,
+	VANQ_COUNT_L_H,
+
+	NUM_VANQ_ORDER_MODES
+};
+
+static const char *vanqorders[NUM_VANQ_ORDER_MODES] = {
+	"traditional: by monster level, by internal monster index",
+	"by monster toughness, by internal monster index",
+	"alphabetically, first unique monsters, then others",
+	"alphabetically, unique monsters and others intermixed",
+	"by monster class, high to low level within class",
+	"by monster class, low to high level within class",
+	"by count, high to low, by internal index within tied count",
+	"by count, low to high, by internal index within tied count",
+};
+static int vanq_sortmode = VANQ_MLVL_MNDX;
+
+/* high priests aren't unique but are flagged as such to simplify something */
+#define UniqCritterIndx(mndx) ((mons[mndx].geno & G_UNIQ) \
+			       && mndx != PM_HIGH_PRIEST)
+
+STATIC_PTR int CFDECLSPEC
+vanqsort_cmp(vptr1, vptr2)
+const genericptr vptr1;
+const genericptr vptr2;
+{
+	int indx1 = *(short *) vptr1, indx2 = *(short *) vptr2,
+	    mlev1, mlev2, mstr1, mstr2, uniq1, uniq2, died1, died2, res;
+	const char *name1, *name2, *punct;
+	schar mcls1, mcls2;
+
+	switch (vanq_sortmode) {
+	default:
+	case VANQ_MLVL_MNDX:
+	    /* sort by monster level */
+	    mlev1 = mons[indx1].mlevel, mlev2 = mons[indx2].mlevel;
+	    res = mlev2 - mlev1;	/* mlevel high to low */
+	    break;
+	case VANQ_MSTR_MNDX:
+	    /* sort by monster toughness */
+	    mstr1 = monstr[indx1], mstr2 = monstr[indx2];
+	    res = mstr2 - mstr1;	/* monstr high to low */
+	    break;
+	case VANQ_ALPHA_SEP:
+	    uniq1 = UniqCritterIndx(indx1) ? 1 : 0;
+	    uniq2 = UniqCritterIndx(indx2) ? 1 : 0;
+	    if (uniq1 ^ uniq2) {	/* one or other uniq, but not both */
+		res = uniq2 - uniq1;
+		break;
+	    } /* else both unique or neither unique */
+	    /*FALLTHRU*/
+	case VANQ_ALPHA_MIX:
+	    name1 = mons[indx1].mname, name2 = mons[indx2].mname;
+	    res = strcmpi(name1, name2);	/* caseblind alpha, low to high */
+	    break;
+	case VANQ_MCLS_HTOL:
+	case VANQ_MCLS_LTOH:
+	    /* mons[].mlet is a small integer, 1..N, of type plain char;
+	       if 'char' happens to be unsigned, (mlet1 - mlet2) would yield
+	       an inappropriate result when mlet2 is greater than mlet1,
+	       so force our copies (mcls1, mcls2) to be signed */
+	    mcls1 = (schar) mons[indx1].mlet, mcls2 = (schar) mons[indx2].mlet;
+	    /* S_ANT through S_ZRUTY correspond to lowercase monster classes,
+	       S_ANGEL through S_ZOMBIE correspond to uppercase, and various
+	       punctuation characters are used for classes beyond those */
+	    if (mcls1 > S_ZOMBIE && mcls2 > S_ZOMBIE) {
+		/* force a specific order to the punctuation classes that's
+		   different from the internal order;
+		   internal order is ok if neither or just one is punctuation
+		   since letters have lower values so come out before punct */
+		static const char punctclasses[] = {
+		    S_LIZARD, S_EEL, S_GOLEM, S_GHOST, S_DEMON, S_HUMAN, '\0'
+		};
+
+		if ((punct = index(punctclasses, mcls1)) != 0)
+		    mcls1 = (schar) (S_ZOMBIE + 1 + (int)(punct - punctclasses));
+		if ((punct = index(punctclasses, mcls2)) != 0)
+		    mcls2 = (schar) (S_ZOMBIE + 1 + (int)(punct - punctclasses));
+	    }
+	    res = mcls1 - mcls2;	/* class */
+	    if (res == 0) {
+		mlev1 = mons[indx1].mlevel, mlev2 = mons[indx2].mlevel;
+		res = mlev1 - mlev2;	/* mlevel low to high */
+		if (vanq_sortmode == VANQ_MCLS_HTOL)
+		    res = -res;		/* mlevel high to low */
+	    }
+	    break;
+	case VANQ_COUNT_H_L:
+	case VANQ_COUNT_L_H:
+	    died1 = mvitals[indx1].died, died2 = mvitals[indx2].died;
+	    res = died2 - died1;	/* dead count high to low */
+	    if (vanq_sortmode == VANQ_COUNT_L_H)
+		res = -res;		/* dead count low to high */
+	    break;
+	}
+	/* tiebreaker: internal mons[] index */
+	if (res == 0)
+	    res = indx1 - indx2;	/* mndx low to high */
+	return res;
+}
+
+/* let the player pick the sort order; returns -1 if cancelled via ESC */
+STATIC_OVL int
+set_vanq_order()
+{
+	winid tmpwin;
+	menu_item *selected;
+	anything any;
+	int i, n, choice;
+
+	tmpwin = create_nhwindow(NHW_MENU);
+	start_menu(tmpwin);
+	any.a_void = 0;		/* zero out all bits */
+	for (i = 0; i < SIZE(vanqorders); i++) {
+	    if (i == VANQ_ALPHA_MIX || i == VANQ_MCLS_HTOL) /* skip these */
+		continue;
+	    any.a_int = i + 1;
+	    add_menu(tmpwin, NO_GLYPH, &any, 0, 0, ATR_NONE, vanqorders[i],
+		     (i == vanq_sortmode) ? MENU_SELECTED : MENU_UNSELECTED);
+	}
+	end_menu(tmpwin, "Sort order for vanquished monster counts");
+
+	n = select_menu(tmpwin, PICK_ONE, &selected);
+	destroy_nhwindow(tmpwin);
+	if (n > 0) {
+	    choice = selected[0].item.a_int - 1;
+	    /* skip preselected entry if we have more than one item chosen */
+	    if (n > 1 && choice == vanq_sortmode)
+		choice = selected[1].item.a_int - 1;
+	    free((genericptr_t) selected);
+	    vanq_sortmode = choice;
+	}
+	return (n < 0) ? -1 : vanq_sortmode;
+}
+
+/* defquery 'a' means show the list after asking for the sort order */
 STATIC_OVL boolean
 list_vanquished(defquery, ask)
 char defquery;
 boolean ask;
 {
-    register int i, lev;
-    int ntypes = 0, max_lev = 0, nkilled;
+    register int i;
+    int pfx, nkilled;
+    unsigned ntypes, ni;
     long total_killed = 0L;
     char c;
     winid klwin;
-    char buf[BUFSZ];
+    short mindx[NUMMONS];
+    char buf[BUFSZ], buftoo[BUFSZ];
 
     /* get totals first */
+    ntypes = 0;
     for (i = LOW_PM; i < NUMMONS; i++) {
-	if (mvitals[i].died) ntypes++;
-	total_killed += (long)mvitals[i].died;
-	if (mons[i].mlevel > max_lev) max_lev = mons[i].mlevel;
+	if ((nkilled = (int) mvitals[i].died) == 0) continue;
+	mindx[ntypes++] = i;
+	total_killed += (long) nkilled;
     }
 
     /* vanquished creatures list;
      * includes all dead monsters, not just those killed by the player
      */
     if (ntypes != 0) {
+	char mlet, prev_mlet = 0; /* used as small integer, not character */
+	boolean class_header, uniq_header, was_uniq = FALSE;
+
 	c = ask ? yn_function("Do you want an account of creatures vanquished?",
-			      ynqchars, defquery) : defquery;
+			      ynaqchars, defquery) : defquery;
 	if (c == 'q') done_stopprint++;
-	if (c == 'y') {
+	if (c == 'y' || c == 'a') {
+	    if (c == 'a') {	/* ask player to choose sort order */
+		/* choose value for vanq_sortmode via menu; ESC cancels list
+		   of vanquished monsters but does not set 'done_stopprint' */
+		if (set_vanq_order() < 0)
+		    return (boolean) (total_killed);
+	    }
+	    uniq_header = (vanq_sortmode == VANQ_ALPHA_SEP);
+	    class_header = (vanq_sortmode == VANQ_MCLS_LTOH ||
+			    vanq_sortmode == VANQ_MCLS_HTOL);
+
 	    klwin = create_nhwindow(NHW_MENU);
 	    putstr(klwin, 0, "Vanquished creatures:");
 	    putstr(klwin, 0, "");
 
-	    /* countdown by monster "toughness" */
-	    for (lev = max_lev; lev >= 0; lev--)
-	      for (i = LOW_PM; i < NUMMONS; i++)
-		if (mons[i].mlevel == lev && (nkilled = mvitals[i].died) > 0) {
-		    if ((mons[i].geno & G_UNIQ) && i != PM_HIGH_PRIEST) {
-			Sprintf(buf, "%s%s",
-				!type_is_pname(&mons[i]) ? "The " : "",
-				mons[i].mname);
-			if (nkilled > 1) {
-			    switch (nkilled) {
-				case 2:  Sprintf(eos(buf)," (twice)");  break;
-				case 3:  Sprintf(eos(buf)," (thrice)");  break;
-				default: Sprintf(eos(buf)," (%d time%s)",
-						 nkilled, plur(nkilled));
-					 break;
-			    }
-			}
-		    } else {
-			/* trolls or undead might have come back,
-			   but we don't keep track of that */
-			if (nkilled == 1)
-			    Strcpy(buf, an(mons[i].mname));
-			else
-			    Sprintf(buf, "%d %s",
-				    nkilled, makeplural(mons[i].mname));
-		    }
-		    putstr(klwin, 0, buf);
+	    qsort((genericptr_t) mindx, ntypes, sizeof *mindx, vanqsort_cmp);
+	    for (ni = 0; ni < ntypes; ni++) {
+		i = mindx[ni];
+		nkilled = mvitals[i].died;
+		mlet = mons[i].mlet;
+		if (class_header && mlet != prev_mlet) {
+		    Strcpy(buf, monexplain[(int) mlet]);
+		    putstr(klwin, ask ? 0 : iflags.menu_headings,
+			   upstart(buf));
+		    prev_mlet = mlet;
 		}
+		if (UniqCritterIndx(i)) {
+		    Sprintf(buf, "%s%s",
+			    !type_is_pname(&mons[i]) ? "the " : "",
+			    mons[i].mname);
+		    if (nkilled > 1) {
+			switch (nkilled) {
+			    case 2:  Sprintf(eos(buf), " (twice)");  break;
+			    case 3:  Sprintf(eos(buf), " (thrice)");  break;
+			    default: Sprintf(eos(buf), " (%d times)", nkilled);
+				     break;
+			}
+		    }
+		    was_uniq = TRUE;
+		} else {
+		    if (uniq_header && was_uniq) {
+			putstr(klwin, 0, "");
+			was_uniq = FALSE;
+		    }
+		    /* trolls or undead might have come back,
+		       but we don't keep track of that */
+		    if (nkilled == 1)
+			Strcpy(buf, an(mons[i].mname));
+		    else
+			Sprintf(buf, "%3d %s",
+				nkilled, makeplural(mons[i].mname));
+		}
+		/* number of leading spaces to match 3 digit prefix */
+		pfx = !strncmpi(buf, "the ", 3) ? 0 :
+		      !strncmpi(buf, "an ", 3) ? 1 :
+		      !strncmpi(buf, "a ", 2) ? 2 :
+		      !digit(buf[2]) ? 4 : 0;
+		if (class_header) ++pfx;
+		Sprintf(buftoo, "%*s%s", pfx, "", buf);
+		putstr(klwin, 0, buftoo);
+	    }
 	    /*
 	     * if (Hallucination)
 	     *     putstr(klwin, 0, "and a partridge in a pear tree");
@@ -1109,10 +1292,11 @@ boolean ask;
     return (boolean) (total_killed);
 }
 
+/* #vanquished command: offers the sort orders first */
 int
 dolistvanq()
 {
-    if (!list_vanquished('y', FALSE))
+    if (!list_vanquished('a', FALSE))
         pline("No monsters have yet been killed.");
     return(0);
 }
@@ -1129,39 +1313,74 @@ num_genocides()
     return n;
 }
 
-STATIC_OVL void
+/* defquery 'a' means ask for the sort order first; 'g' is used while
+   being asked what to genocide (no "none" message at end of game) */
+void
 list_genocided(defquery, ask)
 char defquery;
 boolean ask;
 {
     register int i;
-    int ngenocided;
+    int ngenocided, save_sortmode;
+    unsigned ngone = 0, ni;
     char c;
     winid klwin;
+    short mindx[NUMMONS];
     char buf[BUFSZ];
+    boolean genoing = (defquery == 'g');
+    char mlet, prev_mlet = 0;
+    boolean class_header = FALSE;
 
+    if (genoing) defquery = 'y';
     ngenocided = num_genocides();
 
     /* genocided species list */
     if (ngenocided != 0) {
 	c = ask ? yn_function("Do you want a list of species genocided?",
-			      ynqchars, defquery) : defquery;
+			      ynaqchars, defquery) : defquery;
 	if (c == 'q') done_stopprint++;
-	if (c == 'y') {
+	if (c == 'y' || c == 'a') {
+	    for (i = LOW_PM; i < NUMMONS; i++)
+		if (mvitals[i].mvflags & G_GENOD) mindx[ngone++] = i;
+
+	    if (ngone > 1) {
+		/* genocided species share the vanquished list's sort order */
+		if (c == 'a' && set_vanq_order() < 0)
+		    return;
+		/* sorting by count doesn't make sense for genocides;
+		   use alphabetical order instead */
+		save_sortmode = vanq_sortmode;
+		if (vanq_sortmode == VANQ_COUNT_H_L ||
+			vanq_sortmode == VANQ_COUNT_L_H)
+		    vanq_sortmode = VANQ_ALPHA_MIX;
+		qsort((genericptr_t) mindx, ngone, sizeof *mindx,
+		      vanqsort_cmp);
+		class_header = (vanq_sortmode == VANQ_MCLS_LTOH ||
+				vanq_sortmode == VANQ_MCLS_HTOL);
+		vanq_sortmode = save_sortmode;
+	    }
+
 	    klwin = create_nhwindow(NHW_MENU);
 	    putstr(klwin, 0, "Genocided species:");
 	    putstr(klwin, 0, "");
 
-	    for (i = LOW_PM; i < NUMMONS; i++)
-		if (mvitals[i].mvflags & G_GENOD) {
-		    if ((mons[i].geno & G_UNIQ) && i != PM_HIGH_PRIEST)
-			Sprintf(buf, "%s%s",
-				!type_is_pname(&mons[i]) ? "" : "the ",
-				mons[i].mname);
-		    else
-			Strcpy(buf, makeplural(mons[i].mname));
-		    putstr(klwin, 0, buf);
+	    for (ni = 0; ni < ngone; ni++) {
+		i = mindx[ni];
+		mlet = mons[i].mlet;
+		if (class_header && mlet != prev_mlet) {
+		    Strcpy(buf, monexplain[(int) mlet]);
+		    putstr(klwin, ask ? 0 : iflags.menu_headings,
+			   upstart(buf));
+		    prev_mlet = mlet;
 		}
+		if (UniqCritterIndx(i))
+		    Sprintf(buf, "%s%s",
+			    !type_is_pname(&mons[i]) ? "" : "the ",
+			    mons[i].mname);
+		else
+		    Strcpy(buf, makeplural(mons[i].mname));
+		putstr(klwin, 0, buf);
+	    }
 
 	    putstr(klwin, 0, "");
 	    Sprintf(buf, "%d species genocided.", ngenocided);
@@ -1170,7 +1389,18 @@ boolean ask;
 	    display_nhwindow(klwin, TRUE);
 	    destroy_nhwindow(klwin);
 	}
+    } else if (!program_state.gameover) {
+	/* #genocided or genocide prompt rather than final disclosure */
+	pline("No creatures have been genocided%s.", genoing ? " yet" : "");
     }
+}
+
+/* #genocided command */
+int
+dogenocided()
+{
+    list_genocided(iflags.menu_requested ? 'a' : 'y', FALSE);
+    return 0;
 }
 
 /*end.c*/

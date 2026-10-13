@@ -2244,6 +2244,7 @@ struct ext_func_tab extcmdlist[] = {
 #endif
 	{"explore", "enter explore mode", enter_explore_mode, TRUE},
 	{"force", "force a lock", doforce, FALSE},
+	{"genocided", "list genocided monsters", dogenocided, TRUE},
 	{"invoke", "invoke an object's powers", doinvoke, TRUE},
 	{"jump", "jump to a location", dojump, FALSE},
 	{"loot", "loot a box on the floor", doloot, FALSE},

@@ -614,6 +614,8 @@ E void FDECL(done, (int));
 E void FDECL(container_contents, (struct obj *,BOOLEAN_P,BOOLEAN_P));
 E void FDECL(terminate, (int));
 E int NDECL(dolistvanq);
+E int NDECL(dogenocided);
+E void FDECL(list_genocided, (CHAR_P,BOOLEAN_P));
 E int NDECL(num_genocides);
 /* KMH, ethics */
 E int NDECL(doethics);
