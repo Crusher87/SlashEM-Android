@@ -11,6 +11,12 @@
 
 #ifdef OVLB
 
+/* a formatted message is built in a buffer this big, then chopped down
+   to BUFSZ-1 characters if it turns out to be longer than that */
+#ifndef BIGBUFSZ
+#define BIGBUFSZ (4 * BUFSZ)
+#endif
+
 static boolean no_repeat = FALSE;
 
 static char *FDECL(You_buf, (int));
@@ -47,25 +53,48 @@ void
 pline VA_DECL(const char *, line)
 #endif	/* USE_STDARG | USE_VARARG */
 
-	char pbuf[BUFSZ];
+	static int in_pline = 0;
+	char pbuf[BIGBUFSZ];	/* will get chopped down to BUFSZ-1 if longer */
+	int ln;
 /* Do NOT use VA_START and VA_END in here... see above */
 
 	if (!line || !*line) return;
 	if (index(line, '%')) {
-	    Vsprintf(pbuf,line,VA_ARGS);
+	    (void) vsnprintf(pbuf, sizeof pbuf, line, VA_ARGS);
 	    line = pbuf;
 	}
-	if (!iflags.window_inited) {
+	if ((ln = (int) strlen(line)) > BUFSZ - 1) {
+	    if (line != pbuf)			/* no '%' was present */
+		(void) strncpy(pbuf, line, BUFSZ - 1); /* caveat: unterminated */
+	    /* truncate, preserving the final 3 characters:
+	       "___ extremely long text" -> "___ extremely l...ext"
+	       (this may be suboptimal if overflow is less than 3) */
+	    (void) strncpy(pbuf + BUFSZ - 1 - 6, "...", 3);
+	    /* avoid strncpy; buffers could overlap if excess is small */
+	    pbuf[BUFSZ - 1 - 3] = line[ln - 3];
+	    pbuf[BUFSZ - 1 - 2] = line[ln - 2];
+	    pbuf[BUFSZ - 1 - 1] = line[ln - 1];
+	    pbuf[BUFSZ - 1] = '\0';
+	    line = pbuf;
+	}
+	/* use raw_print() if we're called too early (or perhaps too late
+	   during shutdown) or if we're being called recursively (probably
+	   via debugpline() in the interface code) */
+	if (in_pline++ || !iflags.window_inited) {
 	    raw_print(line);
-	    return;
+	    goto pline_done;
 	}
 #ifndef MAC
 	if (no_repeat && !strcmp(line, toplines))
-	    return;
+	    goto pline_done;
 #endif /* MAC */
 	if (vision_full_recalc) vision_recalc(0);
 	if (u.ux) flush_screen(1);		/* %% */
 	putstr(WIN_MESSAGE, 0, line);
+
+ pline_done:
+	--in_pline;
+	return;
 }
 
 /*VARARGS1*/
@@ -233,13 +262,19 @@ raw_printf VA_DECL(const char *, line)
 #endif
 /* Do NOT use VA_START and VA_END in here... see above */
 
-	if(!index(line, '%'))
-	    raw_print(line);
-	else {
-	    char pbuf[BUFSZ];
-	    Vsprintf(pbuf,line,VA_ARGS);
-	    raw_print(pbuf);
+	char pbuf[BIGBUFSZ];	/* will be chopped down to BUFSZ-1 if longer */
+
+	if (index(line, '%')) {
+	    (void) vsnprintf(pbuf, sizeof pbuf, line, VA_ARGS);
+	    line = pbuf;
 	}
+	if ((int) strlen(line) > BUFSZ - 1) {
+	    if (line != pbuf)
+		line = strncpy(pbuf, line, BUFSZ - 1);
+	    /* unlike pline, we don't futz around to keep last few chars */
+	    pbuf[BUFSZ - 1] = '\0'; /* terminate strncpy or truncate vsnprintf */
+	}
+	raw_print(line);
 }
 
 
@@ -253,10 +288,12 @@ impossible VA_DECL(const char *, s)
 	program_state.in_impossible = 1;
 	{
 	    char pbuf[BUFSZ];
-	    Vsprintf(pbuf,s,VA_ARGS);
+
+	    (void) vsnprintf(pbuf, sizeof pbuf, s, VA_ARGS);
 	    paniclog("impossible", pbuf);
+	    /* the argument list has been used up; don't format it again */
+	    pline("%s", pbuf);
 	}
-	vpline(s,VA_ARGS);
 	pline("Program in disorder - perhaps you'd better #quit.");
 	program_state.in_impossible = 0;
 	VA_END();
