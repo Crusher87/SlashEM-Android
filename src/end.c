@@ -529,6 +529,10 @@ time_t when;	/* date+time at end of game */
 	dump_skills();
 	dump_spells();
 	dump_techniques();
+	show_overview(final, how);
+	putstr(0, 0, "");
+	show_gamelog(final);
+	putstr(0, 0, "");
 
 	/*
 	 * More end-of-game sections go here.  A function that shows its
