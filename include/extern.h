@@ -1242,6 +1242,7 @@ E void FDECL(killed, (struct monst *));
 E void FDECL(xkilled, (struct monst *,int));
 E void FDECL(mon_to_stone, (struct monst*));
 E void FDECL(mnexto, (struct monst *));
+E void FDECL(m_into_limbo, (struct monst *));
 E boolean FDECL(mnearto, (struct monst *,XCHAR_P,XCHAR_P,BOOLEAN_P));
 E void FDECL(poisontell, (int));
 E void FDECL(poisoned, (const char *,int,const char *,int));

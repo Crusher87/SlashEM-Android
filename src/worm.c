@@ -575,8 +575,11 @@ remove_worm(worm)
 /*  if (!mtmp->wormno) return;  bullet proofing */
 
     while (curr) {
-	remove_monster(curr->wx, curr->wy);
-	newsym(curr->wx, curr->wy);
+	if (curr->wx) {
+	    remove_monster(curr->wx, curr->wy);
+	    newsym(curr->wx, curr->wy);
+	    curr->wx = 0;	/* off the map now */
+	}
 	curr = curr->nseg;
     }
 }
