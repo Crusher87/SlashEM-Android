@@ -831,6 +831,8 @@ E int NDECL(getmonth);	/* KMH -- Used by gypsies */
 E char *FDECL(yymmdd, (time_t));
 #endif
 E long FDECL(yyyymmdd, (time_t));
+E long FDECL(hhmmss, (time_t));
+E time_t NDECL(getnow);
 E int NDECL(phase_of_the_moon);
 E boolean NDECL(friday_13th);
 E boolean NDECL(groundhog_day);	/* KMH -- February 2 */
@@ -1634,6 +1636,10 @@ E boolean FDECL(is_autopickup_exception, (struct obj *, BOOLEAN_P));
 
 E void VDECL(pline, (const char *,...)) PRINTF_F(1,2);
 E void VDECL(Norep, (const char *,...)) PRINTF_F(1,2);
+E void VDECL(pline_prompt, (const char *,...)) PRINTF_F(1,2);
+E void FDECL(msghist_add, (const char *));
+E const char *FDECL(msghist_get, (int));
+E void NDECL(msghist_free);
 E void NDECL(free_youbuf);
 E void VDECL(You, (const char *,...)) PRINTF_F(1,2);
 E void VDECL(Your, (const char *,...)) PRINTF_F(1,2);
@@ -2043,6 +2049,9 @@ E int NDECL(dovspell);
 E void FDECL(learnspell, (struct obj *));
 E boolean NDECL(studyspell);
 E void FDECL(initialspell, (struct obj *));
+#ifdef DUMPLOG
+E void NDECL(dump_spells);
+#endif
 
 /* ### steal.c ### */
 
@@ -2089,6 +2098,9 @@ E int FDECL(tech_inuse, (int));
 E void NDECL(tech_timeout);
 E boolean FDECL(tech_known, (SHORT_P));
 E void FDECL(learntech, (SHORT_P,long,int));
+#ifdef DUMPLOG
+E void NDECL(dump_techniques);
+#endif
 
 /* ### teleport.c ### */
 
@@ -2451,6 +2463,9 @@ E int FDECL(weapon_dam_bonus, (struct obj *));
 E int FDECL(skill_bonus, (int));
 E void FDECL(skill_init, (const struct def_skill *));
 E void NDECL(practice_weapon);
+#ifdef DUMPLOG
+E void NDECL(dump_skills);
+#endif
 
 /* ### were.c ### */
 
@@ -2488,7 +2503,25 @@ E void FDECL(unwield, (struct obj *,BOOLEAN_P));
 
 E void FDECL(choose_windows, (const char *));
 E char FDECL(genl_message_menu, (CHAR_P,int,const char *));
+E void FDECL(putmsghistory, (const char *));
 E void FDECL(genl_preference_update, (const char *));
+#ifdef DUMPLOG
+E void FDECL(dump_open_log, (time_t));
+E void NDECL(dump_close_log);
+E const char *NDECL(dumplog_filename);
+E void FDECL(dump_redirect, (BOOLEAN_P));
+E void FDECL(dump_forward_putstr, (winid,int,const char *,BOOLEAN_P));
+E void NDECL(dump_map);
+E void NDECL(dump_status);
+E void NDECL(dump_msghistory);
+#endif
+#ifdef ANDROID
+/* in winandroid.c */
+E void FDECL(and_putmsghistory, (const char *));
+# ifdef DUMPLOG
+E FILE *FDECL(and_open_dumplog, (const char *,char *));
+# endif
+#endif
 
 /* ### wizard.c ### */
 

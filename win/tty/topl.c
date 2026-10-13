@@ -209,6 +209,62 @@ remember_topl()
     cw->maxcol = cw->maxrow = (idx + 1) % cw->rows;
 }
 
+/*
+ * Called by the core when a saved game is restored, once for each message
+ * that was in the message history when the game was saved (oldest first),
+ * then with a null pointer.  The saved messages go in front of the ones
+ * given since the program started ("Restoring save file..."), so that ^P
+ * shows them in the right order.
+ */
+void
+tty_putmsghistory(msg)
+const char *msg;
+{
+    static char **newmsgs = 0;	/* this session's messages */
+    struct WinDesc *cw;
+    int i, j, idx;
+
+    if (WIN_MESSAGE == WIN_ERR || !(cw = wins[WIN_MESSAGE]) || !cw->rows)
+	return;
+
+    if (msg && !newmsgs) {
+	/* take this session's messages out of the history; the current
+	   top line, if any, is the newest of them */
+	remember_topl();
+	newmsgs = (char **) alloc((unsigned) (cw->rows + 1) * sizeof (char *));
+	for (i = j = 0, idx = cw->maxrow; i < cw->rows; i++) {
+	    if (cw->data[idx] && *cw->data[idx])
+		newmsgs[j++] = cw->data[idx];
+	    else if (cw->data[idx])
+		free((genericptr_t) cw->data[idx]);
+	    cw->data[idx] = (char *) 0;
+	    cw->datlen[idx] = 0;
+	    idx = (idx + 1) % cw->rows;
+	}
+	newmsgs[j] = (char *) 0;
+	cw->maxcol = cw->maxrow = 0;
+	toplines[0] = '\0';
+    }
+
+    if (msg) {
+	/* the previous message moves into the history; this one becomes
+	   the most recent */
+	if (*toplines) remember_topl();
+	(void) strncpy(toplines, msg, TBUFSZ - 1);
+	toplines[TBUFSZ - 1] = '\0';
+    } else if (newmsgs) {
+	/* done with the saved messages; put back this session's ones */
+	for (i = 0; newmsgs[i]; i++) {
+	    if (*toplines) remember_topl();
+	    (void) strncpy(toplines, newmsgs[i], TBUFSZ - 1);
+	    toplines[TBUFSZ - 1] = '\0';
+	    free((genericptr_t) newmsgs[i]);
+	}
+	free((genericptr_t) newmsgs);
+	newmsgs = (char **) 0;
+    }
+}
+
 void
 addtopl(s)
 const char *s;
@@ -419,9 +475,9 @@ char def;
 	    if ((rb = index(respbuf, '\033')) != 0) *rb = '\0';
 	    Sprintf(prompt, "%s [%s] ", query, respbuf);
 	    if (def) Sprintf(eos(prompt), "(%c) ", def);
-	    pline("%s", prompt);
+	    pline_prompt("%s", prompt);
 	} else {
-	    pline("%s ", query);
+	    pline_prompt("%s ", query);
 	    q = readchar();
 	    goto clean_up;
 	}

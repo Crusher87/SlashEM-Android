@@ -97,6 +97,9 @@ static jmethodID jShowLog;
 static jmethodID jSetUsername;
 static jmethodID jSetNumPadOption;
 static jmethodID jAskName;
+#ifdef DUMPLOG
+static jmethodID jGetDumplogDir;
+#endif
 
 static boolean quit_if_possible;
 
@@ -170,6 +173,14 @@ void Java_com_tbd_forkfront_NetHackIO_RunNetHack(JNIEnv* env, jobject thiz, jstr
 		debuglog("baaaaad");
 		return;
 	}
+
+#ifdef DUMPLOG
+	// Optional: the game can do without it, so clear the
+	// NoSuchMethodError if the front end doesn't have it.
+	jGetDumplogDir = (*jEnv)->GetMethodID(jEnv, jApp, "getDumplogDir", "()Ljava/lang/String;");
+	if(!jGetDumplogDir)
+		(*jEnv)->ExceptionClear(jEnv);
+#endif
 
 	pChars = (*jEnv)->GetStringUTFChars(jEnv, path, 0);
 	if(chdir(pChars) != 0)
@@ -1139,6 +1150,81 @@ int and_doprev_message()
 }
 
 //____________________________________________________________________________________
+//putmsghistory(msg)
+//		-- Called by the core when a saved game is restored, once for
+//		   each message that was in the message history when the game
+//		   was saved (oldest first), then with a null pointer.
+//		-- The message log lives in the front end, so just add the old
+//		   messages to it. putstr() never waits for a key here, and the
+//		   restore clears the message window afterwards, so they show up
+//		   only in the log (^P).
+void and_putmsghistory(const char *msg)
+{
+	if(msg && *msg)
+		and_putstr(WIN_MESSAGE, ATR_NONE, msg);
+}
+
+#ifdef DUMPLOG
+//____________________________________________________________________________________
+//and_open_dumplog(basename, fullname)
+//		-- Called by the core (dump_open_log() in windows.c) to open the
+//		   end-of-game dump log called basename for writing.
+//		-- It goes to the directory the front end suggests
+//		   (Documents/nethack on the external storage). Android 10 and
+//		   later may refuse that since this app doesn't ask for a storage
+//		   permission, so then it goes to the game's own directory (the
+//		   current directory) instead.
+//		-- fullname (BUFSZ) gets the name of the file that was opened, or
+//		   an empty string if none could be.
+FILE *and_open_dumplog(const char *basename, char *fullname)
+{
+	FILE *fp = 0;
+	jstring jstr = 0;
+	const char *pChars;
+	char cwd[BUFSZ];
+
+	fullname[0] = 0;
+	if(jGetDumplogDir)
+		jstr = (jstring)JNICallO(jGetDumplogDir);
+	if((*jEnv)->ExceptionCheck(jEnv))
+	{
+		(*jEnv)->ExceptionClear(jEnv);
+		jstr = 0;
+	}
+	if(jstr)
+	{
+		pChars = (*jEnv)->GetStringUTFChars(jEnv, jstr, 0);
+		if(pChars && *pChars && strlen(pChars) + strlen(basename) + 2 < BUFSZ)
+		{
+			sprintf(fullname, "%s/%s", pChars, basename);
+			fp = fopen(fullname, "w");
+			if(!fp)
+				debuglog("dumplog: can't write %s (errno %d)", fullname, errno);
+		}
+		if(pChars)
+			(*jEnv)->ReleaseStringUTFChars(jEnv, jstr, pChars);
+		destroy_jobject(jstr);
+	}
+	if(!fp)
+	{
+		if(getcwd(cwd, sizeof(cwd)) && strlen(cwd) + strlen(basename) + 2 < BUFSZ)
+			sprintf(fullname, "%s/%s", cwd, basename);
+		else
+			strcpy(fullname, basename);
+		fp = fopen(fullname, "w");
+	}
+	if(fp)
+		debuglog("dumplog: writing %s", fullname);
+	else
+	{
+		debuglog("dumplog: can't write %s (errno %d)", fullname, errno);
+		fullname[0] = 0;
+	}
+	return fp;
+}
+#endif /* DUMPLOG */
+
+//____________________________________________________________________________________
 // char yn_function(const char *ques, const char *choices, char default)
 //		-- Print a prompt made up of ques, choices and default.
 //		   Read a single character response that is contained in
@@ -1596,7 +1682,7 @@ void get_ext_cmd_auto(const char *query, register char *bufp)
 	register int c;
 	const int maxc = COLNO >= BUFSZ ? BUFSZ-1 : COLNO;
 
-	pline("%s ", query);
+	pline_prompt("%s ", query);
 	bufp[n] = 0;
 	for(;;)
 	{

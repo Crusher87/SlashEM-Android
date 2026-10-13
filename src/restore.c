@@ -27,6 +27,7 @@ STATIC_DCL struct fruit *FDECL(loadfruitchn, (int));
 STATIC_DCL void FDECL(freefruitchn, (struct fruit *));
 STATIC_DCL void FDECL(ghostfruit, (struct obj *));
 STATIC_DCL boolean FDECL(restgamestate, (int, unsigned int *, unsigned int *));
+STATIC_DCL void FDECL(restore_msghistory, (int));
 STATIC_DCL void FDECL(restlevelstate, (unsigned int, unsigned int));
 STATIC_DCL int FDECL(restlevelfile, (int,XCHAR_P));
 STATIC_DCL void FDECL(reset_oattached_mids, (BOOLEAN_P));
@@ -467,10 +468,46 @@ unsigned int *stuckid, *steedid;	/* STEED */
 
 	restnames(fd);
 	restore_waterlevel(fd);
+	restore_msghistory(fd);
 	/* must come after all mons & objs are restored */
 	relink_timers(FALSE);
 	relink_light_sources(FALSE);
 	return(TRUE);
+}
+
+/* restore the message history written by save_msghistory() and give it
+   to the window port, so that ^P shows the messages from before the save */
+STATIC_OVL void
+restore_msghistory(fd)
+register int fd;
+{
+	int i, msgsize, nnew = 0;
+	char msg[BUFSZ], *newmsgs[MSGHISTORY_COUNT];
+	const char *s;
+
+	/* the messages given so far in this session ("Restoring save file...")
+	   are newer than the saved ones; set them aside */
+	for (i = 0; i < MSGHISTORY_COUNT; i++)
+	    if ((s = msghist_get(i)) != 0)
+		newmsgs[nnew++] = strcpy((char *) alloc(strlen(s) + 1), s);
+	msghist_free();
+
+	while (1) {
+	    mread(fd, (genericptr_t) &msgsize, sizeof msgsize);
+	    if (msgsize == -1) break;
+	    if (msgsize < 0 || msgsize > BUFSZ - 1)
+		panic("restore_msghistory: bad message length (%d)", msgsize);
+	    mread(fd, (genericptr_t) msg, (unsigned) msgsize);
+	    msg[msgsize] = '\0';
+	    msghist_add(msg);
+	    putmsghistory(msg);
+	}
+	putmsghistory((const char *) 0);
+
+	for (i = 0; i < nnew; i++) {
+	    msghist_add(newmsgs[i]);
+	    free((genericptr_t) newmsgs[i]);
+	}
 }
 
 /* update game state pointers to those valid for the current level (so we

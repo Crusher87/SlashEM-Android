@@ -1455,4 +1455,35 @@ studyspell()
 	return (FALSE);
 }
 
+#ifdef DUMPLOG
+/* list the hero's spells for the end-of-game dump log */
+void
+dump_spells()
+{
+	winid win;
+	int i;
+	char buf[BUFSZ];
+
+	win = create_nhwindow(NHW_MENU);
+	if (spellid(0) == NO_SPELL) {
+		putstr(win, 0, "You didn't know any spells.");
+	} else {
+		putstr(win, 0, "Spells known in the end:");
+		Sprintf(buf, "%-21s Level  %-12s Fail", " Name", "Category");
+		putstr(win, 0, buf);
+		for (i = 0; i < MAXSPELL && spellid(i) != NO_SPELL; i++) {
+			Sprintf(buf, " %-20s  %2d%s   %-12s %3d%%",
+				spellname(i), spellev(i),
+				spellknow(i) ? " " : "*",
+				spelltypemnemonic(spell_skilltype(spellid(i))),
+				100 - percent_success(i));
+			putstr(win, 0, buf);
+		}
+	}
+	putstr(win, 0, "");
+	display_nhwindow(win, TRUE);
+	destroy_nhwindow(win);
+}
+#endif /* DUMPLOG */
+
 /*spell.c*/

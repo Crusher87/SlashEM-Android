@@ -2259,6 +2259,44 @@ blitz_spirit_bomb()
 	return 1;
 }
 
+#ifdef DUMPLOG
+/* list the hero's techniques for the end-of-game dump log */
+void
+dump_techniques()
+{
+	winid win;
+	int i, len, longest, tlevel;
+	char buf[BUFSZ];
+
+	for (longest = 0, i = 0; i < MAXTECH; i++) {
+	    if (techid(i) == NO_TECH) continue;
+	    if ((len = strlen(techname(i))) > longest)
+		longest = len;
+	}
+
+	win = create_nhwindow(NHW_MENU);
+	if (!longest) {
+	    putstr(win, 0, "You didn't know any techniques.");
+	} else {
+	    putstr(win, 0, "Techniques known in the end:");
+	    Sprintf(buf, " %-*s Level", longest, "Name");
+	    putstr(win, 0, buf);
+	    for (i = 0; i < MAXTECH; i++) {
+		if (techid(i) == NO_TECH) continue;
+		tlevel = techlev(i);
+		if (tlevel > 0)
+		    Sprintf(buf, " %-*s %5d", longest, techname(i), tlevel);
+		else
+		    Sprintf(buf, " %-*s Beyond recall", longest, techname(i));
+		putstr(win, 0, buf);
+	    }
+	}
+	putstr(win, 0, "");
+	display_nhwindow(win, TRUE);
+	destroy_nhwindow(win);
+}
+#endif /* DUMPLOG */
+
 #ifdef DEBUG
 void
 wiz_debug_cmd() /* in this case, allow controlled loss of techniques */

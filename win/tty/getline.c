@@ -56,7 +56,7 @@ getlin_hook_proc hook;
 	cw->flags &= ~WIN_STOP;
 	ttyDisplay->toplin = 3; /* special prompt state */
 	ttyDisplay->inread++;
-	pline("%s ", query);
+	pline_prompt("%s ", query);
 	*obufp = 0;
 	for(;;) {
 		(void) fflush(stdout);

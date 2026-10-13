@@ -197,6 +197,7 @@ struct instance_flags {
 #endif
 	boolean  window_inited; /* true if init_nhwindows() completed */
 	boolean  vision_inited; /* true if vision is ready */
+	boolean  in_dumplog;	/* output goes to the end-of-game dump log */
 	boolean  menu_tab_sep;	/* Use tabs to separate option menu fields */
 	boolean  menu_requested; /* Flag for overloaded use of 'm' prefix
 				  * on some non-move commands */
