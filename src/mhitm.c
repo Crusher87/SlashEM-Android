@@ -718,9 +718,13 @@ struct monst *magr, *mdef;
 
     mhp = mdef->mhp;
     m_shot.n = multishot;
-    for (m_shot.i = 1; m_shot.i <= m_shot.n; m_shot.i++)
+    for (m_shot.i = 1; m_shot.i <= m_shot.n; m_shot.i++) {
 	m_throw(magr, magr->mx, magr->my, sgn(tbx), sgn(tby),
 		distmin(magr->mx, magr->my, mdef->mx, mdef->my), obj);
+	/* the thrower might have been killed (gas spore explosion,
+	   perhaps), dropping inventory and freeing obj via a merge */
+	if (DEADMONSTER(magr)) break;
+    }
     m_shot.n = m_shot.i = 0;
     m_shot.o = STRANGE_OBJECT;
     m_shot.s = FALSE;

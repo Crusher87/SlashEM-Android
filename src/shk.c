@@ -1042,6 +1042,7 @@ register struct obj *obj, *merge;
 	    }
 	}
 	if (Has_contents(obj)) delete_contents(obj);
+	if (Is_container(obj)) maybe_reset_pick(obj);
 
 	shkp = 0;
 	if (obj->unpaid) {

@@ -953,6 +953,7 @@ E int NDECL(picklock);
 E boolean FDECL(picking_lock, (int *,int *));
 E boolean FDECL(picking_at, (int,int));
 E void NDECL(reset_pick);
+E void FDECL(maybe_reset_pick, (struct obj *));
 E int FDECL(pick_lock, (struct obj **));
 #ifdef ANDROID
 E boolean NDECL(can_force);

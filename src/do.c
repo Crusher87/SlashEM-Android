@@ -1074,6 +1074,12 @@ boolean at_stairs, falling, portal;
 	fd = currentlevel_rewrite();
 	if (fd < 0) return;
 
+	/* discard context which applies to the level we're leaving;
+	   for lock-picking, container may be carried, in which case we
+	   keep context; if on the floor, it's about to be saved+freed and
+	   maybe_reset_pick() needs to do its carried() check before that */
+	maybe_reset_pick((struct obj *)0);
+
 	if (falling) /* assuming this is only trap door or hole */
 	    impact_drop((struct obj *)0, u.ux, u.uy, newlevel->dlevel);
 
