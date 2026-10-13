@@ -6,6 +6,7 @@
 #include "vault.h"
 
 STATIC_DCL struct monst *NDECL(findgd);
+STATIC_DCL boolean FDECL(find_guard_dest, (struct monst *,xchar *,xchar *));
 
 #define g_monnam(mtmp) \
 	x_monnam(mtmp, ARTICLE_NONE, (char *)0, SUPPRESS_IT, FALSE)
@@ -14,9 +15,11 @@ STATIC_DCL struct monst *NDECL(findgd);
 
 STATIC_DCL boolean FDECL(clear_fcorr, (struct monst *,BOOLEAN_P));
 STATIC_DCL void FDECL(restfakecorr,(struct monst *));
+STATIC_DCL void FDECL(parkguard, (struct monst *));
 STATIC_DCL boolean FDECL(in_fcorridor, (struct monst *,int,int));
 STATIC_DCL void FDECL(move_gold,(struct obj *,int));
 STATIC_DCL void FDECL(wallify_vault,(struct monst *));
+STATIC_DCL boolean FDECL(gd_mv_monaway, (struct monst *,int,int));
 
 STATIC_OVL boolean
 clear_fcorr(grd, forceshow)
@@ -74,15 +77,27 @@ register struct monst *grd;
 	register boolean dispose = clear_fcorr(grd, TRUE);
 
 	if(!dispose) {
+		/* drop inventory here rather than at <0,0> later */
+		relobj(grd, 0, FALSE);
 		/* see comment by newpos in gd_move() */
+		parkguard(grd);
+		dispose = clear_fcorr(grd, TRUE);
+	}
+	return(dispose);
+}
+
+/* move guard--dead to alive--to <0,0> until temporary corridor is removed */
+STATIC_OVL void
+parkguard(grd)
+struct monst *grd;
+{
+	if (grd->mx) {
 		remove_monster(grd->mx, grd->my);
 		newsym(grd->mx, grd->my);
 		place_monster(grd, 0, 0);
 		EGD(grd)->ogx = grd->mx;
 		EGD(grd)->ogy = grd->my;
-		dispose = clear_fcorr(grd, TRUE);
 	}
-	return(dispose);
 }
 
 STATIC_OVL boolean
@@ -109,6 +124,47 @@ findgd()
 	    if(mtmp->isgd && !DEADMONSTER(mtmp) && on_level(&(EGD(mtmp)->gdlevel), &u.uz))
 		return(mtmp);
 	return((struct monst *)0);
+}
+
+/* find a corridor spot for the guard to lead the hero to; when 'guard'
+   is given, skip its current spot and its temporary corridor */
+STATIC_OVL boolean
+find_guard_dest(guard, rx, ry)
+struct monst *guard;
+xchar *rx, *ry;
+{
+	register int x, y, dd, lx = 0, ly = 0;
+
+	for(dd = 2; (dd < ROWNO || dd < COLNO); dd++) {
+	  for(y = u.uy-dd; y <= u.uy+dd; ly = y, y++) {
+	    if(y < 0 || y > ROWNO-1) continue;
+	    for(x = u.ux-dd; x <= u.ux+dd; lx = x, x++) {
+	      if(y != u.uy-dd && y != u.uy+dd && x != u.ux-dd)
+		x = u.ux+dd;
+	      if(x < 1 || x > COLNO-1) continue;
+	      if (guard && ((x == guard->mx && y == guard->my) ||
+			    (guard->isgd && in_fcorridor(guard, x, y))))
+		  continue;
+	      if(levl[x][y].typ == CORR) {
+		  if(x < u.ux) lx = x + 1;
+		  else if(x > u.ux) lx = x - 1;
+		  else lx = x;
+		  if(y < u.uy) ly = y + 1;
+		  else if(y > u.uy) ly = y - 1;
+		  else ly = y;
+		  if(levl[lx][ly].typ != STONE && levl[lx][ly].typ != CORR)
+		      goto incr_radius;
+		  *rx = x;
+		  *ry = y;
+		  return TRUE;
+	      }
+	    }
+	  }
+incr_radius: ;
+	}
+	impossible("Not a single corridor on this level??");
+	tele();
+	return FALSE;
 }
 
 #endif /* OVLB */
@@ -145,39 +201,14 @@ invault()
     guard = findgd();
     if(++u.uinvault % 30 == 0 && !guard) { /* if time ok and no guard now. */
 	char buf[BUFSZ];
-	register int x, y, dd, gx, gy;
-	int lx = 0, ly = 0;
+	register int x, y, gx, gy;
+	xchar rx, ry;
 #ifdef GOLDOBJ
         long umoney;
 #endif
 	/* first find the goal for the guard */
-	for(dd = 2; (dd < ROWNO || dd < COLNO); dd++) {
-	  for(y = u.uy-dd; y <= u.uy+dd; ly = y, y++) {
-	    if(y < 0 || y > ROWNO-1) continue;
-	    for(x = u.ux-dd; x <= u.ux+dd; lx = x, x++) {
-	      if(y != u.uy-dd && y != u.uy+dd && x != u.ux-dd)
-		x = u.ux+dd;
-	      if(x < 1 || x > COLNO-1) continue;
-	      if(levl[x][y].typ == CORR) {
-		  if(x < u.ux) lx = x + 1;
-		  else if(x > u.ux) lx = x - 1;
-		  else lx = x;
-		  if(y < u.uy) ly = y + 1;
-		  else if(y > u.uy) ly = y - 1;
-		  else ly = y;
-		  if(levl[lx][ly].typ != STONE && levl[lx][ly].typ != CORR)
-		      goto incr_radius;
-		  goto fnd;
-	      }
-	    }
-	  }
-incr_radius: ;
-	}
-	impossible("Not a single corridor on this level??");
-	tele();
-	return;
-fnd:
-	gx = x; gy = y;
+	if (!find_guard_dest((struct monst *)0, &rx, &ry)) return;
+	gx = rx; gy = ry;
 
 	/* next find a good place for a door in the wall */
 	x = u.ux; y = u.uy;
@@ -430,6 +461,21 @@ struct monst *grd;
 	}
 }
 
+/* make room for the guard at <nx,ny>; returns FALSE if some other
+   monster is still there (level full, so it couldn't be relocated) */
+STATIC_OVL boolean
+gd_mv_monaway(grd, nx, ny)
+register struct monst *grd;
+int nx, ny;
+{
+	if (MON_AT(nx, ny) && !(nx == grd->mx && ny == grd->my)) {
+	    verbalize("Out of my way, scum!");
+	    (void) rloc(m_at(nx, ny), TRUE);
+	    if (MON_AT(nx, ny)) return FALSE;
+	}
+	return TRUE;
+}
+
 /*
  * return  1: guard moved,  0: guard didn't,  -1: let m_move do it,  -2: died
  */
@@ -438,7 +484,7 @@ gd_move(grd)
 register struct monst *grd;
 {
 	int x, y, nx, ny, m, n;
-	int dx, dy, gx, gy, fci;
+	int dx, dy, gx = 0, gy = 0, fci;
 	uchar typ;
 	struct fakecorridor *fcp;
 	register struct egd *egrd = EGD(grd);
@@ -469,9 +515,10 @@ register struct monst *grd;
 	       (grd_in_vault ||
 		(in_fcorridor(grd, grd->mx, grd->my) &&
 		 !in_fcorridor(grd, u.ux, u.uy)))) {
-		(void) rloc(grd, FALSE);
+		(void) rloc(grd, TRUE);
 		wallify_vault(grd);
-		(void) clear_fcorr(grd, TRUE);
+		if (!in_fcorridor(grd, grd->mx, grd->my))
+		    (void) clear_fcorr(grd, TRUE);
 		goto letknow;
 	    }
 	    if(!in_fcorridor(grd, grd->mx, grd->my))
@@ -515,7 +562,7 @@ register struct monst *grd;
 		if (u_carry_gold) {	/* player teleported */
 		    m = grd->mx;
 		    n = grd->my;
-		    (void) rloc(grd, FALSE);
+		    (void) rloc(grd, TRUE);
 		    levl[m][n].typ = egrd->fakecorr[0].ftyp;
 		    newsym(m,n);
 		    grd->mpeaceful = 0;
@@ -587,16 +634,23 @@ letknow:
 		    newsym(m,n);
 		} else if (m == x && n == y) {
 		    mpickgold(grd);	/* does a newsym */
-		} else {
-		    /* just for insurance... */
-		    if (MON_AT(m, n) && m != grd->mx && n != grd->my) {
-			verbalize("Out of my way, scum!");
-			(void) rloc(m_at(m, n), FALSE);
-		    }
+		} else if (gd_mv_monaway(grd, m, n)) {
+		    /* (gd_mv_monaway() made room, just for insurance) */
 		    remove_monster(grd->mx, grd->my);
 		    newsym(grd->mx, grd->my);
 		    place_monster(grd, m, n);
 		    mpickgold(grd);	/* does a newsym */
+		} else {
+		    /* some monster is stuck on the gold; take it from afar */
+		    struct obj *gold = g_at(m,n);
+#ifndef GOLDOBJ
+		    grd->mgold += gold->quan;
+		    delobj(gold);
+#else
+		    obj_extract_self(gold);
+		    add_to_minv(grd, gold);
+#endif
+		    newsym(m,n);
 		}
 		if(cansee(m,n))
 		    pline("%s%s picks up the gold.", Monnam(grd),
@@ -693,12 +747,32 @@ proceed:
 	if (cansee(nx,ny))
 	    newsym(nx,ny);
 
-	fcp = &(egrd->fakecorr[egrd->fcend]);
-	if(egrd->fcend++ == FCSIZ) panic("fakecorr overflow");
-	fcp->fx = nx;
-	fcp->fy = ny;
-	fcp->ftyp = typ;
+	if ((nx != gx || ny != gy) || (grd->mx != gx || grd->my != gy)) {
+	    fcp = &(egrd->fakecorr[egrd->fcend]);
+	    if(egrd->fcend++ == FCSIZ) panic("fakecorr overflow");
+	    fcp->fx = nx;
+	    fcp->fy = ny;
+	    fcp->ftyp = typ;
+	} else if (!egrd->gddone) {
+	    /* We're stuck (the goal is a dead end we can't lead the hero
+	       out of), so try to find a new destination.  Otherwise the
+	       guard keeps adding his own spot to the corridor until it
+	       overflows (bug C343-23). */
+	    if (!find_guard_dest(grd, &egrd->gdx, &egrd->gdy) ||
+		    (egrd->gdx == gx && egrd->gdy == gy)) {
+		pline_The("%s, confused, disappears.", g_monnam(grd));
+		disappear_msg_seen = TRUE;
+		goto cleanup;
+	    } else
+		goto nextpos;
+	}
 newpos:
+	if (!egrd->gddone && !gd_mv_monaway(grd, nx, ny)) {
+	    /* level is full and some monster is in the way */
+	    pline_The("%s, confused, disappears.", g_monnam(grd));
+	    disappear_msg_seen = TRUE;
+	    goto cleanup;
+	}
 	if(egrd->gddone) {
 		/* The following is a kludge.  We need to keep    */
 		/* the guard around in order to be able to make   */
@@ -714,11 +788,7 @@ cleanup:
 
 		see_guard = canspotmon(grd);
 		wallify_vault(grd);
-		remove_monster(grd->mx, grd->my);
-		newsym(grd->mx,grd->my);
-		place_monster(grd, 0, 0);
-		egrd->ogx = grd->mx;
-		egrd->ogy = grd->my;
+		parkguard(grd);	/* move to <0,0> */
 		restfakecorr(grd);
 		if(!semi_dead && (in_fcorridor(grd, u.ux, u.uy) ||
 				     cansee(x, y))) {

@@ -560,7 +560,8 @@ peffects(otmp)
 				you_unwere(FALSE);
 			    u.ulycn = NON_PM;	/* cure lycanthropy */
 			}
-			losehp(d(6,6), "potion of holy water", KILLED_BY_AN);
+			losehp(Maybe_Half_Phys(d(6,6)), "potion of holy water",
+			       KILLED_BY_AN);
 		    } else if(otmp->cursed) {
 			You_feel("quite proud of yourself.");
 			healup(d(6,6),0,0,0);
@@ -581,7 +582,8 @@ peffects(otmp)
 		    } else {
 			if(u.ualign.type == A_LAWFUL) {
 			    pline("This burns like acid!");
-			    losehp(d(6,6), "potion of unholy water",
+			    losehp(Maybe_Half_Phys(d(6,6)),
+				   "potion of unholy water",
 				KILLED_BY_AN);
 			} else
 			    You_feel("full of dread.");
@@ -993,7 +995,7 @@ peffects(otmp)
 					You("hit your %s on the %s.",
 						body_part(HEAD),
 						ceiling(u.ux,u.uy));
-					losehp(uarmh ? 1 : rnd(10),
+					losehp(Maybe_Half_Phys(uarmh ? 1 : rnd(10)),
 						"colliding with the ceiling",
 						KILLED_BY);
 				} else (void) doup();
@@ -1053,7 +1055,8 @@ peffects(otmp)
 		else {
 			pline("This burns%s!", otmp->blessed ? " a little" :
 					otmp->cursed ? " a lot" : " like acid");
-			losehp(d(otmp->cursed ? 2 : 1, otmp->blessed ? 4 : 8),
+			losehp(Maybe_Half_Phys(d(otmp->cursed ? 2 : 1,
+						   otmp->blessed ? 4 : 8)),
 					"potion of acid", KILLED_BY_AN);
 			exercise(A_CON, FALSE);
 		}
@@ -1202,7 +1205,7 @@ boolean your_fault;
 		distance = 0;
 		pline_The("%s crashes on your %s and breaks into shards.",
 			botlnam, body_part(HEAD));
-		losehp(rnd(2), "thrown potion", KILLED_BY_AN);
+		losehp(Maybe_Half_Phys(rnd(2)), "thrown potion", KILLED_BY_AN);
 	} else {
 		distance = distu(mon->mx,mon->my);
 		if (!cansee(mon->mx,mon->my)) pline("Crash!");
@@ -1232,7 +1235,7 @@ boolean your_fault;
 	switch (obj->otyp) {
 	case POT_OIL:
 		if (obj->lamplit)
-		    splatter_burning_oil(u.ux, u.uy);
+		    explode_oil(obj, u.ux, u.uy);
 		break;
 	case POT_POLYMORPH:
 		You_feel("a little %s.", Hallucination ? "normal" : "strange");
@@ -1242,7 +1245,8 @@ boolean your_fault;
 		if (!Acid_resistance) {
 		    pline("This burns%s!", obj->blessed ? " a little" :
 				    obj->cursed ? " a lot" : "");
-		    losehp(d(obj->cursed ? 2 : 1, obj->blessed ? 4 : 8),
+		    losehp(Maybe_Half_Phys(d(obj->cursed ? 2 : 1,
+						 obj->blessed ? 4 : 8)),
 				    "potion of acid", KILLED_BY_AN);
 		}
 		break;
@@ -1483,7 +1487,7 @@ boolean your_fault;
 		break;
 	case POT_OIL:
 		if (obj->lamplit)
-			splatter_burning_oil(mon->mx, mon->my);
+			explode_oil(obj, mon->mx, mon->my);
 		break;
 /*
 	case POT_GAIN_LEVEL:
@@ -1542,6 +1546,12 @@ potionbreathe(obj)
 register struct obj *obj;
 {
 	register int i, ii, isdone, kn = 0;
+	unsigned already_in_use = obj->in_use;
+
+	/* potion of unholy water might be wielded; prevent
+	   you_were() -> drop_weapon() from dropping it so that it
+	   remains in inventory where our caller expects it to be */
+	obj->in_use = 1;
 
 	switch(obj->otyp) {
 	case POT_RESTORE_ABILITY:
@@ -1689,6 +1699,8 @@ register struct obj *obj;
 		break;
 */
 	}
+	if (!already_in_use)
+	    obj->in_use = 0;
 	/* note: no obfree() */
 	if (obj->dknown) {
 	    if (kn)
@@ -2669,7 +2681,7 @@ dodip()
 	uchar here;
 	char allowall[2], qbuf[QBUFSZ], Your_buf[BUFSZ];
 	short mixture;
-	int res;
+	int res, cap;
 
 	allowall[0] = ALL_CLASSES; allowall[1] = '\0';
 	if(!(obj = getobj(allowall, "dip")))
@@ -3179,8 +3191,9 @@ dodip()
 			docall(&fakeobj);
 		    }
 		}
+		cap = near_capacity();	/* before removal from invent */
 		obj_extract_self(singlepotion);
-		singlepotion = hold_another_object(singlepotion,
+		singlepotion = hold_returned_object(singlepotion, cap,
 					"You juggle and drop %s!",
 					doname(singlepotion), (const char *)0);
 		update_inventory();

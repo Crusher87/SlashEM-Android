@@ -35,8 +35,11 @@ STATIC_DCL void FDECL(use_grease, (struct obj *));
 STATIC_DCL void FDECL(use_trap, (struct obj *));
 STATIC_DCL void FDECL(use_stone, (struct obj *));
 STATIC_PTR int NDECL(set_trap);		/* occupation callback */
-STATIC_DCL int FDECL(use_whip, (struct obj *));
-STATIC_DCL int FDECL(use_pole, (struct obj *));
+STATIC_DCL boolean FDECL(is_valid_jump_pos, (int,int,int,BOOLEAN_P));
+STATIC_PTR boolean FDECL(get_valid_jump_position, (int,int));
+STATIC_DCL void FDECL(pole_range, (struct obj *, int *, int *));
+STATIC_PTR boolean FDECL(get_valid_polearm_position, (int,int));
+STATIC_DCL boolean FDECL(find_poleable_mon, (coord *, int, int));
 STATIC_DCL int FDECL(use_cream_pie, (struct obj *));
 STATIC_DCL int FDECL(use_grapple, (struct obj *));
 STATIC_DCL int FDECL(do_break_wand, (struct obj *));
@@ -963,6 +966,7 @@ struct obj **optr;
 	register struct obj *otmp;
 	const char *s = (obj->quan != 1) ? "candles" : "candle";
 	char qbuf[QBUFSZ];
+	boolean was_lamplit;
 
 	if(u.uswallow) {
 		You(no_elbow_room);
@@ -995,11 +999,19 @@ struct obj **optr;
 		if ((long)otmp->spe + obj->quan > 7L)
 		    obj = splitobj(obj, 7L - (long)otmp->spe);
 		else *optr = 0;
+
+		/* The candle's age field doesn't correctly reflect the amount
+		   of fuel in it while it's lit, because the fuel is measured
+		   by the timer.  So to get accurate age updating, we need to
+		   end the burn temporarily while attaching the candle. */
+		was_lamplit = obj->lamplit;
+		if (was_lamplit) end_burn(obj, TRUE);
+
 		You("attach %ld%s %s to %s.",
 		    obj->quan, !otmp->spe ? "" : " more",
 		    s, the(xname(otmp)));
 		if (obj->otyp == MAGIC_CANDLE) {
-		    if (obj->lamplit)
+		    if (was_lamplit)
 			pline_The("new %s %s very ordinary.", s,
 				vtense(s, "look"));
 		    else
@@ -1011,9 +1023,9 @@ struct obj **optr;
 		if (!otmp->spe || otmp->age > obj->age)
 		    otmp->age = obj->age;
 		otmp->spe += (int)obj->quan;
-		if (otmp->lamplit && !obj->lamplit)
+		if (otmp->lamplit && !was_lamplit)
 		    pline_The("new %s magically %s!", s, vtense(s, "ignite"));
-		else if (!otmp->lamplit && obj->lamplit)
+		else if (!otmp->lamplit && was_lamplit)
 		    pline("%s out.", (obj->quan > 1L) ? "They go" : "It goes");
 		if (obj->unpaid)
 		    verbalize("You %s %s, you bought %s!",
@@ -1025,9 +1037,8 @@ struct obj **optr;
 			  The(xname(otmp)), otmp->lamplit ? " lit" : "");
 		/* candelabrum's light range might increase */
 		if (otmp->lamplit) obj_merge_light_sources(otmp, otmp);
-		/* candles are no longer a separate light source */
-		if (obj->lamplit) end_burn(obj, TRUE);
-		/* candles are now gone */
+		/* candles are no longer a separate light source (the burn
+		   was ended above); candles are now gone */
 		useupall(obj);
 	}
 }
@@ -1201,10 +1212,11 @@ struct obj *obj;
 		    if (obj->quan > 1L && (yn(qbuf) == 'n')) {
 			/* Check if player wants to light all the candles */
 			struct obj *rest;	     /* the remaining candles */
+			int cap = near_capacity();
 			rest = splitobj(obj, obj->quan - 1L);
 			obj_extract_self(rest);	     /* free from inv */
 			obj->spe++;	/* this prevents merging */
-			(void)hold_another_object(rest, "You drop %s!",
+			(void)hold_returned_object(rest, cap, "You drop %s!",
 					  doname(rest), (const char *)0);
 			obj->spe--;
 		    }
@@ -1317,12 +1329,14 @@ light_cocktail(obj)
 #endif
 
 	if (obj->quan > 1L) {
+	    int cap = near_capacity();
+
 	    obj = splitobj(obj, 1L);
 	    begin_burn(obj, FALSE);	/* burn before free to get position */
 	    obj_extract_self(obj);	/* free from inv */
 
 	    /* shouldn't merge */
-	    obj = hold_another_object(obj, "You drop %s!",
+	    obj = hold_returned_object(obj, cap, "You drop %s!",
 				      doname(obj), (const char *)0);
 	} else
 	    begin_burn(obj, FALSE);
@@ -1374,6 +1388,43 @@ dojump()
 {
 	/* Physical jump */
 	return jump(0);
+}
+
+/* could the hero jump to <x,y>?  (split out of jump() in NetHack 3.6) */
+STATIC_OVL boolean
+is_valid_jump_pos(x, y, magic, showmsg)
+int x, y, magic;
+boolean showmsg;
+{
+	if (!magic && !(HJumping & ~INTRINSIC) && !EJumping &&
+			distu(x, y) != 5) {
+		/* The Knight jumping restriction still applies when riding a
+		 * horse.  After all, what shape is the knight piece in chess?
+		 */
+		if (showmsg) pline("Illegal move!");
+		return FALSE;
+	} else if (distu(x, y) > (magic ? 6+magic*3 : 9)) {
+		if (showmsg) pline("Too far!");
+		return FALSE;
+	} else if (!isok(x, y)) {
+		if (showmsg) You("cannot jump there!");
+		return FALSE;
+	} else if (!cansee(x, y)) {
+		if (showmsg) You("cannot see where to land!");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static int jumping_is_magic;
+
+/* getpos() callback: spots worth highlighting as jump destinations */
+STATIC_PTR boolean
+get_valid_jump_position(x, y)
+int x, y;
+{
+	return (isok(x, y) && (ACCESSIBLE(levl[x][y].typ) || Passes_walls)
+		&& is_valid_jump_pos(x, y, jumping_is_magic, FALSE));
 }
 
 int
@@ -1463,23 +1514,11 @@ int magic; /* 0=Physical, otherwise skill level */
 	pline("Where do you want to jump?");
 	cc.x = u.ux;
 	cc.y = u.uy;
+	jumping_is_magic = magic;
+	getpos_sethilite(get_valid_jump_position);
 	if (getpos(&cc, TRUE, "the desired position") < 0)
 		return 0;	/* user pressed ESC */
-	if (!magic && !(HJumping & ~INTRINSIC) && !EJumping &&
-			distu(cc.x, cc.y) != 5) {
-		/* The Knight jumping restriction still applies when riding a
-		 * horse.  After all, what shape is the knight piece in chess?
-		 */
-		pline("Illegal move!");
-		return 0;
-	} else if (distu(cc.x, cc.y) > (magic ? 6+magic*3 : 9)) {
-		pline("Too far!");
-		return 0;
-	} else if (!cansee(cc.x, cc.y)) {
-		You("cannot see where to land!");
-		return 0;
-	} else if (!isok(cc.x, cc.y)) {
-		You("cannot jump there!");
+	if (!is_valid_jump_pos(cc.x, cc.y, magic, TRUE)) {
 		return 0;
 	} else {
 	    coord uc;
@@ -1493,7 +1532,8 @@ int magic; /* 0=Physical, otherwise skill level */
 #ifdef STEED
 			if (!u.usteed)
 #endif
-		    losehp(rnd(10), "jumping out of a bear trap", KILLED_BY);
+		    losehp(Maybe_Half_Phys(rnd(10)),
+			   "jumping out of a bear trap", KILLED_BY);
 		    set_wounded_legs(side, rn1(1000,500));
 		    break;
 		  }
@@ -1533,7 +1573,7 @@ int magic; /* 0=Physical, otherwise skill level */
 	    (void) walk_path(&uc, &cc, hurtle_step, (genericptr_t)&range);
 
 	    /* A little Sokoban guilt... */
-	    if (In_sokoban(&u.uz))
+	    if (Sokoban)
 		change_luck(-1);
 
 	    teleds(cc.x, cc.y, TRUE);
@@ -2497,7 +2537,7 @@ set_trap()
 	return 0;
 }
 
-STATIC_OVL int
+int
 use_whip(obj)
 struct obj *obj;
 {
@@ -2514,10 +2554,20 @@ struct obj *obj;
     }
     if (!getdir((char *)0)) return res;
 
-    if (Stunned || (Confusion && !rn2(5))) confdir();
-    rx = u.ux + u.dx;
-    ry = u.uy + u.dy;
-    mtmp = m_at(rx, ry);
+    if (u.uswallow) {
+	mtmp = u.ustuck;
+	rx = mtmp->mx;
+	ry = mtmp->my;
+    } else {
+	if (Stunned || (Confusion && !rn2(5))) confdir();
+	rx = u.ux + u.dx;
+	ry = u.uy + u.dy;
+	if (!isok(rx, ry)) {
+	    You("miss.");
+	    return res;
+	}
+	mtmp = m_at(rx, ry);
+    }
 
     /* fake some proficiency checks */
     proficient = 0;
@@ -2571,7 +2621,7 @@ struct obj *obj;
 	if (dam <= 0) dam = 1;
 	You("hit your %s with your bullwhip.", body_part(FOOT));
 	Sprintf(buf, "killed %sself with %s bullwhip", uhim(), uhis());
-	losehp(dam, buf, NO_KILLER_PREFIX);
+	losehp(Maybe_Half_Phys(dam), buf, NO_KILLER_PREFIX);
 	flags.botl = 1;
 	return 1;
 
@@ -2753,17 +2803,109 @@ static const char
 	cant_see_spot[] = "won't hit anything if you can't see that spot.",
 	cant_reach[] = "can't reach that spot from here.";
 
-/* Distance attacks by pole-weapons */
-STATIC_OVL int
-use_pole (obj)
-	struct obj *obj;
+/* the squared distances a pole-weapon can reach */
+STATIC_OVL void
+pole_range(obj, min_range, max_range)
+struct obj *obj;
+int *min_range, *max_range;
 {
-	int res = 0, typ, max_range;
-	int min_range = obj->otyp == FISHING_POLE ? 1 : 4;
+#ifdef WEAPON_SKILLS
+	int typ = weapon_type(obj);
+#endif
+
+	*min_range = (obj->otyp == FISHING_POLE) ? 1 : 4;
+#ifdef WEAPON_SKILLS
+	if (typ == P_NONE || P_SKILL(typ) <= P_BASIC) *max_range = 4;
+	else if (P_SKILL(typ) <= P_SKILLED) *max_range = 5;
+	else *max_range = 8;
+#else
+	*max_range = 8;
+#endif
+}
+
+/* If there is exactly one monster in pole-weapon range, put its spot in
+ * pos and return TRUE (from NetHack 3.6).  Pets and, with the confirm
+ * option, peacefuls aren't candidates unless the hero is impaired.
+ */
+STATIC_OVL boolean
+find_poleable_mon(pos, min_range, max_range)
+coord *pos;
+int min_range, max_range;
+{
+	struct monst *mtmp;
+	coord mpos;
+	boolean impaired;
+	int x, y, glyph;
+
+	if (Blind)
+	    return FALSE;	/* must be able to see target location */
+	impaired = (Confusion || Stunned || Hallucination);
+	mpos.x = mpos.y = 0;	/* no candidate location yet */
+	/* a pole's reach is never more than 2 steps */
+	for (x = u.ux - 2; x <= u.ux + 2; x++)
+	    for (y = u.uy - 2; y <= u.uy + 2; y++) {
+		if (!isok(x, y) || distu(x, y) < min_range
+			|| distu(x, y) > max_range || !cansee(x, y))
+		    continue;
+		glyph = glyph_at(x, y);
+		if (!impaired && glyph_is_monster(glyph)
+			&& (mtmp = m_at(x, y)) != 0
+			&& (mtmp->mtame || (mtmp->mpeaceful && flags.confirm)))
+		    continue;
+		if (glyph_is_monster(glyph) || glyph_is_warning(glyph)
+			|| glyph_is_invisible(glyph)) {
+		    if (mpos.x)
+			return FALSE;	/* more than one candidate location */
+		    mpos.x = x, mpos.y = y;
+		}
+	    }
+	if (!mpos.x)
+	    return FALSE;	/* no candidate location */
+	*pos = mpos;
+	return TRUE;
+}
+
+static int polearm_range_min = -1;
+static int polearm_range_max = -1;
+static boolean polearm_fishing = FALSE;
+
+/* getpos() callback: spots worth highlighting as pole-weapon targets */
+STATIC_PTR boolean
+get_valid_polearm_position(x, y)
+int x, y;
+{
+	return (isok(x, y) && distu(x, y) >= polearm_range_min
+		&& distu(x, y) <= polearm_range_max && couldsee(x, y)
+		&& (ACCESSIBLE(levl[x][y].typ)
+		    || (polearm_fishing && is_pool(x, y))));
+}
+
+/* is the hero wielding a pole-weapon with exactly one target in reach? */
+boolean
+could_pole_mon()
+{
+	int min_range, max_range;
+	coord cc;
+
+	if (!uwep || !is_pole(uwep) || u.uswallow)
+	    return FALSE;
+	pole_range(uwep, &min_range, &max_range);
+	return find_poleable_mon(&cc, min_range, max_range);
+}
+
+/* Distance attacks by pole-weapons; with autohit (the fire command), a
+ * lone monster in reach is hit without asking where.
+ */
+int
+use_pole(obj, autohit)
+	struct obj *obj;
+	boolean autohit;
+{
+	int res = 0, max_range, min_range;
 	coord cc;
 	struct monst *mtmp;
 	struct obj *otmp;
-	boolean fishing;
+	boolean fishing, found;
 
 
 	/* Are you allowed to use the pole? */
@@ -2776,22 +2918,23 @@ use_pole (obj)
 	    else res = 1;
 	}
 
-	/* Prompt for a location */
-	pline(where_to_hit);
+	/* Calculate range */
+	pole_range(obj, &min_range, &max_range);
+
+	/* Prompt for a location, starting on the only target in reach */
 	cc.x = u.ux;
 	cc.y = u.uy;
-	if (getpos(&cc, TRUE, "the spot to hit") < 0)
-	    return 0;	/* user pressed ESC */
-
-#ifdef WEAPON_SKILLS
-	/* Calculate range */
-	typ = weapon_type(obj);
-	if (typ == P_NONE || P_SKILL(typ) <= P_BASIC) max_range = 4;
-	else if (P_SKILL(typ) <= P_SKILLED) max_range = 5;
-	else max_range = 8;
-#else
-	max_range = 8;
-#endif
+	found = find_poleable_mon(&cc, min_range, max_range);
+	if (!autohit || !found
+		|| Confusion || Stunned || Hallucination) {
+	    pline(where_to_hit);
+	    polearm_range_min = min_range;
+	    polearm_range_max = max_range;
+	    polearm_fishing = (obj->otyp == FISHING_POLE);
+	    getpos_sethilite(get_valid_polearm_position);
+	    if (getpos(&cc, TRUE, "the spot to hit") < 0)
+		return res;	/* ESC; uses a turn iff the pole became wielded */
+	}
 
 	if (distu(cc.x, cc.y) > max_range) {
 	    pline("Too far!");
@@ -2820,7 +2963,8 @@ use_pole (obj)
 		case 1:
 		    /* Snag yourself */
 		    You("hook yourself!");
-		    losehp(rn1(10,10), "a fishing hook", KILLED_BY);
+		    losehp(Maybe_Half_Phys(rn1(10,10)), "a fishing hook",
+			   KILLED_BY);
 		    return 1;
 		case 2:
 		    /* Reel in a fish */
@@ -2946,6 +3090,7 @@ struct obj *obj;
 			You_cant("see through all the sticky goop on your %s.",
 				body_part(FACE));
 	}
+	setnotworn(obj);	/* it might be wielded */
 	if (obj->unpaid) {
 		verbalize("You used it, you bought it!");
 		bill_dummy_object(obj);
@@ -3059,14 +3204,17 @@ use_grapple (obj)
 		pline_The("hook slices through the %s.", surface(cc.x, cc.y));
 	    else {
 		You("are yanked toward the %s!", surface(cc.x, cc.y));
+		/* hurtle() ends with teleds(), which calls spoteffects();
+		   doing that again here would trigger a trap or drowning
+		   at the hero's new spot twice */
 		hurtle(sgn(cc.x-u.ux), sgn(cc.y-u.uy), 1, FALSE);
-		spoteffects(TRUE);
 	    }
 	    return (1);
 	default:	/* Yourself (oops!) */
 	    if (P_SKILL(typ) <= P_BASIC) {
 		You("hook yourself!");
-		losehp(rn1(10,10), "a grappling hook", KILLED_BY);
+		losehp(Maybe_Half_Phys(rn1(10,10)), "a grappling hook",
+		       KILLED_BY);
 		return (1);
 	    }
 	    break;
@@ -3089,7 +3237,7 @@ do_break_wand(obj)
     Sprintf(confirm, "Are you really sure you want to break %s?",
 	safe_qbuf("", sizeof("Are you really sure you want to break ?"),
 				the_wand, ysimple_name(obj), "the wand"));
-    if (yn(confirm) == 'n' ) return 0;
+    if (!paranoid_query(ParanoidBreakwand, confirm)) return 0;
 
     if (nohands(youmonst.data)) {
 	You_cant("break %s without hands!", the_wand);
@@ -3277,9 +3425,10 @@ wand_explode(obj, hero_broke)
 		if (damage) {
 		    if (hero_broke) {
 		    Sprintf(buf, "killed %sself by breaking a wand", uhim());
-		    losehp(damage, buf, NO_KILLER_PREFIX);
+		    losehp(Maybe_Half_Phys(damage), buf, NO_KILLER_PREFIX);
 		    } else
-			losehp(damage, "exploding wand", KILLED_BY_AN);
+			losehp(Maybe_Half_Phys(damage), "exploding wand",
+			       KILLED_BY_AN);
 		}
 		if (flags.botl) bot();		/* blindness */
 	    } else if ((mon = m_at(x, y)) != 0 && !DEADMONSTER(mon)) {
@@ -3329,6 +3478,77 @@ char class;
 	tmp[0] = class;
 	tmp[1] = '\0';
 	Strcat(cl, tmp);
+}
+
+/* make some food or a potion come out of a horn of plenty; returns the
+   number of objects made (0 if the horn was empty) */
+int
+hornoplenty(horn, tipping)
+struct obj *horn;
+boolean tipping;	/* caller emptying entire contents; affects shop handling */
+{
+	int objcount = 0;
+
+	if (!horn || horn->otyp != HORN_OF_PLENTY) {
+	    impossible("bad horn o' plenty");
+	} else if (horn->spe < 1) {
+	    pline(nothing_happens);
+	} else {
+	    struct obj *obj;
+	    const char *what;
+
+	    consume_obj_charge(horn, !tipping);
+	    if (!rn2(13)) {
+		obj = mkobj(POTION_CLASS, FALSE);
+		/* KMH, balance patch -- rewritten */
+		while ((obj->otyp == POT_SICKNESS) ||
+				objects[obj->otyp].oc_magic)
+		    obj->otyp = rnd_class(POT_BOOZE, POT_WATER);
+		what = (obj->quan > 1L) ? "Some potions" : "A potion";
+	    } else {
+		obj = mkobj(FOOD_CLASS, FALSE);
+		if (obj->otyp == FOOD_RATION && !rn2(7))
+		    obj->otyp = LUMP_OF_ROYAL_JELLY;
+		what = "Some food";
+	    }
+	    ++objcount;
+	    pline("%s %s out.", what, vtense(what, "spill"));
+	    obj->blessed = horn->blessed;
+	    obj->cursed = horn->cursed;
+	    obj->owt = weight(obj);
+	    /* using a shop's horn of plenty entails a usage fee and also
+	       confers ownership of the created item to the shopkeeper */
+	    if (horn->unpaid
+		    || (tipping && !carried(horn) && !horn->no_charge
+			&& costly_spot(horn->ox, horn->oy)))
+		addtobill(obj, FALSE, FALSE, tipping);
+	    if (!tipping) {
+		obj = hold_another_object(obj, u.uswallow ?
+				   "Oops!  %s out of your reach!" :
+				    (Is_airlevel(&u.uz) ||
+				     Is_waterlevel(&u.uz) ||
+				     levl[u.ux][u.uy].typ < IRONBARS ||
+				     levl[u.ux][u.uy].typ >= ICE) ?
+					   "Oops!  %s away from you!" :
+					   "Oops!  %s to the floor!",
+					   The(aobjnam(obj, "slip")),
+					   (const char *)0);
+	    } else {
+		/* assumes this is taking place at hero's location */
+		if (!can_reach_floor()) {
+		    hitfloor(obj);	/* does altar check, message, drop */
+		} else {
+		    if (IS_ALTAR(levl[u.ux][u.uy].typ))
+			doaltarobj(obj);	/* does its own drop message */
+		    else
+			pline("%s %s to the %s.", Doname2(obj),
+			      otense(obj, "drop"), surface(u.ux, u.uy));
+		    dropy(obj);
+		}
+	    }
+	    makeknown(HORN_OF_PLENTY);
+	}
+	return objcount;
 }
 
 int
@@ -3388,7 +3608,7 @@ doapply()
 		res = use_container(&obj, 1);
 		break;
 	case BAG_OF_TRICKS:
-		bagotricks(obj);
+		(void) bagotricks(obj, FALSE, (int *) 0);
 		break;
 	case CAN_OF_GREASE:
 		use_grease(obj);
@@ -3405,7 +3625,7 @@ doapply()
 		res = use_pick_axe(obj);
 		break;
 	case FISHING_POLE:
-		res = use_pole(obj);
+		res = use_pole(obj, FALSE);
 		break;
 	case TINNING_KIT:
 		use_tinning_kit(obj);
@@ -3655,41 +3875,7 @@ doapply()
 		} else You("seem to be out of medical supplies");
 		break;
 	case HORN_OF_PLENTY:	/* not a musical instrument */
-		if (obj->spe > 0) {
-		    struct obj *otmp;
-		    const char *what;
-
-		    consume_obj_charge(obj, TRUE);
-		    if (!rn2(13)) {
-			otmp = mkobj(POTION_CLASS, FALSE);
-			/* KMH, balance patch -- rewritten */
-			while ((otmp->otyp == POT_SICKNESS) ||
-					objects[otmp->otyp].oc_magic)
-			    otmp->otyp = rnd_class(POT_BOOZE, POT_WATER);
-			what = "A potion";
-		    } else {
-			otmp = mkobj(FOOD_CLASS, FALSE);
-			if (otmp->otyp == FOOD_RATION && !rn2(7))
-			    otmp->otyp = LUMP_OF_ROYAL_JELLY;
-			what = "Some food";
-		    }
-		    pline("%s spills out.", what);
-		    otmp->blessed = obj->blessed;
-		    otmp->cursed = obj->cursed;
-		    otmp->owt = weight(otmp);
-		    otmp = hold_another_object(otmp, u.uswallow ?
-				       "Oops!  %s out of your reach!" :
-					(Is_airlevel(&u.uz) ||
-					 Is_waterlevel(&u.uz) ||
-					 levl[u.ux][u.uy].typ < IRONBARS ||
-					 levl[u.ux][u.uy].typ >= ICE) ?
-					       "Oops!  %s away from you!" :
-					       "Oops!  %s to the floor!",
-					       The(aobjnam(otmp, "slip")),
-					       (const char *)0);
-		    makeknown(HORN_OF_PLENTY);
-		} else
-		    pline(nothing_happens);
+		(void) hornoplenty(obj, FALSE);
 		break;
 	case LAND_MINE:
 	case BEARTRAP:
@@ -3741,7 +3927,7 @@ doapply()
 	default:
 		/* KMH, balance patch -- polearms can strike at a distance */
 		if (is_pole(obj)) {
-			res = use_pole(obj);
+			res = use_pole(obj, FALSE);
 			break;
 		} else if (is_pick(obj) || is_axe(obj)) {
 			res = use_pick_axe(obj);

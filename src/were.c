@@ -176,9 +176,9 @@ you_were()
 	if (Unchanging || (u.umonnum == u.ulycn)) return;
 	if (Polymorph_control) {
 	    /* `+4' => skip "were" prefix to get name of beast */
-	    Sprintf(qbuf, "Do you want to change into %s? ",
+	    Sprintf(qbuf, "Do you want to change into %s?",
 		    an(mons[u.ulycn].mname+4));
-	    if(yn(qbuf) == 'n') return;
+	    if (!paranoid_query(ParanoidWerechange, qbuf)) return;
 	}
 	(void) polymon(u.ulycn);
 }
@@ -213,7 +213,8 @@ boolean purify;
 	    upermonst.mflags2 &= ~M2_WERE;
 	}
 	if (!Unchanging && in_wereform &&
-		(!Polymorph_control || yn("Remain in beast form?") == 'n'))
+		(!Polymorph_control ||
+		 !paranoid_query(ParanoidWerechange, "Remain in beast form?")))
 	    rehumanize();
 }
 

@@ -1,0 +1,54 @@
+plugins {
+  id 'com.android.application'
+}
+
+android {
+  namespace 'com.tbd.SlashEM'
+  compileSdk 36
+
+  defaultConfig {
+    applicationId 'com.tbd.SlashEM'
+    // Keep minSdk in sync with API in Makefile.src
+    minSdk 21
+    // Play Protect warns about apps targeting more than two versions below
+    // the device's Android version, so keep this on the latest release.
+    targetSdk 36
+    versionName '0.0.7E7F3-3'
+    versionCode 103
+  }
+
+  // A fixed debug key, so every CI build can be installed over the previous
+  // one without uninstalling (which would delete saved games).
+  signingConfigs {
+    debug {
+      storeFile file('debug.keystore')
+      storePassword 'android'
+      keyAlias 'androiddebugkey'
+      keyPassword 'android'
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  lint {
+    disable 'MissingClass'
+    abortOnError false
+  }
+
+  sourceSets {
+    main {
+      manifest.srcFile 'AndroidManifest.xml'
+      java.srcDirs = ['src']
+      res.srcDirs = ['res']
+      assets.srcDirs = ['assets']
+      jniLibs.srcDirs = ['libs']
+    }
+  }
+}
+
+dependencies {
+  implementation project(':forkfront')
+}

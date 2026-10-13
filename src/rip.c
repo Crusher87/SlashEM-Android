@@ -17,6 +17,9 @@ extern const char * const killed_by_prefix[];	/* from topten.c */
 #  define TEXT_TOMBSTONE
 # endif
 #endif
+#if defined(DUMPLOG) && !defined(TEXT_TOMBSTONE)
+# define TEXT_TOMBSTONE		/* the dump log uses genl_outrip() */
+#endif
 
 #ifdef TEXT_TOMBSTONE
 

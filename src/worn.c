@@ -87,6 +87,9 @@ long mask;
 			if (oobj->oartifact)
 			    set_artifact_intrinsic(oobj, 0, mask);
 		    }
+		    /* in case wearing or removal is in progress or removal
+		       is pending (via 'A' command for multiple items) */
+		    cancel_doff(oobj, wp->w_mask);
 		}
 		*(wp->w_obj) = obj;
 		if(obj) {
@@ -133,6 +136,10 @@ register struct obj *obj;
 	}
 	for(wp = worn; wp->w_mask; wp++)
 	    if(obj == *(wp->w_obj)) {
+		/* in case wearing or removal is in progress or removal
+		   is pending (via 'A' command for multiple items) */
+		cancel_doff(obj, wp->w_mask);
+
 		*(wp->w_obj) = 0;
 		p = objects[obj->otyp].oc_oprop;
 		u.uprops[p].extrinsic = u.uprops[p].extrinsic & ~wp->w_mask;

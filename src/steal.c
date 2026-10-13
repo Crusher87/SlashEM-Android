@@ -235,8 +235,9 @@ struct monst *mtmp;
 char *objnambuf;
 {
 	struct obj *otmp;
-	int tmp, could_petrify, named = 0, armordelay;
+	int tmp, could_petrify, named = 0, armordelay, olddelay;
 	boolean monkey_business; /* true iff an animal is doing the thievery */
+	boolean was_doffing;
 	int do_charm = is_neuter(mtmp->data) || flags.female == mtmp->female;
 
 	if (objnambuf) *objnambuf = '\0';
@@ -341,6 +342,10 @@ gotobj:
 	    o_unleash(otmp);
 	}
 
+	was_doffing = doffing(otmp);
+	/* stop donning/doffing now so that afternmv won't be clobbered
+	   below; stop_occupation doesn't handle donning/doffing */
+	olddelay = stop_donning(otmp);
 	/* you're going to notice the theft... */
 	stop_occupation();
 
@@ -354,14 +359,18 @@ gotobj:
 		    break;
 		case ARMOR_CLASS:
 		    armordelay = objects[otmp->otyp].oc_delay;
-		    /* Stop putting on armor which has been stolen. */
-		    if (donning(otmp) || is_animal(mtmp->data)) {
+		    if (olddelay > 0 && olddelay < armordelay)
+			armordelay = olddelay;
+		    /* (armor which was being put on has already been
+		       removed by stop_donning() above) */
+		    if (is_animal(mtmp->data)) {
 			remove_worn_item(otmp, TRUE);
 			break;
 		    } else if (monkey_business) {
 			/* animals usually don't have enough patience
 			   to take off items which require extra time */
-			if (armordelay >= 1 && rn2(10)) goto cant_take;
+			if (armordelay >= 1 && !olddelay && rn2(10))
+			    goto cant_take;
 			remove_worn_item(otmp, TRUE);
 			break;
 		    } else {
@@ -379,13 +388,14 @@ gotobj:
 			if (multi < 0 && is_fainted()) unmul((char *)0);
 			slowly = (armordelay >= 1 || multi < 0);
 			if (do_charm) {
-			    char action[15];
+			    char action[QBUFSZ];
 			    if (curssv)
 				sprintf(action, "let %s take",
 					mhis(mtmp));
 			    else
-				strcpy(action, slowly ?
-					"start removing" : "hand over");
+				strcpy(action, !slowly ? "hand over" :
+					was_doffing ? "continue removing" :
+					"start removing");
 			    pline("%s charms you.  You gladly %s your %s.",
 				  !seen ? pronoun : Monnam(mtmp), action,
 				  equipname(otmp));
@@ -395,7 +405,9 @@ gotobj:
 				  !seen ? pronoun : Adjmonnam(mtmp,
 				  mtmp->female ? "beautiful" : "handsome"),
 				  curssv ? "helps you to take" :
-				  slowly ? "you start taking" : "you take",
+				  !slowly ? "you take" :
+				  was_doffing ? "you continue taking" :
+				  "you start taking",
 				  equipname(otmp));
 			named++;
 			/* the following is to set multi for later on */

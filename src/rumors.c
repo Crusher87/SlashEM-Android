@@ -356,6 +356,8 @@ register struct monst *oracl;
         money2mon(oracl, (long)u_pay);
 #endif
 	flags.botl = 1;
+	if (!u.uevent.minor_oracle && !u.uevent.major_oracle)
+	    livelog_printf(LL_ACHIEVE, "consulted the Oracle");
 	add_xpts = 0;	/* first oracle of each type gives experience points */
 	if (u_pay == minor_cost) {
 		outrumor(1, BY_ORACLE);

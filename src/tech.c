@@ -774,7 +774,8 @@ int tech_no;
 		    You("decide against that idea.");
 		    return(0);
 		}
-		mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+		mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 		if (!mtmp) {
 		    You("perform a flashy twirl!");
 		    return (0);
@@ -814,7 +815,8 @@ int tech_no;
 		    pline("Things may be going badly, but that's extreme.");
 		    return 0;
 		}
-		mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+		mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 		if (!mtmp) {
 		    You("attack...nothing!");
 		    return 0;
@@ -1005,7 +1007,7 @@ int tech_no;
 		    }
 
 		    /* A little Sokoban guilt... */
-		    if (In_sokoban(&u.uz))
+		    if (Sokoban)
 			change_luck(-1);
 		    You("reform!");
 		    teleds(cc.x, cc.y, FALSE);
@@ -1232,9 +1234,11 @@ int tech_no;
 			pline("Why don't you try wielding something else instead.");
 			return(0);
 		}
-		mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+		mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 		if (!mtmp || !canspotmon(mtmp)) {
-			if (memory_is_invisible(u.ux + u.dx, u.uy + u.dy))
+			if (isok(u.ux + u.dx, u.uy + u.dy) &&
+				memory_is_invisible(u.ux + u.dx, u.uy + u.dy))
 			    You("don't know where to aim for!");
 			else
 			    You("don't see anything there!");
@@ -1689,9 +1693,12 @@ int oldlevel, newlevel;
 		
 	    for(; tech->tech_id; tech++)
 		if(oldlevel < tech->ulevel && newlevel >= tech->ulevel) {
-		    if (tech->ulevel != 1 && !tech_known(tech->tech_id))
+		    if (tech->ulevel != 1 && !tech_known(tech->tech_id)) {
 			You("learn how to perform %s!",
 			  tech_names[tech->tech_id]);
+			livelog_printf(LL_MINORAC, "learned the technique %s",
+				       tech_names[tech->tech_id]);
+		    }
 		    learntech(tech->tech_id, mask, tech->tech_lev);
 		} else if (oldlevel >= tech->ulevel && newlevel < tech->ulevel
 		    && tech->ulevel != 1) {
@@ -2070,7 +2077,8 @@ blitz_pummel()
 	if (u.uswallow)
 	    mtmp = u.ustuck;
 	else
-	    mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+	    mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 
 	if (!mtmp) {
 		You("strike nothing.");
@@ -2086,7 +2094,8 @@ blitz_pummel()
 	    if (u.uswallow)
 		mtmp = u.ustuck;
 	    else
-		mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+		mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 
 	    if (!mtmp) return (1);
 	    if (!attack(mtmp)) return (1);
@@ -2109,7 +2118,8 @@ blitz_g_slam()
 		return(0);
 	}
 
-	mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+	mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 	if (!mtmp) {
 		You("strike nothing.");
 		return (0);
@@ -2117,7 +2127,8 @@ blitz_g_slam()
 	if (!attack(mtmp)) return (0);
 
 	/* Slam the monster into the ground */
-	mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+	mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 	if (!mtmp || u.uswallow) return(1);
 
 	You("hurl %s downwards...", mon_nam(mtmp));
@@ -2258,6 +2269,44 @@ blitz_spirit_bomb()
 	explode(sx, sy, 10, (d(3,6) + num), WAND_CLASS, EXPL_MAGICAL);
 	return 1;
 }
+
+#ifdef DUMPLOG
+/* list the hero's techniques for the end-of-game dump log */
+void
+dump_techniques()
+{
+	winid win;
+	int i, len, longest, tlevel;
+	char buf[BUFSZ];
+
+	for (longest = 0, i = 0; i < MAXTECH; i++) {
+	    if (techid(i) == NO_TECH) continue;
+	    if ((len = strlen(techname(i))) > longest)
+		longest = len;
+	}
+
+	win = create_nhwindow(NHW_MENU);
+	if (!longest) {
+	    putstr(win, 0, "You didn't know any techniques.");
+	} else {
+	    putstr(win, 0, "Techniques known in the end:");
+	    Sprintf(buf, " %-*s Level", longest, "Name");
+	    putstr(win, 0, buf);
+	    for (i = 0; i < MAXTECH; i++) {
+		if (techid(i) == NO_TECH) continue;
+		tlevel = techlev(i);
+		if (tlevel > 0)
+		    Sprintf(buf, " %-*s %5d", longest, techname(i), tlevel);
+		else
+		    Sprintf(buf, " %-*s Beyond recall", longest, techname(i));
+		putstr(win, 0, buf);
+	    }
+	}
+	putstr(win, 0, "");
+	display_nhwindow(win, TRUE);
+	destroy_nhwindow(win);
+}
+#endif /* DUMPLOG */
 
 #ifdef DEBUG
 void

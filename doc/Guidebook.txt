@@ -738,6 +738,9 @@
                objects, similar to the `M' command.  For ports  with  mouse
                support,  the  command  is  also  invoked when a mouse-click
                takes place on a location other than the current position.
+               If travel was interrupted, the cursor starts on its destina-
+               tion; type `.' or `_' to continue there.  See also `#retrav-
+               el'.
 
           .    Rest, do nothing for one turn.
 
@@ -1023,6 +1026,10 @@
           #quit
                Quit the program without saving your game.
 
+          #retravel
+               Travel to the previously selected travel destination again.
+               Default key is `^_'.
+
           #ride
                Ride (or stop riding) a monster.
 
@@ -1034,6 +1041,14 @@
                Perform a role or race specific technique.  A  menu  showing
                the  techniques  available  to  your  character will be dis-
                played.
+
+          #terrain
+               Show the known map without monsters, objects, and traps,  so
+               that  what  they cover can be seen.  A menu lets you keep the
+               traps, or the traps and the objects.
+
+          #tip Tip over a container (bag or box) to pour out its contents.
+               Default key is `M-T'.
 
           #turn
                Turn undead.
@@ -2399,6 +2414,7 @@
                     v - summarize monsters that have been vanquished.
                     g - list monster species that have been genocided.
                     c - display your conduct.
+                    o - display dungeon overview.
 
                Each disclosure possibility can optionally be preceded by  a
             prefix which let you refine how it behaves. Here are the  valid
@@ -2786,6 +2802,31 @@
                Any omitted types are filled in at the end from the previous
                order.
 
+          paranoid_confirmation
+               A space separated list of specific situations where  alter-
+               nate  prompting  is  desired.   The default is ``paranoid_-
+               confirmation:pray swim trap''.
+
+               Confirm - for any prompts which are set to require ``yes''
+                         rather than `y', also require ``no'' to reject;
+               quit    - ``yes'' vs `y' to quit or to enter explore mode;
+               die     - ``yes'' vs `y' to die (explore or debug mode);
+               bones   - ``yes'' vs `y' to save bones in debug mode;
+               attack  - ``yes'' vs `y' to attack a peaceful monster;
+               wand-break - ``yes'' vs `y' to break a wand;
+               eat     - ``yes'' vs `y' to continue eating when satiated;
+               Were-change - ``yes'' vs `y' to change form (lycanthropy);
+               pray    - `y' to confirm praying (replaces ``prayconfirm'');
+               trap    - `y' to step onto a known trap unless harmless;
+               swim    - refuse to step into known water or lava unless
+                         the move is prefixed with `m';
+               Autoall - `y' to confirm choosing `A' by itself in a
+                         menustyle:full menu; without it, `A' only takes
+                         effect together with other choices;
+               Remove  - always pick from inventory for `R' and `T'.
+
+               To disable them all, use ``paranoid_confirmation:none''.
+
           perm_invent
                If true, always display your current inventory in a  window.
             This only makes sense for windowing system interfaces that  im-
@@ -2815,8 +2856,12 @@
             may be able  to  use  autopickup_exception  configuration  file
             lines to further refine autopickup behavior.
 
-          prayconfirm
-               Prompt for confirmation before praying (default on).
+          price_quotes
+               When an object you haven't identified is named,  also  show
+               the range of shop prices you have been quoted for buying and
+               selling one of that kind of object, for example ``{buy 26-33
+               sell 10}''.  These notes are always shown in the discoveries
+               list (default off).
 
           pushweapon
             Using  the  `w' (wield) command when already wielding something
@@ -2869,6 +2914,12 @@
           safe_pet
             Prevent you from (knowingly) attacking your pets (default  on).
 
+          safe_wait
+            Refuse  to  wait (`.') or search (`s') while a hostile monster
+            is next to you or while you are turning to stone  or  slime,
+            being  strangled  or fatally ill; prefix the command with `m'
+            or give it a count to do it anyway (default on).
+
           scores
             Control  what  parts of the score list you are shown at the end
             (ex.  ``scores:5 top scores/4 around  my  score/own  scores'').
@@ -2910,6 +2961,17 @@
 
           silent
             Suppress terminal beeps (default on).
+
+          sortloot
+            Controls the sorting behavior of the pickup lists for inventory
+            and #loot commands and some others.  The possible values are:
+
+                 full - always sort the lists;
+                 loot - only sort the lists that don't use inventory  let-
+                 ters, like with the #loot and pickup commands;
+                 none - show lists the traditional way without sorting.
+
+            The default is loot.
 
           sortpack
             Sort  the  pack contents by type when displaying inventory (de-
@@ -2991,9 +3053,10 @@
                Cannot be set with the `O' command.
 
           travel
-            Allow the travel command (default on).  Turning this option off
-            will prevent the game from attempting unintended moves  if  you
-            make inadvertent mouse clicks on the map window.
+            Allow the travel command via mouse click (default on).  Turning
+            this option off will prevent the game from attempting  unintend-
+            ed moves if you make inadvertent mouse clicks on the map window.
+            Does not affect travelling via the `_' command.
 
           verbose
                Provide more commentary during the game (default on).

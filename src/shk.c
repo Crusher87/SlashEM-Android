@@ -45,6 +45,8 @@ STATIC_DCL long FDECL(set_cost, (struct obj *, struct monst *));
 STATIC_DCL const char *FDECL(shk_embellish, (struct obj *, long));
 STATIC_DCL long FDECL(cost_per_charge, (struct monst *,struct obj *,BOOLEAN_P));
 STATIC_DCL long FDECL(cheapest_item, (struct monst *));
+STATIC_DCL int FDECL(menu_pick_pay_items, (struct monst *, unsigned **));
+STATIC_DCL boolean FDECL(bill_id_picked, (unsigned, unsigned *, int));
 STATIC_DCL int FDECL(dopayobj, (struct monst *, struct bill_x *,
 			    struct obj **, int, BOOLEAN_P));
 STATIC_DCL long FDECL(stolen_container, (struct obj *, struct monst *, long,
@@ -245,10 +247,20 @@ void
 replshk(mtmp,mtmp2)
 register struct monst *mtmp, *mtmp2;
 {
-	rooms[ESHK(mtmp2)->shoproom - ROOMOFFSET].resident = mtmp2;
-	if (inhishop(mtmp) && *u.ushops == ESHK(mtmp)->shoproom) {
-		ESHK(mtmp2)->bill_p = &(ESHK(mtmp2)->bill[0]);
-	}
+	struct eshk *eshkp = ESHK(mtmp2);
+
+	rooms[eshkp->shoproom - ROOMOFFSET].resident = mtmp2;
+	/*
+	 * When a shopkeeper's corpse is revived, 'mtmp' is a temporary
+	 * monster of the corpse's type which needn't have any shopkeeper
+	 * data at all (reading ESHK(mtmp) went past the end of it), so
+	 * look at 'mtmp2', which has already taken over mtmp's location.
+	 * Also repoint a bill pointer which still refers to the old
+	 * monster's bill.
+	 */
+	if ((inhishop(mtmp2) && *u.ushops == eshkp->shoproom) ||
+		(eshkp->bill_p && eshkp->bill_p != (struct bill_x *) -1000))
+	    eshkp->bill_p = &(eshkp->bill[0]);
 }
 
 /* do shopkeeper specific structure munging -dlc */
@@ -587,6 +599,9 @@ struct monst *shkp;
 	eshkp->robbed += total;
 	You("stole %ld %s worth of merchandise.",
 	    total, currency(total));
+	livelog_printf(LL_ACHIEVE, "stole %ld %s worth of merchandise from %s %s",
+		       total, currency(total), s_suffix(shkname(shkp)),
+		       shtypes[eshkp->shoptype - SHOPBASE].name);
 	if (!Role_if(PM_ROGUE)) {     /* stealing is unlawful */
 	    adjalign(-sgn(u.ualign.type));
 	    You("feel like an evil rogue.");
@@ -1032,6 +1047,7 @@ register struct obj *obj, *merge;
 	    }
 	}
 	if (Has_contents(obj)) delete_contents(obj);
+	if (Is_container(obj)) maybe_reset_pick(obj);
 
 	shkp = 0;
 	if (obj->unpaid) {
@@ -1334,6 +1350,87 @@ register struct monst *shkp;
 	}
 	return(gmin);
 }
+
+/* show the items on the bill in a menu and ask which to pay for;
+   returns the number picked and their bill ids via *picked_p
+   (caller frees it) */
+STATIC_OVL int
+menu_pick_pay_items(shkp, picked_p)
+struct monst *shkp;
+unsigned **picked_p;
+{
+	struct eshk *eshkp = ESHK(shkp);
+	struct bill_x *bp;
+	struct obj *otmp;
+	winid win;
+	anything any;
+	menu_item *pick_list = (menu_item *)0;
+	char buf[BUFSZ];
+	const char *used;
+	long amt, largest_amt, save_quan;
+	int i, n, amt_width;
+	unsigned save_unpaid;
+
+	*picked_p = (unsigned *)0;
+	/* go through the bill twice, first to control price formatting */
+	largest_amt = 0L;
+	for (i = 0; i < eshkp->billct; i++) {
+	    bp = &eshkp->bill_p[i];
+	    if (bp->price * bp->bquan > largest_amt)
+		largest_amt = bp->price * bp->bquan;
+	}
+	Sprintf(buf, "%ld", largest_amt);
+	amt_width = (int) strlen(buf);
+
+	any.a_void = 0;
+	win = create_nhwindow(NHW_MENU);
+	start_menu(win);
+	for (i = 0; i < eshkp->billct; i++) {
+	    bp = &eshkp->bill_p[i];
+	    if ((otmp = bp_to_obj(bp)) == 0) continue;
+	    used = (otmp->where == OBJ_ONBILL) ? " (used up)" :
+		   (otmp->quan < bp->bquan) ? " (partly used up)" : "";
+	    /* name the whole billed quantity, without the price suffix */
+	    save_quan = otmp->quan;
+	    save_unpaid = otmp->unpaid;
+	    otmp->quan = bp->bquan;
+	    otmp->unpaid = 0;
+	    amt = bp->price * bp->bquan;
+	    Sprintf(buf, "%*ld %s, %s%s", amt_width, amt,
+		    "Zm", doname(otmp), used);
+	    otmp->quan = save_quan;
+	    otmp->unpaid = save_unpaid;
+	    any.a_int = i + 1;	/* +1: avoid 0 */
+	    add_menu(win, NO_GLYPH, &any, 0, 0, ATR_NONE, buf,
+		     MENU_UNSELECTED);
+	}
+	end_menu(win, "Pay for which items?");
+	n = select_menu(win, PICK_ANY, &pick_list);
+	destroy_nhwindow(win);
+
+	if (n > 0) {
+	    *picked_p = (unsigned *) alloc(n * sizeof (unsigned));
+	    for (i = 0; i < n; i++)
+		(*picked_p)[i] =
+		    eshkp->bill_p[pick_list[i].item.a_int - 1].bo_id;
+	    free((genericptr_t)pick_list);
+	}
+	return (n > 0) ? n : 0;
+}
+
+/* is bill entry 'id' among those picked via menu_pick_pay_items()? */
+STATIC_OVL boolean
+bill_id_picked(id, picked, npicked)
+unsigned id;
+unsigned *picked;
+int npicked;
+{
+	int i;
+
+	for (i = 0; i < npicked; i++)
+	    if (picked[i] == id) return TRUE;
+	return FALSE;
+}
 #endif /*OVL3*/
 #ifdef OVL0
 
@@ -1631,7 +1728,7 @@ proceed:
 		    else Strcat(sbuf,
 			   "for gold picked up and the use of merchandise.");
 		} else Strcat(sbuf, "for the use of merchandise.");
-		pline(sbuf);
+		pline("%s", sbuf);
 #ifndef GOLDOBJ
 		if (u.ugold + eshkp->credit < dtmp) {
 		    pline("But you don't%s have enough gold%s.",
@@ -1681,6 +1778,8 @@ proceed:
 	/* now check items on bill */
 	if (eshkp->billct) {
 	    register boolean itemize;
+	    unsigned *picked = (unsigned *)0;
+	    int npicked = 0;
 #ifndef GOLDOBJ
 	    if (!u.ugold && !eshkp->credit) {
 #else
@@ -1708,6 +1807,12 @@ proceed:
 		return(0);
 	    }
 
+	    if (eshkp->billct > 1 && flags.menu_style != MENU_TRADITIONAL) {
+		/* pick the items to pay for from a menu */
+		itemize = FALSE;
+		npicked = menu_pick_pay_items(shkp, &picked);
+		if (!npicked) goto thanks;
+	    } else
 	    /* this isn't quite right; it itemizes without asking if the
 	     * single item on the bill is partly used up and partly unpaid */
 	    itemize = (eshkp->billct > 1 ? yn("Itemized billing?") == 'y' : 1);
@@ -1727,9 +1832,13 @@ proceed:
 		    } else {
 			impossible("Shopkeeper administration out of order.");
 			setpaid(shkp);	/* be nice to the player */
+			if (picked) free((genericptr_t)picked);
 			return 1;
 		    }
-		    if (pass == bp->useup && otmp->quan == bp->bquan) {
+		    if ((pass == bp->useup && otmp->quan == bp->bquan) ||
+			    /* not picked from the menu */
+			    (picked && !bill_id_picked(bp->bo_id,
+						       picked, npicked))) {
 			/* pay for used-up items on first pass and others
 			 * on second, so player will be stuck in the store
 			 * less often; things which are partly used up
@@ -1738,6 +1847,7 @@ proceed:
 		    } else {
 			switch (dopayobj(shkp, bp, &otmp, pass, itemize)) {
 			  case PAY_CANT:
+				if (picked) free((genericptr_t)picked);
 				return 1;	/*break*/
 			  case PAY_BROKE:
 				paid = TRUE;
@@ -1759,6 +1869,7 @@ proceed:
 		}
 	    }
 	thanks:
+	    if (picked) free((genericptr_t)picked);
 	    if (!itemize)
 	        update_inventory(); /* Done in dopayobj() if itemize. */
 	}
@@ -2559,6 +2670,75 @@ register struct obj *unp_obj;	/* known to be unpaid */
 	return bp ? unp_obj->quan * bp->price : 0L;
 }
 
+/* price notes: remember that a shopkeeper has quoted a price for one of
+   this type of object (adapted from NetHack 5.0's price_quotes) */
+void
+record_price_quote(obj, price, buyprice)
+struct obj *obj;
+long price;		/* price for a single item */
+boolean buyprice;	/* TRUE: shk sells it to hero; FALSE: hero sells it */
+{
+	struct objclass *oc = &objects[obj->otyp];
+
+	/* artifact prices say nothing about the base object type, and an
+	   object whose appearance hasn't been seen can't be noted */
+	if (price <= 0L || obj->oartifact || !obj->dknown
+		|| obj->oclass == COIN_CLASS)
+	    return;
+#ifdef BLACKMARKET
+	/* One-eyed Sam's prices are many times the usual ones */
+	if (buyprice && Is_blackmarket(&u.uz))
+	    return;
+#endif
+	if (buyprice) {
+	    if (!oc->oc_buy_minseen || price < oc->oc_buy_minseen)
+		oc->oc_buy_minseen = price;
+	    if (price > oc->oc_buy_maxseen)
+		oc->oc_buy_maxseen = price;
+	} else {
+	    if (!oc->oc_sell_minseen || price < oc->oc_sell_minseen)
+		oc->oc_sell_minseen = price;
+	    if (price > oc->oc_sell_maxseen)
+		oc->oc_sell_maxseen = price;
+	}
+}
+
+/* append " {buy N-M sell N}" for the prices noted for an object type, if
+   any, to buf; does nothing if the result wouldn't fit in bufsiz bytes */
+void
+append_price_quote(buf, bufsiz, otyp)
+char *buf;
+int bufsiz;
+int otyp;
+{
+	struct objclass *oc = &objects[otyp];
+	char qbuf[BUFSZ];
+
+	if (!oc->oc_buy_maxseen && !oc->oc_sell_maxseen)
+	    return;
+
+	Strcpy(qbuf, " {");
+	if (oc->oc_buy_maxseen) {
+	    if (oc->oc_buy_minseen < oc->oc_buy_maxseen)
+		Sprintf(eos(qbuf), "buy %ld-%ld",
+			oc->oc_buy_minseen, oc->oc_buy_maxseen);
+	    else
+		Sprintf(eos(qbuf), "buy %ld", oc->oc_buy_maxseen);
+	}
+	if (oc->oc_sell_maxseen) {
+	    if (oc->oc_buy_maxseen)
+		Strcat(qbuf, " ");
+	    if (oc->oc_sell_minseen < oc->oc_sell_maxseen)
+		Sprintf(eos(qbuf), "sell %ld-%ld",
+			oc->oc_sell_minseen, oc->oc_sell_maxseen);
+	    else
+		Sprintf(eos(qbuf), "sell %ld", oc->oc_sell_maxseen);
+	}
+	Strcat(qbuf, "}");
+	if ((int) (strlen(buf) + strlen(qbuf)) < bufsiz)
+	    Strcat(buf, qbuf);
+}
+
 STATIC_OVL void
 add_one_tobill(obj, dummy)
 register struct obj *obj;
@@ -2589,6 +2769,13 @@ register boolean dummy;
 		return;
 	}
 
+	/* normally bill_p gets set up whenever you enter the shop, but obj
+	   might be going onto the bill because hero just snagged it with
+	   a grappling hook from outside without ever having been inside */
+	if (!ESHK(shkp)->bill_p ||
+		ESHK(shkp)->bill_p == (struct bill_x *) -1000)
+	    ESHK(shkp)->bill_p = &(ESHK(shkp)->bill[0]);
+
 	bct = ESHK(shkp)->billct;
 	bp = &(ESHK(shkp)->bill_p[bct]);
 	bp->bo_id = obj->o_id;
@@ -2600,6 +2787,7 @@ register boolean dummy;
 	bp->price = get_cost(obj, shkp);
 	ESHK(shkp)->billct++;
 	obj->unpaid = 1;
+	record_price_quote(obj, bp->price, TRUE);
 }
 
 STATIC_OVL void
@@ -3167,6 +3355,11 @@ move_on:
 		char c, qbuf[BUFSZ];
 		long tmpcr = ((offer * 9L) / 10L) + (offer <= 1L);
 
+		/* the hero learns what the shk would pay for one of these,
+		   unless an earlier 'q' answer suppresses the offer */
+		if (ltmp > 0L && !cltmp && (sell_how == SELL_NORMAL
+					    || auto_credit || sell_response != 'n'))
+		    record_price_quote(obj, ltmp / obj->quan, FALSE);
 		if (sell_how == SELL_NORMAL || auto_credit) {
 		    c = sell_response = 'y';
 		} else if (sell_response != 'n') {
@@ -3210,6 +3403,8 @@ move_on:
 		boolean short_funds = (offer > shkmoney);
 		if (short_funds) offer = shkmoney;
 #endif
+		if (ltmp > 0L && !cltmp && !short_funds && sell_response != 'n')
+		    record_price_quote(obj, ltmp / obj->quan, FALSE);
 		if (!sell_response) {
 		    only_partially_your_contents =
 			(contained_cost(obj, shkp, 0L, FALSE, FALSE) !=
@@ -4126,7 +4321,10 @@ getcad:
 	if (Invis) Your("invisibility does not fool %s!", shkname(shkp));
 	Sprintf(qbuf,"\"Cad!  You did %ld %s worth of damage!\"  Pay? ",
 		 cost_of_damage, currency(cost_of_damage));
-	if(yn(qbuf) != 'n') {
+	/* only an explicit 'n' refuses; <esc> (hidden 'q') pays, since
+	   refusing angers the shopkeeper and the Android port answers
+	   an open prompt with <esc> when it saves */
+	if(yn_function(qbuf, "yn\033q", 'y') != 'n') {
 		cost_of_damage = check_credit(cost_of_damage, shkp);
 #ifndef GOLDOBJ
 		u.ugold -= cost_of_damage;
@@ -4208,6 +4406,8 @@ register struct obj *first_obj;
 		get_cost(otmp, (struct monst *)0);
 	if (Has_contents(otmp))
 	    cost += contained_cost(otmp, shkp, 0L, FALSE, FALSE);
+	else
+	    record_price_quote(otmp, cost, TRUE);
 	if (!cost) {
 	    Strcpy(price, "no charge");
 	} else {
@@ -4405,7 +4605,8 @@ boolean altusage; /* some items have an "alternate" use with different cost */
 	} else if(otmp->otyp == BAG_OF_TRICKS ||	 /* 1 - 20 */
 		  otmp->otyp == MEDICAL_KIT ||                  
 		  otmp->otyp == HORN_OF_PLENTY) {
-		tmp /= 5L;
+		/* altusage: emptying of all the contents at once (#tip) */
+		if (!altusage || otmp->otyp == MEDICAL_KIT) tmp /= 5L;
 	} else if(otmp->otyp == CRYSTAL_BALL ||		 /* 1 - 5 */
 		  /*otmp->otyp == ORB_OF_ENCHANTMENT ||                  
 		  otmp->otyp == ORB_OF_CHARGING ||*/

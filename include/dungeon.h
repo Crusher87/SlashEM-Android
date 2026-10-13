@@ -182,4 +182,80 @@ struct linfo {
 #endif /* MFLOPPY */
 };
 
+/* types and structures for dungeon map recording
+ *
+ * It is designed to eliminate the need for an external notes file for some
+ * mundane dungeon elements.  "Where was the last altar I passed?" etc...
+ * Presumably the character can remember this sort of thing even if, months
+ * later in real time picking up an old save game, I can't.
+ *
+ * To be consistent, one can assume that this map is in the player's mind and
+ * has no physical correspondence (eliminating illiteracy/blind/hands/hands
+ * free concerns).  Therefore, this map is not exhaustive nor detailed ("some
+ * fountains").  This makes it also subject to player conditions (amnesia).
+ */
+
+/* Because clearly Nethack needs more ways to specify alignment */
+#define Amask2msa(x)	((x) == 4 ? 3 : (x) & AM_MASK)
+#define Msa2amask(x)	((x) == 3 ? 4 : (x))
+#define MSA_NONE	0	/* unaligned or multiple alignments */
+#define MSA_LAWFUL	1
+#define MSA_NEUTRAL	2
+#define MSA_CHAOTIC	3
+
+/* what the player knows about a single dungeon level */
+/* initialized in mklev() */
+typedef struct mapseen {
+	struct mapseen *next;	/* next map in the chain */
+	branch	*br;		/* knows about branch via taking it in goto_level */
+	d_level	lev;		/* corresponding dungeon level */
+	struct mapseen_feat {
+	    /* feature knowledge that must be calculated from levl array */
+	    Bitfield(nfount, 2);
+	    Bitfield(nsink, 2);
+	    Bitfield(naltar, 2);
+	    Bitfield(nthrone, 2);
+
+	    Bitfield(ngrave, 2);
+	    Bitfield(ntree, 2);
+	    Bitfield(ntoilet, 2);
+	    /* calculated from rooms array */
+	    Bitfield(nshop, 2);
+
+	    Bitfield(ntemple, 2);
+	    /* altar alignment; MSA_NONE if there is more than one and
+	       they aren't all the same */
+	    Bitfield(msalign, 2);
+	    /* room type of the shop(s); 0 if there are several kinds */
+	    Bitfield(shoptype, 6);
+	} feat;
+	struct mapseen_flags {
+	    Bitfield(unreachable, 1);	/* can't get back to this level */
+	    Bitfield(forgot, 1);	/* player has forgotten about this level */
+	    Bitfield(oracle, 1);
+	    Bitfield(sokosolved, 1);
+	    Bitfield(bigroom, 1);
+	    Bitfield(castle, 1);
+	    Bitfield(castletune, 1);	/* add tune hint to castle annotation */
+	    Bitfield(valley, 1);
+
+	    Bitfield(msanctum, 1);
+	    Bitfield(ludios, 1);
+	    Bitfield(roguelevel, 1);
+	    /* quest annotations: quest_summons is for main dungeon level
+	       with entry portal and is reset once quest has been finished;
+	       questing is for quest home (level 1) */
+	    Bitfield(quest_summons, 1);	/* heard summons from leader */
+	    Bitfield(questing, 1);	/* quest leader has unlocked quest stairs */
+	    Bitfield(vibrating_square, 1); /* "gateway to sanctum" */
+	} flags;
+	/* custom naming */
+	char	*custom;
+	unsigned custom_lth;
+	struct mapseen_rooms {
+	    Bitfield(seen, 1);
+	    Bitfield(untended, 1);	/* flag for shop without shk */
+	} msrooms[(MAXNROFROOMS + 1) * 2];	/* same size as rooms[] */
+} mapseen;
+
 #endif /* DUNGEON_H */

@@ -17,6 +17,9 @@
 #ifdef POSITIONBAR
 STATIC_DCL void NDECL(do_positionbar);
 #endif
+#ifdef OVL0
+STATIC_DCL void FDECL(interrupt_multi, (const char *));
+#endif
 
 #define decrnknow(spell)	spl_book[spell].sp_know--
 #define spellid(spell)		spl_book[spell].sp_id
@@ -101,6 +104,8 @@ moveloop()
 		    /* both you and the monsters are out of steam this round */
 		    /* set up for a new turn */
 		    struct monst *mtmp;
+		    int prev_hp, prev_en;	/* to notice reaching maximum */
+		    boolean was_polyd;
 		    mcalcdistress();	/* adjust monsters' trap, blind, etc */
 
 		    /* reallocate movement rations to monsters */
@@ -185,6 +190,9 @@ moveloop()
 		     * Another possible result is rehumanization, which requires
 		     * that encumbrance and movement rate be recalculated.
 		     */
+		    was_polyd = Upolyd;
+		    prev_hp = Upolyd ? u.mh : u.uhp;
+		    prev_en = u.uen;
 		    if (u.uinvulnerable) {
 			/* for the moment at least, you're in tiptop shape */
 			wtcap = UNENCUMBERED;
@@ -272,6 +280,15 @@ moveloop()
 			flags.botl = 1;
 		    }
 
+		    /* stop voluntary multi-turn activity (counted search or
+		       rest) once hit points or energy have been restored */
+		    if (Upolyd == was_polyd &&
+			    (Upolyd ? (u.mh == u.mhmax && prev_hp < u.mhmax) :
+				  (u.uhp == u.uhpmax && prev_hp < u.uhpmax)))
+			interrupt_multi("You are in full health.");
+		    if (u.uen == u.uenmax && prev_en < u.uenmax)
+			interrupt_multi("You feel full of energy.");
+
 		    if(!u.uinvulnerable) {
 			if(Teleportation && !rn2(85)) {
 			    xchar old_ux = u.ux, old_uy = u.uy;
@@ -358,6 +375,7 @@ moveloop()
 	/****************************************/
 
 	find_ac();
+	gamelog_conduct();	/* #chronicle: note newly broken conducts */
 	if(!flags.mv || Blind) {
 	    /* redo monsters if hallu or wearing a helm of telepathy */
 	    if (Hallucination) {	/* update screen randomly */
@@ -482,6 +500,16 @@ moveloop()
     }
 }
 
+/* stop a counted search or rest (but not running or travel) */
+STATIC_OVL void
+interrupt_multi(msg)
+const char *msg;
+{
+	if (multi > 0 && !flags.travel && !flags.run) {
+	    nomul(0);
+	    if (flags.verbose && msg) Norep("%s", msg);
+	}
+}
 
 #endif /* OVL0 */
 #ifdef OVL1
@@ -546,6 +574,7 @@ newgame()
 #endif
 
 	flags.ident = 1;
+	free_gamelog();		/* empty #chronicle */
 
 	for (i = 0; i < NUMMONS; i++)
 		mvitals[i].mvflags = mons[i].geno & G_NOCORPSE;
@@ -635,10 +664,15 @@ boolean new_game;	/* false => restoring an old game */
 	  Hello((struct monst *) 0), plname, buf, urace.adj,
 	  (currentgend && urole.name.f) ? urole.name.f : urole.name.m);
 #endif
-    if (new_game) pline("%s %s, welcome to %s!  You are a%s %s %s.",
+    if (new_game) {
+	pline("%s %s, welcome to %s!  You are a%s %s %s.",
 	  Hello((struct monst *) 0), plname, DEF_GAME_NAME, buf, urace.adj,
 	  (currentgend && urole.name.f) ? urole.name.f : urole.name.m);
-    else pline("%s %s, the%s %s %s, welcome back to %s!",
+	/* #chronicle; this way the list of major events is never empty */
+	livelog_printf(LL_ACHIEVE, "%s the%s %s %s entered the dungeon",
+	  plname, buf, urace.adj,
+	  (currentgend && urole.name.f) ? urole.name.f : urole.name.m);
+    } else pline("%s %s, the%s %s %s, welcome back to %s!",
 	  Hello((struct monst *) 0), plname, buf, urace.adj,
 	  (currentgend && urole.name.f) ? urole.name.f : urole.name.m, 
 	  DEF_GAME_NAME);

@@ -1,48 +1,55 @@
-
 Build instructions
 
 
-These instructions are written for a 64-bit Ubuntu installation.
-Modifying them for other linux distributionos should be little to no
-work. If you're running Windows you're on your own.
+The easiest way to get an APK is the GitHub Actions workflow in
+.github/workflows/android.yml. Every push builds app-debug.apk and attaches
+it to the workflow run as the "slashem-debug-apk" artifact.
 
+To build locally on 64-bit Ubuntu:
 
 
 === Preparations ===
 
- - Install the Android SDK
-     http://developer.android.com/sdk
- 
- - Download and extract the Android NDK
-     http://developer.android.com/sdk/ndk
-      
- - Install 'bison' and 'flex'
- 
+ - Install the Android SDK command-line tools
+     https://developer.android.com/studio#command-tools
+
+ - Install the SDK platform, build tools and NDK r21e:
+     sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;21.4.7075529"
+
+ - Install 'bison', 'flex', 'gcc-multilib' and 'groff-base'
+
+ - Install JDK 17 (needed by the Gradle build)
+
+ - Set ANDROID_SDK_ROOT to the SDK installation directory
+
  - Check out the source
-     git clone https://github.com/gurrhack/ForkFront-Android.git
-     git clone https://github.com/gurrhack/SlashEM-Android.git
+     git clone --recursive https://github.com/Crusher87/SlashEM-Android.git
 
 
 
 === Building Slash'EM ===
 
 1. cd <SlashEM-Android>/sys/android
-2. Open Makefile.src and change NDK to the appropriate path
+2. Open Makefile.src and set NDK to the NDK path
+   (e.g. $ANDROID_SDK_ROOT/ndk/21.4.7075529). The CPU architecture
+   defaults to arm64-v8a; pass e.g. ABI=armeabi-v7a to make to change it.
 3. sh ./setup.sh
 4. cd ../..
 5. make install
 
+This writes app/libs/<ABI>/libslashem.so and app/assets/slashemdir.
 
 
 
 === Building the app ===
 
-1. Start IntelliJ
-2. Create an empty project in the parent directory
-3. Add a new empty Java module to the project root
-4. Import the ForkFront module located at <ForkFront-Android>/forkfront.iml
-5. Import the Slash'EM module located at <SlashEM-Android>/sys/android/slashem.iml
-6. Build and Run!
+1. cd <SlashEM-Android>/sys/android
+2. ./gradlew assembleDebug
+3. Install app/build/outputs/apk/debug/app-debug.apk on your device.
+
+The ForkFront front end (https://github.com/gurrhack/ForkFront-Android) is a
+git submodule in ForkFront-Android/. It is built unmodified by forkfront/,
+and app/src/com/tbd/SlashEM/SlashEM.java adapts it to current Android.
 
 
 Happy hacking!

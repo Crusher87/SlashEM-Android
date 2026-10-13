@@ -4,6 +4,7 @@
 
 #define NEED_VARARGS /* Uses ... */	/* comment line for pre-compiled headers */
 #include "hack.h"
+#include "lev.h"	/* save_gamelog() */
 #include "epri.h"
 #ifdef WIZARD
 #include "edog.h"
@@ -11,9 +12,65 @@
 
 #ifdef OVLB
 
+/* a formatted message is built in a buffer this big, then chopped down
+   to BUFSZ-1 characters if it turns out to be longer than that */
+#ifndef BIGBUFSZ
+#define BIGBUFSZ (4 * BUFSZ)
+#endif
+
 static boolean no_repeat = FALSE;
+static boolean no_history = FALSE;	/* see pline_prompt() */
 
 static char *FDECL(You_buf, (int));
+
+/*
+ * The most recent messages, kept by the core rather than the window port
+ * so that they can be saved with the game (and given back to the window
+ * port's ^P history after a restore) and listed in the dump log.
+ * msghist[msghist_next] is the oldest one, or empty if there are fewer
+ * than MSGHISTORY_COUNT.
+ */
+static char *msghist[MSGHISTORY_COUNT];
+static int msghist_next = 0;		/* slot to use for the next message */
+
+/* remember a message */
+void
+msghist_add(line)
+const char *line;
+{
+	char *oldest = msghist[msghist_next];
+
+	if (!line || !*line) return;
+	if (oldest && strlen(oldest) >= strlen(line)) {
+	    Strcpy(oldest, line);
+	} else {
+	    if (oldest) free((genericptr_t) oldest);
+	    msghist[msghist_next] = strcpy((char *) alloc(strlen(line) + 1),
+					   line);
+	}
+	msghist_next = (msghist_next + 1) % MSGHISTORY_COUNT;
+}
+
+/* the idx'th remembered message, oldest first; null for an unused slot */
+const char *
+msghist_get(idx)
+int idx;
+{
+	if (idx < 0 || idx >= MSGHISTORY_COUNT) return (const char *) 0;
+	return msghist[(msghist_next + idx) % MSGHISTORY_COUNT];
+}
+
+/* forget all messages */
+void
+msghist_free()
+{
+	int i;
+
+	for (i = 0; i < MSGHISTORY_COUNT; i++)
+	    if (msghist[i])
+		free((genericptr_t) msghist[i]), msghist[i] = (char *) 0;
+	msghist_next = 0;
+}
 
 /*VARARGS1*/
 /* Note that these declarations rely on knowledge of the internals
@@ -47,25 +104,54 @@ void
 pline VA_DECL(const char *, line)
 #endif	/* USE_STDARG | USE_VARARG */
 
-	char pbuf[BUFSZ];
+	static int in_pline = 0;
+	char pbuf[BIGBUFSZ];	/* will get chopped down to BUFSZ-1 if longer */
+	int ln;
 /* Do NOT use VA_START and VA_END in here... see above */
 
 	if (!line || !*line) return;
 	if (index(line, '%')) {
-	    Vsprintf(pbuf,line,VA_ARGS);
+	    (void) vsnprintf(pbuf, sizeof pbuf, line, VA_ARGS);
 	    line = pbuf;
 	}
-	if (!iflags.window_inited) {
+	if ((ln = (int) strlen(line)) > BUFSZ - 1) {
+	    if (line != pbuf)			/* no '%' was present */
+		(void) strncpy(pbuf, line, BUFSZ - 1); /* caveat: unterminated */
+	    /* truncate, preserving the final 3 characters:
+	       "___ extremely long text" -> "___ extremely l...ext"
+	       (this may be suboptimal if overflow is less than 3) */
+	    (void) strncpy(pbuf + BUFSZ - 1 - 6, "...", 3);
+	    /* avoid strncpy; buffers could overlap if excess is small */
+	    pbuf[BUFSZ - 1 - 3] = line[ln - 3];
+	    pbuf[BUFSZ - 1 - 2] = line[ln - 2];
+	    pbuf[BUFSZ - 1 - 1] = line[ln - 1];
+	    pbuf[BUFSZ - 1] = '\0';
+	    line = pbuf;
+	}
+	/* use raw_print() if we're called too early (or perhaps too late
+	   during shutdown) or if we're being called recursively (probably
+	   via debugpline() in the interface code) */
+	if (in_pline++ || !iflags.window_inited) {
 	    raw_print(line);
-	    return;
+	    goto pline_done;
 	}
 #ifndef MAC
 	if (no_repeat && !strcmp(line, toplines))
-	    return;
+	    goto pline_done;
 #endif /* MAC */
+	if (iflags.in_dumplog) {
+	    /* putstr() writes to the dump log; leave the screen alone */
+	    putstr(WIN_MESSAGE, 0, line);
+	    return;
+	}
 	if (vision_full_recalc) vision_recalc(0);
 	if (u.ux) flush_screen(1);		/* %% */
+	if (!no_history) msghist_add(line);
 	putstr(WIN_MESSAGE, 0, line);
+
+ pline_done:
+	--in_pline;
+	return;
 }
 
 /*VARARGS1*/
@@ -76,6 +162,21 @@ Norep VA_DECL(const char *, line)
 	no_repeat = TRUE;
 	vpline(line, VA_ARGS);
 	no_repeat = FALSE;
+	VA_END();
+	return;
+}
+
+/*VARARGS1*/
+/* pline() for a prompt that a window port shows in the message window:
+   it is left out of the message history (it's not a message, and the
+   answer isn't part of it) */
+void
+pline_prompt VA_DECL(const char *, line)
+	VA_START(line);
+	VA_INIT(line, const char *);
+	no_history = TRUE;
+	vpline(line, VA_ARGS);
+	no_history = FALSE;
 	VA_END();
 	return;
 }
@@ -233,13 +334,19 @@ raw_printf VA_DECL(const char *, line)
 #endif
 /* Do NOT use VA_START and VA_END in here... see above */
 
-	if(!index(line, '%'))
-	    raw_print(line);
-	else {
-	    char pbuf[BUFSZ];
-	    Vsprintf(pbuf,line,VA_ARGS);
-	    raw_print(pbuf);
+	char pbuf[BIGBUFSZ];	/* will be chopped down to BUFSZ-1 if longer */
+
+	if (index(line, '%')) {
+	    (void) vsnprintf(pbuf, sizeof pbuf, line, VA_ARGS);
+	    line = pbuf;
 	}
+	if ((int) strlen(line) > BUFSZ - 1) {
+	    if (line != pbuf)
+		line = strncpy(pbuf, line, BUFSZ - 1);
+	    /* unlike pline, we don't futz around to keep last few chars */
+	    pbuf[BUFSZ - 1] = '\0'; /* terminate strncpy or truncate vsnprintf */
+	}
+	raw_print(line);
 }
 
 
@@ -253,10 +360,12 @@ impossible VA_DECL(const char *, s)
 	program_state.in_impossible = 1;
 	{
 	    char pbuf[BUFSZ];
-	    Vsprintf(pbuf,s,VA_ARGS);
+
+	    (void) vsnprintf(pbuf, sizeof pbuf, s, VA_ARGS);
 	    paniclog("impossible", pbuf);
+	    /* the argument list has been used up; don't format it again */
+	    pline("%s", pbuf);
 	}
-	vpline(s,VA_ARGS);
 	pline("Program in disorder - perhaps you'd better #quit.");
 	program_state.in_impossible = 0;
 	VA_END();
@@ -443,6 +552,215 @@ self_invis_message()
 	    Hallucination ? "Far out, man!  You" : "Gee!  All of a sudden, you",
 	    See_invisible ? "can see right through yourself" :
 		"can't see yourself");
+}
+
+/*
+ * #chronicle: a log of the major events of the game, adapted from
+ * NetHack 5.0's gamelog (which also feeds its "livelog").  The log is
+ * saved with the game; show_gamelog() lists it in-game and at the end of
+ * the game (for the dump log).
+ */
+struct gamelog_line {
+	struct gamelog_line *next;
+	long turn;		/* when the event happened */
+	long flags;		/* LL_xxx kind of event */
+	char *text;
+};
+
+static struct gamelog_line *gamelog = 0, *gamelog_last = 0;
+static long gamelog_done = 0L;	/* GLF_xxx: one-time events already logged */
+
+/* add an event to the log */
+void
+gamelog_add(glflags, gltime, str)
+long glflags, gltime;
+const char *str;
+{
+	struct gamelog_line *tmp;
+
+	tmp = (struct gamelog_line *) alloc(sizeof (struct gamelog_line));
+	tmp->next = (struct gamelog_line *) 0;
+	tmp->turn = gltime;
+	tmp->flags = glflags;
+	tmp->text = strcpy((char *) alloc(strlen(str) + 1), str);
+	if (gamelog_last)
+	    gamelog_last->next = tmp;
+	else
+	    gamelog = tmp;
+	gamelog_last = tmp;
+}
+
+/*VARARGS2*/
+/* log an event that happens now; callers keep the arguments short */
+void
+livelog_printf VA_DECL2(long, ll_type, const char *, line)
+	char buf[BUFSZ * 2];
+	VA_START(line);
+	VA_INIT(line, const char *);
+	Vsprintf(buf, line, VA_ARGS);
+	VA_END();
+	gamelog_add(ll_type, moves, buf);
+}
+
+/* for events that are only logged the first time they happen: returns
+   TRUE (and remembers it) if 'what' (GLF_xxx) hasn't been logged yet */
+boolean
+gamelog_first(what)
+long what;
+{
+	if (gamelog_done & what)
+	    return FALSE;
+	gamelog_done |= what;
+	return TRUE;
+}
+
+/* log the first violation of each conduct; called every turn, so that
+   the many places which break conducts don't all need to do it (the
+   ones that can say more, like the first wish, log it themselves) */
+void
+gamelog_conduct()
+{
+	if (u.uconduct.food && gamelog_first(GLF_FOOD))
+	    livelog_printf(LL_CONDUCT, "ate for the first time");
+	if (u.uconduct.unvegan && gamelog_first(GLF_UNVEGAN))
+	    livelog_printf(LL_CONDUCT,
+			   "consumed animal products for the first time");
+	if (u.uconduct.unvegetarian && gamelog_first(GLF_UNVEGETARIAN))
+	    livelog_printf(LL_CONDUCT, "tasted meat for the first time");
+	if (u.uconduct.gnostic && gamelog_first(GLF_GNOSTIC))
+	    livelog_printf(LL_CONDUCT, "rejected atheism");
+	if (u.uconduct.weaphit && gamelog_first(GLF_WEAPHIT))
+	    livelog_printf(LL_CONDUCT,
+			   "hit with a wielded weapon for the first time");
+	if (u.uconduct.killer && gamelog_first(GLF_KILLER))
+	    livelog_printf(LL_CONDUCT, "killed for the first time");
+	if (u.uconduct.literate && gamelog_first(GLF_LITERATE))
+	    livelog_printf(LL_CONDUCT, "became literate");
+	if (u.uconduct.polypiles && gamelog_first(GLF_POLYPILE))
+	    livelog_printf(LL_CONDUCT, "polymorphed an object for the first time");
+	if (u.uconduct.polyselfs && gamelog_first(GLF_POLYSELF))
+	    livelog_printf(LL_CONDUCT, "changed form for the first time");
+	if (u.uconduct.wishes && gamelog_first(GLF_WISH))
+	    livelog_printf(LL_CONDUCT, "made a wish for the first time");
+	if (u.uconduct.celibacy && gamelog_first(GLF_CELIBACY))
+	    livelog_printf(LL_CONDUCT, "gave up celibacy");
+}
+
+/* #chronicle command */
+int
+do_gamelog()
+{
+	gamelog_conduct();	/* in case one was broken this turn */
+	if (gamelog)
+	    show_gamelog(0);
+	else
+	    pline("No chronicled events.");
+	return 0;
+}
+
+/* events shown at the end of the game (and in the dump log) */
+#define LL_majors (LL_WISH | LL_ACHIEVE | LL_UMONST | LL_DIVINEGIFT \
+		   | LL_LIFESAVE | LL_ARTIFACT | LL_GENOCIDE | LL_DUMP)
+
+/* list the chronicle: final is 0 for #chronicle, or 1 (hero alive) or
+   2 (hero dead) at the end of the game, when only the major events are
+   listed; the dump log can call this */
+void
+show_gamelog(final)
+int final;
+{
+	struct gamelog_line *llmsg;
+	winid win;
+	char buf[BUFSZ];
+	int eventcnt = 0;
+
+	win = create_nhwindow(NHW_TEXT);
+	Sprintf(buf, "%s events:", final ? "Major" : "Logged");
+	putstr(win, 0, buf);
+	for (llmsg = gamelog; llmsg; llmsg = llmsg->next) {
+	    if (final && !(llmsg->flags & LL_majors))
+		continue;
+	    /* don't give away what the hero hasn't found out yet */
+	    if (!final && (llmsg->flags & LL_SPOILER) != 0
+#ifdef WIZARD
+		&& !wizard
+#endif
+		)
+		continue;
+	    if (!eventcnt++)
+		putstr(win, 0, " Turn");
+	    Sprintf(buf, "%5ld: ", llmsg->turn);
+	    (void) strncat(buf, llmsg->text, BUFSZ - 1 - strlen(buf));
+	    putstr(win, 0, buf);
+	}
+	if (!eventcnt)
+	    putstr(win, 0, " none");
+	display_nhwindow(win, TRUE);
+	destroy_nhwindow(win);
+}
+
+#undef LL_majors
+
+void
+save_gamelog(fd, mode)
+int fd, mode;
+{
+	struct gamelog_line *llmsg;
+	int count, len;
+
+	if (perform_bwrite(mode)) {
+	    for (count = 0, llmsg = gamelog; llmsg; llmsg = llmsg->next)
+		count++;
+	    bwrite(fd, (genericptr_t) &count, sizeof count);
+	    bwrite(fd, (genericptr_t) &gamelog_done, sizeof gamelog_done);
+	    for (llmsg = gamelog; llmsg; llmsg = llmsg->next) {
+		bwrite(fd, (genericptr_t) &llmsg->turn, sizeof llmsg->turn);
+		bwrite(fd, (genericptr_t) &llmsg->flags, sizeof llmsg->flags);
+		len = (int) strlen(llmsg->text);
+		bwrite(fd, (genericptr_t) &len, sizeof len);
+		bwrite(fd, (genericptr_t) llmsg->text, (unsigned) len);
+	    }
+	}
+	if (release_data(mode))
+	    free_gamelog();
+}
+
+/* forget the whole chronicle */
+void
+free_gamelog()
+{
+	struct gamelog_line *llmsg, *next;
+
+	for (llmsg = gamelog; llmsg; llmsg = next) {
+	    next = llmsg->next;
+	    free((genericptr_t) llmsg->text);
+	    free((genericptr_t) llmsg);
+	}
+	gamelog = gamelog_last = (struct gamelog_line *) 0;
+	gamelog_done = 0L;
+}
+
+void
+restore_gamelog(fd)
+int fd;
+{
+	int count, len;
+	long turn, glflags;
+	char buf[BUFSZ * 2];
+
+	free_gamelog();		/* start from an empty log */
+	mread(fd, (genericptr_t) &count, sizeof count);
+	mread(fd, (genericptr_t) &gamelog_done, sizeof gamelog_done);
+	while (count-- > 0) {
+	    mread(fd, (genericptr_t) &turn, sizeof turn);
+	    mread(fd, (genericptr_t) &glflags, sizeof glflags);
+	    mread(fd, (genericptr_t) &len, sizeof len);
+	    if (len < 0 || len >= (int) sizeof buf)
+		panic("restore_gamelog: bad length (%d)", len);
+	    mread(fd, (genericptr_t) buf, (unsigned) len);
+	    buf[len] = '\0';
+	    gamelog_add(glflags, turn, buf);
+	}
 }
 
 #endif /* OVLB */

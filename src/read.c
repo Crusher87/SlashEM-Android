@@ -42,6 +42,7 @@ static void FDECL(p_glow2,(struct obj *,const char *));
 static void FDECL(randomize,(int *, int));
 static void FDECL(forget_single_object, (int));
 static void FDECL(maybe_tame, (struct monst *,struct obj *));
+STATIC_PTR boolean FDECL(get_valid_stinking_cloud_pos, (int,int));
 
 STATIC_PTR void FDECL(set_lit, (int,int,genericptr_t));
 
@@ -453,7 +454,7 @@ int curse_bless;
 		if (is_on) Ring_gone(obj);
 		s = rnd(3 * abs(obj->spe));	/* amount of damage */
 		useup(obj);
-		losehp(s, "exploding ring", KILLED_BY_AN);
+		losehp(Maybe_Half_Phys(s), "exploding ring", KILLED_BY_AN);
 	    } else {
 		long mask = is_on ? (obj == uleft ? LEFT_RING :
 				     RIGHT_RING) : 0L;
@@ -709,7 +710,7 @@ forget_map(howmuch)
 {
 	register int zx, zy;
 
-	if (In_sokoban(&u.uz))
+	if (Sokoban)
 	    return;
 
 	known = TRUE;
@@ -719,7 +720,10 @@ forget_map(howmuch)
 		levl[zx][zy].seenv = 0;
 		levl[zx][zy].waslit = 0;
 		clear_memory_glyph(zx, zy, S_stone);
+		lastseentyp[zx][zy] = STONE;
 	    }
+	/* forget overview data for this level */
+	forget_mapseen(ledger_no(&u.uz));
 }
 
 /* Forget all traps on the level. */
@@ -779,6 +783,7 @@ forget_levels(percent)
 	count = ((count * percent) + 50) / 100;
 	for (i = 0; i < count; i++) {
 	    level_info[indices[i]].flags |= FORGOTTEN;
+	    forget_mapseen(indices[i]);
 	}
 }
 
@@ -843,6 +848,16 @@ struct obj *sobj;
 	    else if (!resist(mtmp, sobj->oclass, 0, NOTELL))
 		(void) tamedog(mtmp, (struct obj *) 0);
 	}
+}
+
+/* where a stinking cloud can be centered (from NetHack 3.6); also a
+   getpos() callback for highlighting those spots */
+STATIC_PTR boolean
+get_valid_stinking_cloud_pos(x, y)
+int x, y;
+{
+	return (isok(x, y) && cansee(x, y) && ACCESSIBLE(levl[x][y].typ)
+		&& distu(x, y) < 32);
 }
 
 int
@@ -1477,7 +1492,7 @@ register struct obj	*sobj;
 	    	pline_The("%s rumbles %s you!", ceiling(u.ux,u.uy),
 	    			sobj->blessed ? "around" : "above");
 	    	known = 1;
-	    	if (In_sokoban(&u.uz))
+	    	if (Sokoban)
 	    	    change_luck(-1);	/* Sokoban guilt */
 
 	    	/* Loop through the surrounding squares */
@@ -1576,7 +1591,8 @@ register struct obj	*sobj;
 			stackobj(otmp2);
 			newsym(u.ux, u.uy);
 		    }
-		    if (dmg) losehp(dmg, "scroll of earth", KILLED_BY_AN);
+		    if (dmg) losehp(Maybe_Half_Phys(dmg), "scroll of earth",
+				    KILLED_BY_AN);
 		}
 	    }
 	    break;
@@ -1596,11 +1612,12 @@ register struct obj	*sobj;
 		pline("Where do you want to center the cloud?");
 		cc.x = u.ux;
 		cc.y = u.uy;
+		getpos_sethilite(get_valid_stinking_cloud_pos);
 		if (getpos(&cc, TRUE, "the desired position") < 0) {
 		    pline(Never_mind);
 		    return 0;
 		}
-		if (!cansee(cc.x, cc.y) || distu(cc.x, cc.y) >= 32) {
+		if (!get_valid_stinking_cloud_pos(cc.x, cc.y)) {
 		    You("smell rotten eggs.");
 		    return 0;
 		}
@@ -1622,7 +1639,8 @@ register struct obj *obj;
     obj->in_use = TRUE;	/* in case losehp() is fatal */
     Your("%s vibrates violently, and explodes!",xname(obj));
     nhbell();
-    losehp(rnd(2*(u.uhpmax+1)/3), "exploding wand", KILLED_BY_AN);
+    losehp(Maybe_Half_Phys(rnd(2*(u.uhpmax+1)/3)), "exploding wand",
+	   KILLED_BY_AN);
     useup(obj);
     exercise(A_STR, FALSE);
 }
@@ -1750,6 +1768,7 @@ do_class_genocide()
 	menu_item *selected;
 
 	int i, j, immunecnt, gonecnt, goodcnt, class, feel_dead = 0;
+	int wiped = 0, prevgenos = 0;
 	char buf[BUFSZ];
 	boolean gameover = FALSE;	/* true iff killed self */
 
@@ -1765,7 +1784,11 @@ do_class_genocide()
 		} while (buf[0]=='\033' || !buf[0]);
 		/* choosing "none" preserves genocideless conduct */
 		if (!strcmpi(buf, "none") ||
-		    !strcmpi(buf, "nothing")) return;
+		    !strcmpi(buf, "nothing")) {
+		    livelog_printf(LL_GENOCIDE,
+				   "declined to perform class genocide");
+		    return;
+		}
 
 		if (strlen(buf) == 1) {
 		    /*WAC adding "help" for those who use graphical displays*/
@@ -1855,6 +1878,8 @@ do_class_genocide()
 			/* This check must be first since player monsters might
 			 * have G_GENOD or !G_GENO.
 			 */
+			    if (!wiped++)
+				prevgenos = num_genocides();
 			    mvitals[i].mvflags |= (G_GENOD|G_NOCORPSE);
 			    reset_rndmonst(i);
 			    kill_genocided_monsters();
@@ -1911,6 +1936,15 @@ do_class_genocide()
 			}
 		    }
 		}
+		if (wiped) {	/* #chronicle */
+		    if (!prevgenos)
+			livelog_printf(LL_CONDUCT | LL_GENOCIDE,
+				       "performed %s first genocide (class %c)",
+				       uhis(), def_monsyms[class]);
+		    else
+			livelog_printf(LL_GENOCIDE, "genocided class %c",
+				       def_monsyms[class]);
+		}
 		if (gameover || u.uhp == -1) {
 		    killer_format = KILLED_BY_AN;
 		    killer = "scroll of genocide";
@@ -1948,9 +1982,15 @@ int how;
 		    pline(thats_enough_tries);
 		    return;
 		}
-		getlin("What monster do you want to genocide? [type the name]",
+		getlin("What monster do you want to genocide? [type the name, or ? for list]",
 			buf);
 		(void)mungspaces(buf);
+		/* "?" lists the species genocided so far, then asks again */
+		if (!strcmp(buf, "?") || !strcmp(buf, "'?'")) {
+		    list_genocided('g', FALSE);
+		    i--;	/* don't count this as one of the tries */
+		    continue;
+		}
 		/* choosing "none" preserves genocideless conduct */
 		if (!strcmpi(buf, "none") || !strcmpi(buf, "nothing")) {
 		    /* ... but no free pass if cursed */
@@ -1959,7 +1999,11 @@ int how;
 			if (!ptr) return; /* no message, like normal case */
 			mndx = monsndx(ptr);
 			break;		/* remaining checks don't apply */
-		    } else return;
+		    } else {
+			livelog_printf(LL_GENOCIDE,
+				       "declined to perform genocide");
+			return;
+		    }
 		}
 
 		mndx = name_to_mon(buf);
@@ -2010,6 +2054,14 @@ int how;
 		which = !type_is_pname(ptr) ? "the " : "";
 	}
 	if (how & REALLY) {
+	    /* #chronicle */
+	    if (!num_genocides())
+		livelog_printf(LL_CONDUCT | LL_GENOCIDE,
+			       "performed %s first genocide (%s)", uhis(),
+			       makeplural(ptr->mname));
+	    else
+		livelog_printf(LL_GENOCIDE, "genocided %s",
+			       makeplural(ptr->mname));
 	    /* setting no-corpse affects wishing and random tin generation */
 	    mvitals[mndx].mvflags |= (G_GENOD | G_NOCORPSE);
 	    pline("Wiped out %s%s.", which,

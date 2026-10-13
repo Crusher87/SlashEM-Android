@@ -436,6 +436,21 @@ typedef unsigned char	uchar;
 # define MENU_COLOR
 #endif
 
+/* Number of recent messages the game remembers.  They are kept in the save
+ * file, so that ^P still shows them after a restore, and listed in the dump
+ * log. */
+#define MSGHISTORY_COUNT 50
+
+/* End-of-game dump log: when a game ends, write a text file named
+ * slashem-<name>-<YYYYMMDDhhmmss>.txt with the final map and status, the
+ * latest messages, inventory, attributes, conduct, vanquished monsters and
+ * so on.  It goes into DUMPLOG_DIR (default: the game directory); on Android
+ * into Documents/nethack, or the game directory if that can't be written. */
+#define DUMPLOG
+#if defined(DUMPLOG) && !defined(DUMPLOG_DIR)
+# define DUMPLOG_DIR ""		/* if set, must end with a '/' */
+#endif
+
 #if defined(UNIX)
 #define USE_REGEX_MATCH
 /* if USE_REGEX_MATCH is defined, use regular expressions (GNU regex.h)

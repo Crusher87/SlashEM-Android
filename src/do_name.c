@@ -6,19 +6,62 @@
 
 #ifdef OVLB
 
-STATIC_DCL void FDECL(do_oname, (struct obj *));
-static void FDECL(getpos_help, (BOOLEAN_P,const char *));
+STATIC_DCL void FDECL(getpos_help, (BOOLEAN_P,const char *));
+STATIC_PTR int FDECL(CFDECLSPEC cmp_coord_distu, (const genericptr,
+						  const genericptr));
+STATIC_DCL boolean FDECL(gather_locs_interesting, (int,int,int));
+STATIC_DCL void FDECL(gather_locs, (coord **,int *,int));
+STATIC_DCL boolean FDECL(auto_describe, (int,int,BOOLEAN_P));
+STATIC_DCL void FDECL(getpos_hilite, (BOOLEAN_P));
+
+#ifdef ANDROID
+void FDECL(and_putstr_ex, (winid,int,const char *,int));
+#endif
 
 extern const char what_is_an_unknown_object[];		/* from pager.c */
+extern const char travel_destination[];			/* from cmd.c */
+
+/* Callback for getpos() telling which map spots are valid targets;
+ * they can be highlighted with '$' and visited with 'z' and 'Z'
+ * (from NetHack 3.6).  Callers set it just before calling getpos(),
+ * which resets it when done.
+ */
+static boolean FDECL((*getpos_getvalid), (int,int)) =
+					(boolean FDECL((*), (int,int))) 0;
+
+void
+getpos_sethilite(gp_getvalidf)
+boolean FDECL((*gp_getvalidf), (int,int));
+{
+    getpos_getvalid = gp_getvalidf;
+}
+
+/* kinds of spots that getpos() can cycle through */
+#define GLOC_MONS	0
+#define GLOC_OBJS	1
+#define GLOC_DOOR	2
+#define GLOC_EXPLORE	3
+#define GLOC_INTERESTING 4
+#define GLOC_VALID	5
+#define NUM_GLOCS	6
+
+/* the keys for those: next and previous */
+static const char gloc_keys[] = "mMoOdDxXaAzZ";
+
+static const char *const gloc_descr[NUM_GLOCS] = {
+    "monster", "object", "door or doorway", "unexplored location",
+    "interesting thing", "valid location"
+};
 
 /* the response for '?' help request in getpos() */
-static void
+STATIC_OVL void
 getpos_help(force, goal)
 boolean force;
 const char *goal;
 {
     char sbuf[BUFSZ];
     boolean doing_what_is;
+    int i;
     winid tmpwin = create_nhwindow(NHW_MENU);
 
     Sprintf(sbuf, "Use [%s] to move the cursor to %s.",
@@ -26,6 +69,16 @@ const char *goal;
     putstr(tmpwin, 0, sbuf);
     putstr(tmpwin, 0, "Use [HJKL] to move the cursor 8 units at a time.");
     putstr(tmpwin, 0, "Or enter a background symbol (ex. <).");
+    putstr(tmpwin, 0, "Use @ to move the cursor on yourself.");
+    for (i = 0; i < NUM_GLOCS; i++) {
+	if (i == GLOC_VALID && !getpos_getvalid) continue;
+	Sprintf(sbuf, "Use %c or %c to move the cursor to the next or previous %s.",
+		gloc_keys[2 * i], gloc_keys[2 * i + 1], gloc_descr[i]);
+	putstr(tmpwin, 0, sbuf);
+    }
+    if (getpos_getvalid)
+	putstr(tmpwin, 0, "Use $ to display the valid locations.");
+    putstr(tmpwin, 0, "Use # to toggle automatic description.");
     /* disgusting hack; the alternate selection characters work for any
        getpos call, but they only matter for dowhatis (and doquickwhatis) */
     doing_what_is = (goal == what_is_an_unknown_object);
@@ -39,6 +92,165 @@ const char *goal;
     destroy_nhwindow(tmpwin);
 }
 
+/* qsort comparison: nearer to the hero first, then top to bottom */
+STATIC_PTR int CFDECLSPEC
+cmp_coord_distu(a, b)
+const genericptr a;
+const genericptr b;
+{
+    const coord *c1 = (const coord *)a;
+    const coord *c2 = (const coord *)b;
+    int dx, dy, dist_1, dist_2;
+
+    dx = u.ux - c1->x;
+    dy = u.uy - c1->y;
+    dist_1 = max(abs(dx), abs(dy));
+    dx = u.ux - c2->x;
+    dy = u.uy - c2->y;
+    dist_2 = max(abs(dx), abs(dy));
+
+    if (dist_1 == dist_2)
+	return (c1->y != c2->y) ? (c1->y - c2->y) : (c1->x - c2->x);
+    return dist_1 - dist_2;
+}
+
+#define is_cmap_wall_or_stone(c) ((c) >= S_stone && (c) <= S_trwall)
+#define is_cmap_door_or_bridge(c) ((c) == S_ndoor || \
+				   ((c) >= S_vodoor && (c) <= S_hcdoor) || \
+				   ((c) >= S_vodbridge && (c) <= S_hcdbridge))
+#define IS_UNEXPLORED_LOC(x,y) \
+    (isok((x), (y)) && memory_glyph((x), (y)) == cmap_to_glyph(S_stone) && \
+     !levl[(x)][(y)].seenv)
+
+/* is the spot <x,y> one of the kind gloc that getpos() can jump to? */
+STATIC_OVL boolean
+gather_locs_interesting(x, y, gloc)
+int x, y, gloc;
+{
+    int glyph = glyph_at(x, y), c = -1;
+
+    if (glyph_is_cmap(glyph))
+	c = glyph_to_cmap(glyph);
+
+    switch (gloc) {
+    default:
+    case GLOC_MONS:
+	/* this skips monsters shown by warning or remembered as unseen */
+	return (glyph_is_monster(glyph)
+		&& glyph != monnum_to_glyph(PM_LONG_WORM_TAIL));
+    case GLOC_OBJS:
+	return (glyph_is_object(glyph)
+		&& glyph != objnum_to_glyph(BOULDER)
+		&& glyph != objnum_to_glyph(ROCK));
+    case GLOC_DOOR:
+	return (c >= 0 && is_cmap_door_or_bridge(c));
+    case GLOC_EXPLORE:
+	return (c >= 0
+		&& (is_cmap_door_or_bridge(c) || c == S_room
+		    || c == S_corr || c == S_litcorr)
+		&& (IS_UNEXPLORED_LOC(x + 1, y) || IS_UNEXPLORED_LOC(x - 1, y)
+		    || IS_UNEXPLORED_LOC(x, y + 1)
+		    || IS_UNEXPLORED_LOC(x, y - 1)));
+    case GLOC_VALID:
+	if (getpos_getvalid)
+	    return (*getpos_getvalid)(x, y);
+	/*FALLTHRU*/
+    case GLOC_INTERESTING:
+	return (c < 0 || is_cmap_door_or_bridge(c)
+		|| !(is_cmap_wall_or_stone(c) || c == S_tree || c == S_bars
+		     || c == S_ice || c == S_air || c == S_cloud
+		     || c == S_lava || c == S_water || c == S_pool
+		     || c == S_room || c == S_corr || c == S_litcorr));
+    }
+    /*NOTREACHED*/
+    return FALSE;
+}
+
+/* gather the map spots of kind gloc, nearest first; the hero's own spot
+   is always included (as element 0) so that cycling through them all
+   comes back to the hero */
+STATIC_OVL void
+gather_locs(arr_p, cnt_p, gloc)
+coord **arr_p;
+int *cnt_p;
+int gloc;
+{
+    int x, y, pass, idx;
+
+    *cnt_p = idx = 0;
+    for (pass = 0; pass < 2; pass++) {
+	for (x = 1; x < COLNO; x++)
+	    for (y = 0; y < ROWNO; y++) {
+		if ((x == u.ux && y == u.uy)
+			|| gather_locs_interesting(x, y, gloc)) {
+		    if (!pass) {
+			++*cnt_p;
+		    } else {
+			(*arr_p)[idx].x = x;
+			(*arr_p)[idx].y = y;
+			++idx;
+		    }
+		}
+	    }
+	if (!pass)	/* end of first pass */
+	    *arr_p = (coord *)alloc(*cnt_p * sizeof (coord));
+	else		/* end of second pass */
+	    qsort((genericptr_t)*arr_p, *cnt_p, sizeof (coord),
+		  cmp_coord_distu);
+    }
+}
+
+/* autodescribe: say what is at <cx,cy>; replace says that the last
+   message shown was the previous description, which can be overwritten
+   (on Android, so that the message log doesn't fill up with them) */
+STATIC_OVL boolean
+auto_describe(cx, cy, replace)
+int cx, cy;
+boolean replace;
+{
+    coord cc;
+    char tmpbuf[BUFSZ], outbuf[BUFSZ];
+    const char *firstmatch = "unknown";
+
+    cc.x = cx;
+    cc.y = cy;
+    if (!do_screen_description(cc, TRUE, 0, tmpbuf, &firstmatch,
+			       (struct permonst **)0))
+	return FALSE;
+    Sprintf(outbuf, "%.200s%s", firstmatch,
+	    (getpos_getvalid && !(*getpos_getvalid)(cx, cy))
+		? " (illegal)" : "");
+    /* not pline(): this isn't worth keeping in any message history */
+#ifdef ANDROID
+    if (replace)
+	and_putstr_ex(WIN_MESSAGE, 0, outbuf, -BUFSZ);
+    else
+#endif
+	putstr(WIN_MESSAGE, 0, outbuf);
+    curs(WIN_MAP, cx, cy);
+    flush_screen(0);
+    return TRUE;
+}
+
+/* show (on) or remove the highlighting of valid spots; this covers
+   what is shown there, so autodescribe is skipped meanwhile */
+STATIC_OVL void
+getpos_hilite(on)
+boolean on;
+{
+    int x, y;
+
+    if (!on) {
+	tmp_at(DISP_END, 0);
+	return;
+    }
+    tmp_at(DISP_BEAM, cmap_to_glyph(S_flashbeam));
+    for (x = 1; x < COLNO; x++)
+	for (y = 0; y < ROWNO; y++)
+	    if ((*getpos_getvalid)(x, y))
+		tmp_at(x, y);
+}
+
 int
 getpos(cc,force,goal)
 coord *cc;
@@ -49,10 +261,20 @@ const char *goal;
     int cx, cy, i, c;
     int sidx, tx, ty;
     boolean msg_given = TRUE;	/* clear message window by default */
+    boolean described = FALSE;	/* last message is an autodescription */
+    boolean hilite_state = FALSE;
     static const char pick_chars[] = ".,;:";
     const char *cp;
     const char *sdp;
+    coord *garr[NUM_GLOCS];
+    int gcount[NUM_GLOCS];
+    int gidx[NUM_GLOCS];
+
     if(iflags.num_pad) sdp = ndir; else sdp = sdir;	/* DICE workaround */
+    for (i = 0; i < NUM_GLOCS; i++) {
+	garr[i] = (coord *)0;
+	gcount[i] = gidx[i] = 0;
+    }
 
     if (flags.verbose) {
 	pline("(For instructions type a ?)");
@@ -69,7 +291,23 @@ const char *goal;
     lock_mouse_cursor(TRUE);
 #endif
     for (;;) {
+	if (iflags.autodescribe && !msg_given && !hilite_state) {
+	    if (auto_describe(cx, cy, described))
+		described = TRUE;
+	}
+
 	c = nh_poskey(&tx, &ty, &sidx);
+
+	if (hilite_state) {	/* shown until the next key */
+	    getpos_hilite(FALSE);
+	    hilite_state = FALSE;
+	    curs(WIN_MAP, cx, cy);
+	    flush_screen(0);
+	}
+
+	if (iflags.autodescribe)
+	    msg_given = FALSE;
+
 	if (c == '\033') {
 	    cx = cy = -10;
 	    msg_given = TRUE;	/* force clear */
@@ -86,6 +324,14 @@ const char *goal;
 	if ((cp = index(pick_chars, c)) != 0) {
 	    /* '.' => 0, ',' => 1, ';' => 2, ':' => 3 */
 	    result = cp - pick_chars;
+	    break;
+	}
+	/* "_ _" travels to the remembered travel destination again; once
+	   the cursor has moved, '_' looks for an altar as usual */
+	if (c == '_' && goal == travel_destination &&
+		cx == cc->x && cy == cc->y &&
+		cx == iflags.travelcc.x && cy == iflags.travelcc.y) {
+	    result = 0;
 	    break;
 	}
 	for (i = 0; i < 8; i++) {
@@ -124,6 +370,47 @@ const char *goal;
 
 	if(c == '?'){
 	    getpos_help(force, goal);
+	    pline("Move the cursor to %s:", goal);
+	    msg_given = TRUE;
+	    described = FALSE;
+	} else if (c == '$' && getpos_getvalid) {
+	    /* show the valid spots until the next key */
+	    getpos_hilite(TRUE);
+	    hilite_state = TRUE;
+	    goto nxtc;
+	} else if (c == '#') {
+	    iflags.autodescribe = !iflags.autodescribe;
+	    pline("Automatic description %sis %s.",
+		  flags.verbose ? "of features under cursor " : "",
+		  iflags.autodescribe ? "on" : "off");
+	    msg_given = TRUE;
+	    described = FALSE;
+	    goto nxtc;
+	} else if (c == '@') {
+	    /* reset 'm&M', 'o&O', &c too */
+	    for (i = 0; i < NUM_GLOCS; i++)
+		gidx[i] = 0;
+	    cx = u.ux;
+	    cy = u.uy;
+	    goto nxtc;
+	} else if ((cp = index(gloc_keys, c)) != 0) {
+	    /* nearest or farthest monster, object, door, &c */
+	    int gtmp = (int)(cp - gloc_keys),	/* 0..11 */
+		gloc = gtmp >> 1;		/* 0..5 */
+
+	    if (!garr[gloc]) {
+		gather_locs(&garr[gloc], &gcount[gloc], gloc);
+		gidx[gloc] = 0;	/* garr[][0] is the hero's spot */
+	    }
+	    if (!(gtmp & 1)) {	/* 'm', 'o', 'd', 'x', 'a', 'z' */
+		gidx[gloc] = (gidx[gloc] + 1) % gcount[gloc];
+	    } else {		/* 'M', 'O', 'D', 'X', 'A', 'Z' */
+		if (--gidx[gloc] < 0)
+		    gidx[gloc] = gcount[gloc] - 1;
+	    }
+	    cx = garr[gloc][gidx[gloc]].x;
+	    cy = garr[gloc][gidx[gloc]].y;
+	    goto nxtc;
 	} else {
 	    if (!index(quitchars, c)) {
 		char matching[MAXPCHARS];
@@ -142,21 +429,53 @@ const char *goal;
 			    lo_x = (pass == 0 && ty == lo_y) ? cx + 1 : 1;
 			    hi_x = (pass == 1 && ty == hi_y) ? cx : COLNO - 1;
 			    for (tx = lo_x; tx <= hi_x; tx++) {
+				/* first, look at what is currently shown
+				   (might be a monster or object) */
 				k = glyph_at(tx, ty);
 				if (glyph_is_cmap(k) &&
-					matching[glyph_to_cmap(k)]) {
-				    cx = tx,  cy = ty;
-				    if (msg_given) {
-					clear_nhwindow(WIN_MESSAGE);
-					msg_given = FALSE;
-				    }
-				    goto nxtc;
+					matching[glyph_to_cmap(k)])
+				    goto foundc;
+				/* next, try the glyph remembered there
+				   (might be a trap or object) */
+				if (level.flags.hero_memory) {
+				    k = memory_glyph(tx, ty);
+				    if (glyph_is_cmap(k) &&
+					    matching[glyph_to_cmap(k)])
+					goto foundc;
+#ifdef DISPLAY_LAYERS
+				    /* and the trap and background remembered
+				       under it */
+				    if (levl[tx][ty].mem_trap &&
+					    matching[levl[tx][ty].mem_trap - 1
+						     + MAXDCHARS])
+					goto foundc;
+				    if (matching[levl[tx][ty].mem_bg])
+					goto foundc;
+#endif
 				}
+				/* last, the terrain there if it has been
+				   seen (from NetHack 3.6) */
+				if (levl[tx][ty].seenv) {
+				    k = back_to_glyph(tx, ty);
+				    if (glyph_is_cmap(k) &&
+					    matching[glyph_to_cmap(k)])
+					goto foundc;
+				}
+				continue;
+			    foundc:
+				cx = tx,  cy = ty;
+				if (msg_given) {
+				    clear_nhwindow(WIN_MESSAGE);
+				    msg_given = FALSE;
+				    described = FALSE;
+				}
+				goto nxtc;
 			    }	/* column */
 			}	/* row */
 		    }		/* pass */
 		    pline("Can't find dungeon feature '%c'.", c);
 		    msg_given = TRUE;
+		    described = FALSE;
 		    goto nxtc;
 		} else {
 		    pline("Unknown direction: '%s' (%s).",
@@ -164,6 +483,7 @@ const char *goal;
 			  !force ? "aborted" :
 			  iflags.num_pad ? "use 2468 or ." : "use hjkl or .");
 		    msg_given = TRUE;
+		    described = FALSE;
 		} /* k => matching */
 	    } /* !quitchars */
 	    if (force) goto nxtc;
@@ -187,6 +507,10 @@ const char *goal;
     if (msg_given) clear_nhwindow(WIN_MESSAGE);
     cc->x = cx;
     cc->y = cy;
+    for (i = 0; i < NUM_GLOCS; i++)
+	if (garr[i])
+	    free((genericptr_t)garr[i]);
+    getpos_getvalid = (boolean FDECL((*), (int,int))) 0;
     return result;
 }
 
@@ -269,11 +593,15 @@ do_mname()
 	}
 	/* special case similar to the one in lookat() */
 	(void) distant_monnam(mtmp, ARTICLE_THE, buf);
-	Sprintf(qbuf, "What do you want to call %s?", buf);
+	Sprintf(qbuf, "What do you want to call %s?",
+		safe_qbuf("", sizeof "What do you want to call ?",
+			  buf, "it", "it"));
 	getlin(qbuf,buf);
 	if(!*buf || *buf == '\033') return(0);
 	/* strip leading and trailing spaces; unnames monster if all spaces */
 	(void)mungspaces(buf);
+	/* names are limited to PL_PSIZ (christen_monst() would chop it) */
+	if (strlen(buf) >= PL_PSIZ) buf[PL_PSIZ - 1] = '\0';
 
 	if (mtmp->data->geno & G_UNIQ)
 	    pline("%s doesn't like being called names!", Monnam(mtmp));
@@ -287,7 +615,6 @@ do_mname()
  * when there might be pointers around in unknown places. For now: only
  * when obj is in the inventory.
  */
-STATIC_OVL
 void
 do_oname(obj)
 register struct obj *obj;
@@ -296,32 +623,51 @@ register struct obj *obj;
 	const char *aname;
 	short objtyp;
 
-	Sprintf(qbuf, "What do you want to name %s %s?",
-		is_plural(obj) ? "these" : "this", xname(obj));
+	Sprintf(qbuf, "What do you want to name %s ",
+		is_plural(obj) ? "these" : "this");
+	Sprintf(eos(qbuf), "%s?", safe_qbuf(qbuf, sizeof "?", xname(obj),
+		is_plural(obj) ? "things" : "thing",
+		is_plural(obj) ? "things" : "thing"));
 	getlin(qbuf, buf);
 	if(!*buf || *buf == '\033')	return;
 	/* strip leading and trailing spaces; unnames item if all spaces */
 	(void)mungspaces(buf);
-
-	/* relax restrictions over proper capitalization for artifacts */
-	if ((aname = artifact_name(buf, &objtyp)) != 0 && objtyp == obj->otyp)
-		Strcpy(buf, aname);
+	/* names are limited to PL_PSIZ (oname() would chop it) */
+	if (strlen(buf) >= PL_PSIZ) buf[PL_PSIZ - 1] = '\0';
 
 	if (obj->oartifact) {
 		pline_The("artifact seems to resist the attempt.");
 		return;
-	} else if (restrict_name(obj, buf) || exist_artifact(obj->otyp, buf)) {
-		int n = rn2((int)strlen(buf));
+	}
+
+	/* relax restrictions over proper capitalization for artifacts;
+	   check the canonical spelling whatever the object's type, so that
+	   a name which only matches after capitalization can't be used to
+	   tell whether an unidentified object is the artifact's type */
+	if ((aname = artifact_name(buf, &objtyp)) != 0 &&
+		(restrict_name(obj, aname) || exist_artifact(obj->otyp, aname))) {
+		int n;
 		register char c1, c2;
 
+		/* substitute canonical spelling before slippage */
+		Strcpy(buf, aname);
+		n = rn2((int)strlen(buf));
 		c1 = lowc(buf[n]);
 		do c2 = 'a' + rn2('z'-'a'); while (c1 == c2);
 		buf[n] = (buf[n] == c1) ? c2 : highc(c2);  /* keep same case */
 		pline("While engraving your %s slips.", body_part(HAND));
 		display_nhwindow(WIN_MESSAGE, FALSE);
 		You("engrave: \"%s\".",buf);
+	} else if (aname && objtyp == obj->otyp) {
+		/* naming will turn obj into this artifact, so use the
+		   canonical capitalization (Sting or Orcrist) */
+		Strcpy(buf, aname);
 	}
 	obj = oname(obj, buf);
+	if (obj && obj->oartifact)	/* #chronicle */
+	    livelog_printf(LL_ARTIFACT, "chose %s to be named \"%s\"",
+			   an(simple_typename(obj->otyp)),
+			   artiname(obj->oartifact));
 }
 
 /*
@@ -504,10 +850,14 @@ register struct obj *obj;
 	    Sprintf(qbuf,"Call a stream of %s fluid:",
 		    OBJ_DESCR(objects[otemp.otyp]));
 	else
-	    Sprintf(qbuf, "Call %s:", an(xname(&otemp)));
+	    Sprintf(qbuf, "Call %s:", safe_qbuf("", sizeof "Call :",
+				an(xname(&otemp)), "it", "it"));
 	getlin(qbuf, buf);
 	if(!*buf || *buf == '\033')
 		return;
+	/* type names are limited to PL_PSIZ, like other player-given names;
+	   a longer one could overflow the buffers used by xname() */
+	if (strlen(buf) >= PL_PSIZ) buf[PL_PSIZ - 1] = '\0';
 
 	/* clear old name */
 	str1 = &(objects[obj->otyp].oc_uname);

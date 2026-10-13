@@ -166,6 +166,7 @@ forcelock()	/* try to force a locked chest */
 	if(rn2(100) >= xlock.chance) return(1);		/* still busy */
 
 	You("succeed in forcing the lock.");
+	exercise((xlock.picktyp) ? A_DEX : A_STR, TRUE);
 	xlock.box->olocked = 0;
 	xlock.box->obroken = 1;
 	if((xlock.picktyp == 0 && !rn2(3)) || (xlock.picktyp == 2 && !rn2(5))) {
@@ -212,10 +213,11 @@ forcelock()	/* try to force a locked chest */
 		loss += stolen_value(xlock.box, u.ux, u.uy,
 				     (boolean)shkp->mpeaceful, TRUE, TRUE);
 	    if(loss) You("owe %ld %s for objects destroyed.", loss, currency(loss));
+	    /* clears xlock context via obfree() -> maybe_reset_pick() */
 	    delobj(xlock.box);
 	}
-	exercise((xlock.picktyp) ? A_DEX : A_STR, TRUE);
-	return((xlock.usedtime = 0));
+	reset_pick();	/* lock-picking context is no longer valid */
+	return 0;
 }
 
 STATIC_PTR
@@ -300,6 +302,27 @@ reset_pick()
 	xlock.usedtime = xlock.chance = xlock.picktyp = 0;
 	xlock.door = 0;
 	xlock.box = 0;
+}
+
+/* level change or object deletion; context may no longer be valid */
+void
+maybe_reset_pick(container)
+struct obj *container;	/* passed from obfree() */
+{
+	/*
+	 * If a specific container, only clear context if it is for that
+	 * particular container (which is being deleted).  Other stuff on
+	 * the current dungeon level remains valid.
+	 * However if 'container' is Null, clear context if not carrying
+	 * xlock.box (which might be Null if context is for a door).
+	 * Used for changing levels, where a floor container or a door is
+	 * being left behind and won't be valid on the new level but a
+	 * carried container will still be.  There might not be any context,
+	 * in which case redundantly clearing it is harmless.
+	 */
+	if (container ? (container == xlock.box) :
+		(!xlock.box || !carried(xlock.box)))
+	    reset_pick();
 }
 
 #endif /* OVL0 */
@@ -810,6 +833,10 @@ doforce()		/* try to force a chest with your weapon */
 	} else {		/* break down/open door */
 	    struct monst *mtmp;
 
+	    if (!isok(x, y)) {
+		You("%s no door there.", Blind ? "feel" : "see");
+		return(0);
+	    }
 	    door = &levl[x][y];
 	    if ((mtmp = m_at(x, y)) && canseemon(mtmp)
 			&& mtmp->m_ap_type != M_AP_FURNITURE
@@ -1039,6 +1066,11 @@ doclose()		/* try to close a door */
 	if((x == u.ux) && (y == u.uy)) {
 		You("are in the way!");
 		return(1);
+	}
+
+	if (!isok(x, y)) {
+		You("%s no door there.", Blind ? "feel" : "see");
+		return(0);
 	}
 
 	if ((mtmp = m_at(x,y))				&&

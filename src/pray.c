@@ -153,8 +153,16 @@ in_trouble()
 	if(near_capacity() >= EXT_ENCUMBER && AMAX(A_STR)-ABASE(A_STR) > 3)
 		return(TROUBLE_COLLAPSING);
 
+	/* surrounded by impassible rock, regardless of the state of your
+	   own location (for example, inside a doorless closet, or inside
+	   solid rock after wall-phasing ran out); secret doors and
+	   corridors can be found by searching, so they don't count */
 	for (i= -1; i<=1; i++) for(j= -1; j<=1; j++) {
-		if (!isok(u.ux+i, u.uy+j) || IS_ROCK(levl[u.ux+i][u.uy+j].typ)
+		if (!i && !j) continue;
+		if (!isok(u.ux+i, u.uy+j) ||
+		    (IS_ROCK(levl[u.ux+i][u.uy+j].typ) &&
+		     levl[u.ux+i][u.uy+j].typ != SDOOR &&
+		     levl[u.ux+i][u.uy+j].typ != SCORR)
 		    || (blocked_boulder(i,j) && !throws_rocks(youmonst.data)))
 			count++;
 	}
@@ -340,9 +348,22 @@ register int trouble;
 		    flags.botl = 1;
 		    break;
 	    case TROUBLE_STUCK_IN_WALL:
-		    Your("surroundings change.");
 		    /* no control, but works on no-teleport levels */
-		    (void) safe_teleds(FALSE);
+		    if (safe_teleds(FALSE)) {
+			Your("surroundings change.");
+		    } else {
+			/* safe_teleds() couldn't find a safe place; perhaps
+			   the level is completely full.  As a last resort,
+			   confer intrinsic wall/rock-phazing.  Hero might get
+			   stuck again fairly soon....
+			   Without something like this, fix_all_troubles can
+			   get stuck in an infinite loop trying to fix
+			   STUCK_IN_WALL and repeatedly failing. */
+			set_itimeout(&HPasses_walls, (long)(d(4,4) + 4));
+			/* how else could you move between packed rocks or
+			   among lattice forming "solid" rock? */
+			You_feel("much slimmer.");
+		    }
 		    break;
 	    case TROUBLE_CURSED_LEVITATION:
 		    if (Cursed_obj(uarmf, LEVITATION_BOOTS)) {
@@ -682,12 +703,16 @@ gcrownu()
     case A_LAWFUL:
 	u.uevent.uhand_of_elbereth = 1;
 	verbalize("I crown thee...  The Hand of Elbereth!");
+	livelog_printf(LL_DIVINEGIFT,
+		       "was crowned \"The Hand of Elbereth\" by %s", u_gname());
 	break;
     case A_NEUTRAL:
 	u.uevent.uhand_of_elbereth = 2;
 	in_hand = (uwep && uwep->oartifact == ART_VORPAL_BLADE);
 	already_exists = exist_artifact(LONG_SWORD, artiname(ART_VORPAL_BLADE));
 	verbalize("Thou shalt be my Envoy of Balance!");
+	livelog_printf(LL_DIVINEGIFT, "became %s Envoy of Balance",
+		       s_suffix(u_gname()));
 	break;
     case A_CHAOTIC:
 	u.uevent.uhand_of_elbereth = 3;
@@ -695,6 +720,9 @@ gcrownu()
 	already_exists = exist_artifact(RUNESWORD, artiname(ART_STORMBRINGER));
 	verbalize("Thou art chosen to %s for My Glory!",
 		  already_exists && !in_hand ? "take lives" : "steal souls");
+	livelog_printf(LL_DIVINEGIFT, "was chosen to %s for the Glory of %s",
+		       already_exists && !in_hand ? "take lives" : "steal souls",
+		       u_gname());
 	break;
     }
 
@@ -713,6 +741,8 @@ gcrownu()
 	at_your_feet("A spellbook");
 	dropy(obj);
 	u.ugifts++;
+	livelog_printf(LL_DIVINEGIFT | LL_SPOILER, "was bestowed with %s",
+		       an(OBJ_NAME(objects[class_gift])));
 	/* when getting a new book for known spell, enhance
 	   currently wielded weapon rather than the book */
 	for (sp_no = 0; sp_no < MAXSPELL; sp_no++)
@@ -735,7 +765,12 @@ gcrownu()
 	} else if (obj && obj->otyp == LONG_SWORD && !obj->oartifact) {
 	    if (!Blind) Your("sword shines brightly for a moment.");
 	    obj = oname(obj, artiname(ART_EXCALIBUR));
-	    if (obj && obj->oartifact == ART_EXCALIBUR) u.ugifts++;
+	    if (obj && obj->oartifact == ART_EXCALIBUR) {
+		u.ugifts++;
+		livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT,
+			       "had %s wielded long sword transformed into %s",
+			       uhis(), artiname(ART_EXCALIBUR));
+	    }
 	}
 	/* acquire Excalibur's skill regardless of weapon or gift */
 	unrestrict_weapon_skill(P_LONG_SWORD);
@@ -755,6 +790,8 @@ gcrownu()
 	    at_your_feet("A sword");
 	    dropy(obj);
 	    u.ugifts++;
+	    livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT, "was bestowed with %s",
+			   artiname(ART_VORPAL_BLADE));
 	}
 	/* acquire Vorpal Blade's skill regardless of weapon or gift */
 	unrestrict_weapon_skill(P_LONG_SWORD);
@@ -778,6 +815,8 @@ gcrownu()
 	    obj->spe = 1;
 	    dropy(obj);
 	    u.ugifts++;
+	    livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT, "was bestowed with %s",
+			   artiname(ART_STORMBRINGER));
 	}
 	/* acquire Stormbringer's skill regardless of weapon or gift */
 	unrestrict_weapon_skill(P_BROAD_SWORD);
@@ -819,6 +858,14 @@ pleased(g_align)
 	/* don't use p_trouble, worst trouble may get fixed while praying */
 	int trouble = in_trouble();	/* what's your worst difficulty? */
 	int pat_on_head = 0, kick_on_butt;
+	/* Negative luck is normally impossible here (can_pray() forces
+	   prayer failure in that situation), but it's possible for Luck
+	   to drop during the period of prayer occupation and become
+	   negative by the time we get here (e.g. a delayed killing of a
+	   peaceful by a stinking cloud).  We don't bother remembering
+	   start-of-prayer luck, just make sure it's at least -1 so that
+	   the random numbers below never get a range of zero or less. */
+	int prayer_luck = max(Luck, -1);
 
 	You_feel("that %s is %s.", align_gname(g_align),
 	    u.ualign.record >= DEVOUT ?
@@ -850,7 +897,8 @@ pleased(g_align)
 	    /* if hero was in trouble, but got better, no special favor */
 	    if (p_trouble == 0) pat_on_head = 1;
 	} else {
-	    int action = rn1(Luck + (on_altar() ? 3 + on_shrine() : 2), 1);
+	    int action = rn1(prayer_luck + (on_altar() ? 3 + on_shrine() : 2), 1);
+	    int tryct = 0;
 
 	    if (!on_altar()) action = min(action, 3);
 	    if (u.ualign.record < STRIDENT)
@@ -867,7 +915,8 @@ pleased(g_align)
 		    break;
 
 	    case 3: fix_worst_trouble(trouble);
-	    case 2: while ((trouble = in_trouble()) > 0)
+	    case 2: /* arbitrary number of tries */
+		    while ((trouble = in_trouble()) > 0 && (++tryct < 10))
 		    fix_worst_trouble(trouble);
 		    break;
 
@@ -880,7 +929,7 @@ pleased(g_align)
        fixed or there were no troubles to begin with; hallucination
        won't be in effect so special handling for it is superfluous */
     if(pat_on_head)
-	switch(rn2((Luck + 6)>>1)) {
+	switch(rn2((prayer_luck + 6)>>1)) {
 	case 0:	break;
 	case 1:
 	    if (uwep && (welded(uwep) || uwep->oclass == WEAPON_CLASS ||
@@ -1348,7 +1397,7 @@ dosacrifice()
 	    } else {
 		struct monst *dmon;
 		const char *demonless_msg;
-		register struct obj *octmp;
+		register struct obj *octmp, *nextobj;
 
 		/* Human sacrifice on a chaotic or unaligned altar */
 		/* is equivalent to demon summoning */
@@ -1383,8 +1432,11 @@ dosacrifice()
 			  case 1:
 			       pline("Angered at your summons, he curses you!");
 			       /* but not angry enough to whup yer ass */
-			       for(octmp = invent; octmp ; octmp = octmp->nobj)
+			       /* curse() might drop the off-hand weapon */
+			       for(octmp = invent; octmp ; octmp = nextobj) {
+				 nextobj = octmp->nobj;
 				 if (!rn2(6)) curse(octmp);
+			       }
 			       break;
 			  case 2: 
 			  case 3:
@@ -1554,6 +1606,8 @@ verbalize("In return for thy service, I grant thee the gift of Immortality!");
 			u.ualign.type = u.ualignbase[A_CURRENT] = altaralign;
 		    u.ublessed = 0;
 		    flags.botl = 1;
+		    livelog_printf(LL_ALIGNMENT, "permanently converted to %s",
+				   align_str(altaralign));
 
 		    You("have a sudden sense of a new direction.");
 		    /* Beware, Conversion is costly */
@@ -1690,6 +1744,10 @@ verbalize("In return for thy service, I grant thee the gift of Immortality!");
 		    at_your_feet("An object");
 		    godvoice(u.ualign.type, "Use my gift wisely!");
 		    u.ugifts++;
+		    livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT,
+				   "was bestowed with %s by %s",
+				   artiname(otmp->oartifact),
+				   align_gname(u.ualign.type));
 		    u.ublesscnt = rnz(300 + (50 * nartifacts));
 		    exercise(A_WIS, TRUE);
 		    /* make sure we can use this weapon */
@@ -1786,9 +1844,9 @@ int
 dopray()
 {
     /* Confirm accidental slips of Alt-P */
-    if (flags.prayconfirm)
-	if (yn("Are you sure you want to pray?") == 'n')
-	    return 0;
+    if (ParanoidPray &&
+	    !paranoid_query(ParanoidConfirm, "Are you sure you want to pray?"))
+	return 0;
 
     u.uconduct.gnostic++;
     /* Praying implies that the hero is conscious and since we have
@@ -1855,6 +1913,8 @@ prayer_done()		/* M. Stephenson (1.0.3b) */
 	/* ALI, Racially undead (ie., vampires) get the same penalties */
 	else if (rn2(20) > ACURR(A_CON))
 	    u.uhp = (u.uhp/2) + 1;
+	livelog_printf(LL_MINORAC, "prayed to %s while undead, and was rebuked",
+		       align_gname(alignment));
 	losehp(rnd(20), "residual undead turning effect", KILLED_BY_AN);
 	exercise(A_CON, FALSE);
 	return(1);
@@ -1862,12 +1922,22 @@ prayer_done()		/* M. Stephenson (1.0.3b) */
     if (Inhell) {
 	pline("Since you are in Gehennom, %s won't help you.",
 	      align_gname(alignment));
+	livelog_printf(LL_MINORAC, "prayed to %s in Gehennom, to no avail",
+		       align_gname(alignment));
 	/* haltingly aligned is least likely to anger */
 	if (u.ualign.record <= 0 || rnl(u.ualign.record))
 	    angrygods(u.ualign.type);
 	return(0);
     }
 
+    /* #chronicle (pleased() may give a gift or a crown, logged later) */
+    livelog_printf(LL_MINORAC, "prayed to %s, who was %s",
+		   align_gname(alignment),
+		   (p_type == 0) ? "displeased" :
+		   (p_type == 1) ? "angered" :
+		   /* water on a cross-aligned altar upsets the god */
+		   (p_type == 2 && sobj_at(POT_WATER, u.ux, u.uy)) ? "upset"
+		   : "pleased");
     if (p_type == 0) {
 	if(on_altar() && u.ualign.type != alignment)
 	    (void) water_prayer(FALSE);
@@ -1923,6 +1993,14 @@ turn_undead()
 {
 	struct monst *mtmp, *mtmp2;
 	int once, range, xlev;
+
+	/* turning undead involves chanting a formula */
+	if (!can_chant(&youmonst)) {
+	    You("are %s upon %s to turn aside evilness.",
+		Strangled ? "not able to call" : "incapable of calling",
+		u_gname());
+	    return(0);
+	}
 
 	u.uconduct.gnostic++;
 

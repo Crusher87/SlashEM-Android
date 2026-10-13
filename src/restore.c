@@ -27,6 +27,7 @@ STATIC_DCL struct fruit *FDECL(loadfruitchn, (int));
 STATIC_DCL void FDECL(freefruitchn, (struct fruit *));
 STATIC_DCL void FDECL(ghostfruit, (struct obj *));
 STATIC_DCL boolean FDECL(restgamestate, (int, unsigned int *, unsigned int *));
+STATIC_DCL void FDECL(restore_msghistory, (int));
 STATIC_DCL void FDECL(restlevelstate, (unsigned int, unsigned int));
 STATIC_DCL int FDECL(restlevelfile, (int,XCHAR_P));
 STATIC_DCL void FDECL(reset_oattached_mids, (BOOLEAN_P));
@@ -229,6 +230,11 @@ boolean ghostly, frozen;
 			otmp3->ocontainer = otmp;
 		}
 		if (otmp->bypass) otmp->bypass = 0;
+		if (!ghostly) {
+		    /* relink an interrupted meal or book (see saveobjchn) */
+		    food_restored(otmp);
+		    book_restored(otmp);
+		}
 
 		otmp2 = otmp;
 	}
@@ -362,7 +368,8 @@ unsigned int *stuckid, *steedid;	/* STEED */
 {
 	/* discover is actually flags.explore */
 	boolean remember_discover = discover;
-	struct obj *otmp;
+	struct flag newgameflags;
+	struct obj *otmp, *bc_obj;
 	int uid;
 
 	mread(fd, (genericptr_t) &uid, sizeof uid);
@@ -376,6 +383,10 @@ unsigned int *stuckid, *steedid;	/* STEED */
 		return FALSE;
 	}
 
+	/* we want to be able to revert to command line/environment/config
+	   file option values instead of keeping old save file option values
+	   if partial restore fails and we resort to starting a new game */
+	newgameflags = flags;
 	mread(fd, (genericptr_t) &flags, sizeof(struct flag));
 	flags.bypasses = 0;	/* never use the saved value of bypasses */
 	if (remember_discover) discover = remember_discover;
@@ -399,13 +410,33 @@ unsigned int *stuckid, *steedid;	/* STEED */
 	    wiz1_level.dlevel = 0;
 	    u.uz.dnum = 0;
 	    u.uz.dlevel = 1;
+	    /* revert to pre-restore option settings */
+	    flags = newgameflags;
 	    return(FALSE);
 	}
 
 	/* this stuff comes after potential aborted restore attempts */
+	/* interrupted activities; must come before objects are restored
+	   so that the objects they refer to can be relinked */
+	mread(fd, (genericptr_t) &digging, sizeof(struct dig_info));
+	rest_food_context(fd);
+	rest_book_context(fd);
+	rest_takeoff_context(fd);
 	restore_timers(fd, RANGE_GLOBAL, FALSE, 0L);
 	restore_light_sources(fd);
 	invent = restobjchn(fd, FALSE, FALSE);
+
+	/* restore dangling (not on floor or in inventory) ball and/or chain */
+	bc_obj = restobjchn(fd, FALSE, FALSE);
+	while (bc_obj) {
+	    struct obj *nobj = bc_obj->nobj;
+
+	    if (bc_obj->owornmask)
+		setworn(bc_obj, bc_obj->owornmask);
+	    bc_obj->nobj = (struct obj *)0;
+	    bc_obj = nobj;
+	}
+
 	migrating_objs = restobjchn(fd, FALSE, FALSE);
 	migrating_mons = restmonchn(fd, FALSE);
 	mread(fd, (genericptr_t) mvitals, sizeof(mvitals));
@@ -452,6 +483,7 @@ unsigned int *stuckid, *steedid;	/* STEED */
 			sizeof(struct tech) * (MAXTECH + 1));
 	restore_artifacts(fd);
 	restore_oracles(fd);
+	restore_gamelog(fd);
 	if (u.ustuck)
 		mread(fd, (genericptr_t) stuckid, sizeof (*stuckid));
 #ifdef STEED
@@ -467,10 +499,46 @@ unsigned int *stuckid, *steedid;	/* STEED */
 
 	restnames(fd);
 	restore_waterlevel(fd);
+	restore_msghistory(fd);
 	/* must come after all mons & objs are restored */
 	relink_timers(FALSE);
 	relink_light_sources(FALSE);
 	return(TRUE);
+}
+
+/* restore the message history written by save_msghistory() and give it
+   to the window port, so that ^P shows the messages from before the save */
+STATIC_OVL void
+restore_msghistory(fd)
+register int fd;
+{
+	int i, msgsize, nnew = 0;
+	char msg[BUFSZ], *newmsgs[MSGHISTORY_COUNT];
+	const char *s;
+
+	/* the messages given so far in this session ("Restoring save file...")
+	   are newer than the saved ones; set them aside */
+	for (i = 0; i < MSGHISTORY_COUNT; i++)
+	    if ((s = msghist_get(i)) != 0)
+		newmsgs[nnew++] = strcpy((char *) alloc(strlen(s) + 1), s);
+	msghist_free();
+
+	while (1) {
+	    mread(fd, (genericptr_t) &msgsize, sizeof msgsize);
+	    if (msgsize == -1) break;
+	    if (msgsize < 0 || msgsize > BUFSZ - 1)
+		panic("restore_msghistory: bad message length (%d)", msgsize);
+	    mread(fd, (genericptr_t) msg, (unsigned) msgsize);
+	    msg[msgsize] = '\0';
+	    msghist_add(msg);
+	    putmsghistory(msg);
+	}
+	putmsghistory((const char *) 0);
+
+	for (i = 0; i < nnew; i++) {
+	    msghist_add(newmsgs[i]);
+	    free((genericptr_t) newmsgs[i]);
+	}
 }
 
 /* update game state pointers to those valid for the current level (so we
@@ -696,6 +764,13 @@ register int fd;
 		if(otmp->owornmask)
 			setworn(otmp, otmp->owornmask);
 
+	if ((uball && !uchain) || (uchain && !uball)) {
+	    impossible("dorecover: lost ball & chain");
+	    /* poor man's unpunish() */
+	    setworn((struct obj *)0, W_CHAIN);
+	    setworn((struct obj *)0, W_BALL);
+	}
+
 	/* in_use processing must be after:
 	 *    + The inventory has been read so that freeinv() works.
 	 *    + The current level has been restored so billing information
@@ -811,6 +886,7 @@ boolean ghostly;
 #else
 	mread(fd, (genericptr_t) levl, sizeof(levl));
 #endif	/* RLECOMP */
+	mread(fd, (genericptr_t) lastseentyp, sizeof(lastseentyp));
 
 	mread(fd, (genericptr_t)&omoves, sizeof(omoves));
 	mread(fd, (genericptr_t)&upstair, sizeof(stairway));

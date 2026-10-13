@@ -97,6 +97,9 @@ static jmethodID jShowLog;
 static jmethodID jSetUsername;
 static jmethodID jSetNumPadOption;
 static jmethodID jAskName;
+#ifdef DUMPLOG
+static jmethodID jGetDumplogDir;
+#endif
 
 static boolean quit_if_possible;
 
@@ -150,9 +153,9 @@ void Java_com_tbd_forkfront_NetHackIO_RunNetHack(JNIEnv* env, jobject thiz, jstr
 	jYNFunction = (*jEnv)->GetMethodID(jEnv, jApp, "ynFunction", "([B[BI)V");
 	jGetLine = (*jEnv)->GetMethodID(jEnv, jApp, "getLine", "([BIII)Ljava/lang/String;");
 	jStartMenu = (*jEnv)->GetMethodID(jEnv, jApp, "startMenu", "(I)V");
-	jAddMenu = (*jEnv)->GetMethodID(jEnv, jApp, "addMenu", "(IIIIII[BII)V");
+	jAddMenu = (*jEnv)->GetMethodID(jEnv, jApp, "addMenu", "(IIJIII[BII)V");
 	jEndMenu = (*jEnv)->GetMethodID(jEnv, jApp, "endMenu", "(I[B)V");
-	jSelectMenu = (*jEnv)->GetMethodID(jEnv, jApp, "selectMenu", "(III)[I");
+	jSelectMenu = (*jEnv)->GetMethodID(jEnv, jApp, "selectMenu", "(III)[J");
 	jCliparound = (*jEnv)->GetMethodID(jEnv, jApp, "cliparound", "(IIII)V");
 	jDelayOutput = (*jEnv)->GetMethodID(jEnv, jApp, "delayOutput", "()V");
 	jShowDPad = (*jEnv)->GetMethodID(jEnv, jApp, "askDirection", "()V");
@@ -170,6 +173,14 @@ void Java_com_tbd_forkfront_NetHackIO_RunNetHack(JNIEnv* env, jobject thiz, jstr
 		debuglog("baaaaad");
 		return;
 	}
+
+#ifdef DUMPLOG
+	// Optional: the game can do without it, so clear the
+	// NoSuchMethodError if the front end doesn't have it.
+	jGetDumplogDir = (*jEnv)->GetMethodID(jEnv, jApp, "getDumplogDir", "()Ljava/lang/String;");
+	if(!jGetDumplogDir)
+		(*jEnv)->ExceptionClear(jEnv);
+#endif
 
 	pChars = (*jEnv)->GetStringUTFChars(jEnv, path, 0);
 	if(chdir(pChars) != 0)
@@ -747,6 +758,21 @@ int *color, *attr;
 	return FALSE;
 }
 #endif /* MENU_COLOR */
+/* Menu identifiers are passed to Java as a jlong holding the raw bytes of the
+ * union, so pointer identifiers (a_obj) survive the round trip on 64-bit. */
+static jlong ident_to_jlong(const ANY_P *ident)
+{
+	jlong id = 0;
+	memcpy(&id, ident, sizeof(anything) < sizeof(jlong) ? sizeof(anything) : sizeof(jlong));
+	return id;
+}
+
+static void jlong_to_ident(jlong id, ANY_P *ident)
+{
+	memset(ident, 0, sizeof(anything));
+	memcpy(ident, &id, sizeof(anything) < sizeof(jlong) ? sizeof(anything) : sizeof(jlong));
+}
+
 void and_add_menu(winid wid, int glyph, const ANY_P *ident, CHAR_P accelerator, CHAR_P groupacc, int attr, const char *str, BOOLEAN_P preselected)
 {
 	int tile, color;
@@ -765,7 +791,7 @@ void and_add_menu(winid wid, int glyph, const ANY_P *ident, CHAR_P accelerator, 
 	}
 
 	jbyteArray jstr = create_bytearray(str);
-	JNICallV(jAddMenu, wid, tile, ident->a_int, (int)accelerator, (int)groupacc, 1<<attr, jstr, (int)preselected, color);
+	JNICallV(jAddMenu, wid, tile, ident_to_jlong(ident), (int)accelerator, (int)groupacc, 1<<attr, jstr, (int)preselected, color);
 	destroy_jobject(jstr);
 }
 
@@ -820,13 +846,13 @@ int and_select_menu(winid wid, int how, MENU_ITEM_P **selected)
 int and_select_menu_r(winid wid, int how, MENU_ITEM_P **selected, int reentry)
 {
 	int i, n;
-	jintArray a;
-	jint* p;
-	jint* q;
+	jlongArray a;
+	jlong* p;
+	jlong* q;
 
 	//debuglog("and_select_menu");
 
-	a = (jintArray)JNICallO(jSelectMenu, wid, how, reentry);
+	a = (jlongArray)JNICallO(jSelectMenu, wid, how, reentry);
 
 	*selected = 0;
 
@@ -840,14 +866,14 @@ int and_select_menu_r(winid wid, int how, MENU_ITEM_P **selected, int reentry)
 	{
 		n >>= 1;
 
-		q = p = (*jEnv)->GetIntArrayElements(jEnv, a, 0);
+		q = p = (*jEnv)->GetLongArrayElements(jEnv, a, 0);
 		*selected = (MENU_ITEM_P*)malloc(sizeof(MENU_ITEM_P) * n);
 		for(i = 0; i < n; i++)
 		{
-			(*selected)[i].item.a_int = *p++;
-			(*selected)[i].count = *p++;
+			jlong_to_ident(*p++, &(*selected)[i].item);
+			(*selected)[i].count = (long)*p++;
 		}
-		(*jEnv)->ReleaseIntArrayElements(jEnv, a, q, 0);
+		(*jEnv)->ReleaseLongArrayElements(jEnv, a, q, 0);
 	}
 	else if(n == 1)
 	{
@@ -1124,6 +1150,81 @@ int and_doprev_message()
 }
 
 //____________________________________________________________________________________
+//putmsghistory(msg)
+//		-- Called by the core when a saved game is restored, once for
+//		   each message that was in the message history when the game
+//		   was saved (oldest first), then with a null pointer.
+//		-- The message log lives in the front end, so just add the old
+//		   messages to it. putstr() never waits for a key here, and the
+//		   restore clears the message window afterwards, so they show up
+//		   only in the log (^P).
+void and_putmsghistory(const char *msg)
+{
+	if(msg && *msg)
+		and_putstr(WIN_MESSAGE, ATR_NONE, msg);
+}
+
+#ifdef DUMPLOG
+//____________________________________________________________________________________
+//and_open_dumplog(basename, fullname)
+//		-- Called by the core (dump_open_log() in windows.c) to open the
+//		   end-of-game dump log called basename for writing.
+//		-- It goes to the directory the front end suggests
+//		   (Documents/nethack on the external storage). Android 10 and
+//		   later may refuse that since this app doesn't ask for a storage
+//		   permission, so then it goes to the game's own directory (the
+//		   current directory) instead.
+//		-- fullname (BUFSZ) gets the name of the file that was opened, or
+//		   an empty string if none could be.
+FILE *and_open_dumplog(const char *basename, char *fullname)
+{
+	FILE *fp = 0;
+	jstring jstr = 0;
+	const char *pChars;
+	char cwd[BUFSZ];
+
+	fullname[0] = 0;
+	if(jGetDumplogDir)
+		jstr = (jstring)JNICallO(jGetDumplogDir);
+	if((*jEnv)->ExceptionCheck(jEnv))
+	{
+		(*jEnv)->ExceptionClear(jEnv);
+		jstr = 0;
+	}
+	if(jstr)
+	{
+		pChars = (*jEnv)->GetStringUTFChars(jEnv, jstr, 0);
+		if(pChars && *pChars && strlen(pChars) + strlen(basename) + 2 < BUFSZ)
+		{
+			sprintf(fullname, "%s/%s", pChars, basename);
+			fp = fopen(fullname, "w");
+			if(!fp)
+				debuglog("dumplog: can't write %s (errno %d)", fullname, errno);
+		}
+		if(pChars)
+			(*jEnv)->ReleaseStringUTFChars(jEnv, jstr, pChars);
+		destroy_jobject(jstr);
+	}
+	if(!fp)
+	{
+		if(getcwd(cwd, sizeof(cwd)) && strlen(cwd) + strlen(basename) + 2 < BUFSZ)
+			sprintf(fullname, "%s/%s", cwd, basename);
+		else
+			strcpy(fullname, basename);
+		fp = fopen(fullname, "w");
+	}
+	if(fp)
+		debuglog("dumplog: writing %s", fullname);
+	else
+	{
+		debuglog("dumplog: can't write %s (errno %d)", fullname, errno);
+		fullname[0] = 0;
+	}
+	return fp;
+}
+#endif /* DUMPLOG */
+
+//____________________________________________________________________________________
 // char yn_function(const char *ques, const char *choices, char default)
 //		-- Print a prompt made up of ques, choices and default.
 //		   Read a single character response that is contained in
@@ -1157,11 +1258,8 @@ char and_yn_function(const char *question, const char *choices, CHAR_P def)
 	if(choices)
 	{
 		nChoices = strlen(choices);
-		esc = (int)index(choices, '\033');
-		if(esc)
-			esc -= (int)choices;
-		else
-			esc = -1;
+		const char *escp = index(choices, '\033');
+		esc = escp ? (int)(escp - choices) : -1;
 	}
 	else
 	{
@@ -1188,6 +1286,18 @@ char and_yn_function(const char *question, const char *choices, CHAR_P def)
 		destroy_jobject(jb);
 
 		ch = and_nhgetch();
+		/* <esc> (also sent when the app aborts an open prompt to save)
+		   must give the same answer as in the non-popup path below:
+		   callers only expect one of the choices */
+		if(ch == '\033')
+		{
+			if(index(choices, 'q'))
+				ch = 'q';
+			else if(index(choices, 'n'))
+				ch = 'n';
+			else
+				ch = def;
+		}
 		return ch;
 	}
 
@@ -1584,7 +1694,7 @@ void get_ext_cmd_auto(const char *query, register char *bufp)
 	register int c;
 	const int maxc = COLNO >= BUFSZ ? BUFSZ-1 : COLNO;
 
-	pline("%s ", query);
+	pline_prompt("%s ", query);
 	bufp[n] = 0;
 	for(;;)
 	{

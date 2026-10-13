@@ -86,6 +86,7 @@ struct obj {
 	Bitfield(otrapped,1);	/* container is trapped */
 				/* or accidental tripped rolling boulder trap */
 #define opoisoned otrapped	/* object (weapon) is coated with poison */
+	Bitfield(tknown,1);	/* trap status known for chests and boxes */
 
 	Bitfield(recharged,3);	/* number of times it's been recharged */
 	Bitfield(lamplit,1);	/* a light-source -- can be lit */

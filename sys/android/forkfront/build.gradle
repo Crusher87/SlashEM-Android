@@ -1,0 +1,38 @@
+// Builds the ForkFront front end from the unmodified upstream sources in the
+// ForkFront-Android submodule. Only the build script and manifest live here,
+// so the submodule can be updated without merging build changes.
+plugins {
+  id 'com.android.library'
+}
+
+def upstream = '../ForkFront-Android/lib'
+
+android {
+  namespace 'com.tbd.forkfront'
+  compileSdk 36
+
+  defaultConfig {
+    minSdk 21
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+
+  lint {
+    abortOnError false
+  }
+
+  sourceSets {
+    main {
+      manifest.srcFile 'AndroidManifest.xml'
+      java.srcDirs = ["$upstream/src"]
+      res.srcDirs = ["$upstream/res"]
+    }
+  }
+}
+
+dependencies {
+  implementation 'cz.msebera.android:httpclient:4.4.1.2'
+}

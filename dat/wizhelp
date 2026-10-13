@@ -7,7 +7,7 @@ Debug-Mode Quick Reference:
 ^I  ==  identify items in pack.
 ^J  ==  go up an experience level
 ^N  ==  toggle invulnerability
-^O  ==  tell locations of special levels.
+^O  ==  show dungeon overview.
 ^T  ==  do intra-level teleport.
 ^V  ==  do trans-level teleport.
 ^W  ==  make wish.
@@ -22,5 +22,6 @@ Debug-Mode Quick Reference:
 #stats == show memory statistics
 #timeout == look at timeout queue
 #vision == show vision array
+#wizwhere == tell locations of special levels
 #wmode == show wall modes
 

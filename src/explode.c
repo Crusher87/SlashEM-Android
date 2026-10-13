@@ -560,8 +560,8 @@ boolean yours; /* is it your fault (for killing monsters) */
 		if (Invulnerable) {
 		    damu = 0;
 		    You("are unharmed!");
-		} else if (Half_physical_damage && adtyp == AD_PHYS)
-		    damu = (damu+1) / 2;
+		} else if (adtyp == AD_PHYS || adtyp == AD_ACID)
+		    damu = Maybe_Half_Phys(damu);
 		if (adtyp == AD_FIRE) (void) burnarmor(&youmonst);
 		destroy_item(SCROLL_CLASS, (int) adtyp);
 		destroy_item(SPBOOK_CLASS, (int) adtyp);
@@ -826,6 +826,19 @@ splatter_burning_oil(x, y)
     int x, y;
 {
     explode(x, y, ZT_SPELL(ZT_FIRE), d(4,4), BURNING_OIL, EXPL_FIERY);
+}
+
+/* lit potion of oil is exploding; extinguish it as a light source before
+   possibly killing the hero and attempting to save bones */
+void
+explode_oil(obj, x, y)
+struct obj *obj;
+int x, y;
+{
+    if (!obj->lamplit)
+	impossible("exploding unlit oil");
+    end_burn(obj, TRUE);
+    splatter_burning_oil(x, y);
 }
 
 #ifdef FIREARMS

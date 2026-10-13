@@ -14,6 +14,7 @@
 
 #ifdef OVLB
 STATIC_DCL void FDECL(polyman, (const char *,const char *));
+STATIC_DCL void FDECL(dropp, (struct obj *));
 STATIC_DCL void NDECL(break_armor);
 STATIC_DCL void FDECL(drop_weapon,(int));
 STATIC_DCL void NDECL(uunstick);
@@ -259,6 +260,10 @@ dead: /* we come directly here if their experience level went to 0 or less */
 	polyman("feel like a new %s!",
 		(flags.female && urace.individual.f) ? urace.individual.f :
 		(urace.individual.m) ? urace.individual.m : urace.noun);
+	livelog_printf(LL_MINORAC, "became experience level %d as a new %s",
+		       u.ulevel,
+		       (flags.female && urace.individual.f) ? urace.individual.f :
+		       (urace.individual.m) ? urace.individual.m : urace.noun);
 	if (Slimed) {
 		Your("body transforms, but there is still slime on you.");
 		Slimed = 10L;
@@ -457,7 +462,13 @@ int	mntmp;
 	}
 
 	/* KMH, conduct */
-	u.uconduct.polyselfs++;
+	if (!u.uconduct.polyselfs++ && gamelog_first(GLF_POLYSELF))
+	    livelog_printf(LL_CONDUCT,
+			   "changed form for the first time, becoming %s",
+			   an(mons[mntmp].mname));
+	else
+	    livelog_printf(LL_MINORAC, "polymorphed into %s",
+			   an(mons[mntmp].mname));
 
 	if (!Upolyd) {
 		/* Human to monster; save human stats */
@@ -689,6 +700,33 @@ int	mntmp;
 	return(1);
 }
 
+/* dropx() jacket for break_armor() */
+STATIC_OVL void
+dropp(obj)
+struct obj *obj;
+{
+	struct obj *otmp;
+
+	/*
+	 * Dropping worn armor while polymorphing might put hero into water
+	 * (loss of levitation boots or water walking boots that the new
+	 * form can't wear), where emergency_disrobe() could remove it from
+	 * inventory.  Without this, dropx() could trigger an 'object lost'
+	 * panic.  Right now, boots are the only armor which might encounter
+	 * this situation, but handle it for all armor.
+	 *
+	 * Hypothetically, 'obj' could have merged with something (not
+	 * applicable for armor) and no longer be a valid pointer, so scan
+	 * inventory for it instead of trusting obj->where.
+	 */
+	for (otmp = invent; otmp; otmp = otmp->nobj) {
+	    if (otmp == obj) {
+		dropx(obj);
+		break;
+	    }
+	}
+}
+
 STATIC_OVL void
 break_armor()
 {
@@ -702,12 +740,12 @@ break_armor()
 		if (donning(otmp)) cancel_don();
 		Your("armor falls off!");
 		(void) Armor_gone();
-		dropx(otmp); /*WAC Drop instead of destroy*/
+		dropp(otmp); /*WAC Drop instead of destroy*/
 	    } else if (controlled_change && !otmp->cursed) {
 		if (donning(otmp)) cancel_don();
 		You("quickly remove your armor as you start to change.");
 		(void) Armor_gone();
-		dropx(otmp); /*WAC Drop instead of destroy*/
+		dropp(otmp); /*WAC Drop instead of destroy*/
 	    } else {
 		if (donning(otmp)) cancel_don();
 		You("break out of your armor!");
@@ -720,12 +758,12 @@ break_armor()
 	    if(otmp->oartifact) {
 		Your("%s falls off!", cloak_simple_name(otmp));
 		(void) Cloak_off();
-		dropx(otmp);
+		dropp(otmp);
 	    } else if (controlled_change && !otmp->cursed) {
 		You("remove your %s before you transform.",
 			cloak_simple_name(otmp));
 		(void) Cloak_off();
-		dropx(otmp);
+		dropp(otmp);
 	    } else {
 		Your("%s tears apart!", cloak_simple_name(otmp));
 		(void) Cloak_off();
@@ -737,7 +775,7 @@ break_armor()
 	    if (controlled_change && !otmp->cursed && !uskin) {
 		You("take off your shirt just before it starts to rip.");
 		setworn((struct obj *)0, otmp->owornmask & W_ARMU);
-		dropx(otmp);
+		dropp(otmp);
 	    } else {                
 		Your("shirt rips to shreds!");
 		useup(uarmu);
@@ -749,14 +787,14 @@ break_armor()
 		if (donning(otmp)) cancel_don();
 		Your("armor falls around you!");
 		(void) Armor_gone();
-		dropx(otmp);
+		dropp(otmp);
 	}
 	if ((otmp = uarmc) != 0) {
 		if (is_whirly(youmonst.data))
 			Your("%s falls, unsupported!", cloak_simple_name(otmp));
 		else You("shrink out of your %s!", cloak_simple_name(otmp));
 		(void) Cloak_off();
-		dropx(otmp);
+		dropp(otmp);
 	}
 #ifdef TOURIST
 	if ((otmp = uarmu) != 0) {
@@ -764,7 +802,7 @@ break_armor()
 			You("seep right through your shirt!");
 		else You("become much too small for your shirt!");
 		setworn((struct obj *)0, otmp->owornmask & W_ARMU);
-		dropx(otmp);
+		dropp(otmp);
 	}
 #endif
     }
@@ -781,7 +819,7 @@ break_armor()
 		if (donning(otmp)) cancel_don();
 		Your("helmet falls to the %s!", surface(u.ux, u.uy));
 		(void) Helmet_off();
-		dropx(otmp);
+		dropp(otmp);
 	    }
 	}
     }
@@ -792,18 +830,18 @@ break_armor()
 	    You("drop your gloves%s!", uwep ? " and weapon" : "");
 	    drop_weapon(0);
 	    (void) Gloves_off();
-	    dropx(otmp);
+	    dropp(otmp);
 	}
 	if ((otmp = uarms) != 0) {
 	    You("can no longer hold your shield!");
 	    (void) Shield_off();
-	    dropx(otmp);
+	    dropp(otmp);
 	}
 	if ((otmp = uarmh) != 0) {
 	    if (donning(otmp)) cancel_don();
 	    Your("helmet falls to the %s!", surface(u.ux, u.uy));
 	    (void) Helmet_off();
-	    dropx(otmp);
+	    dropp(otmp);
 	}
     }
     if (nohands(youmonst.data) || verysmall(youmonst.data) ||
@@ -815,7 +853,7 @@ break_armor()
 	    else Your("boots %s off your feet!",
 			verysmall(youmonst.data) ? "slide" : "are pushed");
 	    (void) Boots_off();
-	    dropx(otmp);
+	    dropp(otmp);
 	}
     }
 }
@@ -838,12 +876,17 @@ int alone;
 	    if (alone) You("find you must drop your weapon%s!",
 			   	u.twoweap ? "s" : "");
 	    otmp2 = u.twoweap ? uswapwep : 0;
+	    /* if either uwep or wielded uswapwep is flagged as 'in_use'
+	       (a wielded potion of polymorph being quaffed, or boiling
+	       unholy water triggering lycanthropy) then don't drop it;
+	       leave that to caller (or caller's caller, &c) */
 	    uwepgone();
-	    if (!wep->cursed || wep->otyp != LOADSTONE)
+	    if (!wep->in_use && (!wep->cursed || wep->otyp != LOADSTONE))
 		dropx(otmp);
 	    if (otmp2 != 0) {
 		uswapwepgone();
-		if (!otmp2->cursed || otmp2->otyp != LOADSTONE)
+		if (!otmp2->in_use &&
+			(!otmp2->cursed || otmp2->otyp != LOADSTONE))
 		    dropx(otmp2);
 	    }
 	    untwoweapon();
@@ -936,7 +979,7 @@ dogaze()
 		  	char qbuf[QBUFSZ];
 		  	
 			Sprintf(qbuf, "Really gaze at %s?", mon_nam(mtmp));
-			if (yn(qbuf) != 'y') return (0);
+			if (!paranoid_query(ParanoidHit, qbuf)) return (0);
 			if (mtmp->mpeaceful) setmangry(mtmp);
 	}
 
@@ -1245,7 +1288,7 @@ dogaze()
 			Sprintf(qbuf, "Really %s %s?",
 			    (adtyp == AD_CONF) ? "confuse" : "attack",
 			    mon_nam(mtmp));
-			if (yn(qbuf) != 'y') continue;
+			if (!paranoid_query(ParanoidHit, qbuf)) continue;
 			setmangry(mtmp);
 		    }
 		    if (!mtmp->mcanmove || mtmp->mstun || mtmp->msleeping ||
@@ -1761,7 +1804,7 @@ polyatwill()      /* Polymorph under conscious control (#youpoly) */
 	    }
 	} else if (Race_if(PM_HUMAN_WEREWOLF) &&
 		(!Upolyd || u.umonnum == u.ulycn)) {
-	    if (yn("Change form?") == 'n')
+	    if (!paranoid_query(ParanoidWerechange, "Change form?"))
 		return 0;
 	    else if (u.ulycn == NON_PM) {
 	    	/* Very serious */

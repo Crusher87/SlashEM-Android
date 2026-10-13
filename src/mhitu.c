@@ -1988,13 +1988,15 @@ gulpmu(mtmp, mattk)	/* monster swallows you, or damage if u.uswallow */
 	int	i;
 
 	if (!u.uswallow) {	/* swallows you */
+		int omx = mtmp->mx, omy = mtmp->my;
+
 		if (youmonst.data->msize >= MZ_HUGE) return(0);
 		if ((t && ((t->ttyp == PIT) || (t->ttyp == SPIKED_PIT))) &&
 		    sobj_at(BOULDER, u.ux, u.uy))
 			return(0);
 
 		if (Punished) unplacebc();	/* ball&chain go away */
-		remove_monster(mtmp->mx, mtmp->my);
+		remove_monster(omx, omy);
 		mtmp->mtrapped = 0;		/* no longer on old trap */
 		place_monster(mtmp, u.ux, u.uy);
 		newsym(mtmp->mx,mtmp->my);
@@ -2029,7 +2031,15 @@ gulpmu(mtmp, mattk)	/* monster swallows you, or damage if u.uswallow */
 		}
 
 		if (touch_petrifies(youmonst.data) && !resists_ston(mtmp)) {
+			/* put the attacker back where it started;
+			   the resulting statue will end up there */
+			remove_monster(mtmp->mx, mtmp->my);	/* u.ux,u.uy */
+			place_monster(mtmp, omx, omy);
 			minstapetrify(mtmp, TRUE);
+			/* we're not fully swallowed yet, so bring the
+			   ball & chain back here instead of in unstuck() */
+			if (Punished) placebc();
+			newsym(u.ux, u.uy);
 			if (mtmp->mhp > 0) return 0;
 			else return 2;
 		}
@@ -2164,7 +2174,9 @@ gulpmu(mtmp, mattk)	/* monster swallows you, or damage if u.uswallow */
 	mdamageu(mtmp, tmp);
 	if (tmp) stop_occupation();
 
-	if (touch_petrifies(youmonst.data) && !resists_ston(mtmp)) {
+	if (!u.uswallow) {
+	    ;	/* life-saving has already expelled swallowed hero */
+	} else if (touch_petrifies(youmonst.data) && !resists_ston(mtmp)) {
 	    pline("%s very hurriedly %s you!", Monnam(mtmp),
 		  is_animal(mtmp->data)? "regurgitates" : "expels");
 	    expels(mtmp, mtmp->data, FALSE);
@@ -2687,6 +2699,10 @@ register struct monst *mon;
 	if (Blind) pline("It caresses you...");
 	else You_feel("very attracted to %s.", mon_nam(mon));
 
+	/* if in the process of putting armor on or taking armor off,
+	   interrupt that activity now */
+	(void) stop_donning((struct obj *)0);
+
 	for(ring = invent; ring; ring = nring) {
 	    nring = ring->nobj;
 	    if (ring->otyp != RIN_ADORNMENT) continue;
@@ -2796,7 +2812,10 @@ register struct monst *mon;
 	pline("Time stands still while you and %s lie in each other's arms...",
 		noit_mon_nam(mon));
 	/* Well,  IT happened ... */
-	u.uconduct.celibacy++;
+	if (!u.uconduct.celibacy++ && gamelog_first(GLF_CELIBACY))
+	    livelog_printf(LL_CONDUCT, "gave up celibacy with %s",
+			   x_monnam(mon, ARTICLE_A, (char *)0, EXACT_NAME,
+				    FALSE));
 	
 	if (rn2(35) > ACURR(A_CHA) + ACURR(A_INT)) {
 		/* Don't bother with mspec_used here... it didn't get tired! */
