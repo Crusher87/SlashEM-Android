@@ -3977,11 +3977,15 @@ boolean disarm;
 			   * If we attempt to call unpunish() in the
 			   * for-loop below we can end up with otmp2
 			   * being invalid once the chain is gone.
-			   * Deal with ball & chain right now instead.
+			   * Deal with ball & chain right now instead:
+			   * unpunish() in advance if either ball or chain
+			   * (or both) is going to be destroyed.  [The chain
+			   * is on the floor even when the ball is carried.]
 			   */
-			  if (Punished && !carried(uball) &&
+			  if (Punished &&
 				((uchain->ox == u.ux && uchain->oy == u.uy) ||
-				 (uball->ox == u.ux && uball->oy == u.uy)))
+				 (uball->where == OBJ_FLOOR &&
+				  uball->ox == u.ux && uball->oy == u.uy)))
 				unpunish();
 
 			  for(otmp = level.objects[u.ux][u.uy];
