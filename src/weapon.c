@@ -1758,6 +1758,48 @@ register struct obj *obj;
     obj->owornmask &= ~W_WEP;
 }
 
+#ifdef DUMPLOG
+/* list the hero's skills for the end-of-game dump log */
+void
+dump_skills()
+{
+    int pass, i, len, longest;
+    boolean heading;
+    char buf[BUFSZ], sklnambuf[BUFSZ];
+    winid win;
+
+    for (longest = 0, i = 0; i < P_NUM_SKILLS; i++) {
+	if (P_RESTRICTED(i)) continue;
+	if ((len = strlen(P_NAME(i))) > longest)
+	    longest = len;
+    }
+
+    win = create_nhwindow(NHW_MENU);
+    putstr(win, 0, "Skills at the end of the game:");
+    for (pass = 0; pass < SIZE(skill_ranges); pass++) {
+	heading = FALSE;
+	for (i = skill_ranges[pass].first;
+		i <= skill_ranges[pass].last; i++) {
+	    if (P_RESTRICTED(i)) continue;
+	    if (i == P_TWO_WEAPON_COMBAT &&
+		    youmonst.data->mattk[1].aatyp != AT_WEAP)
+		continue;
+	    if (!heading) {
+		Sprintf(buf, " %s", skill_ranges[pass].name);
+		putstr(win, 0, buf);
+		heading = TRUE;
+	    }
+	    Sprintf(buf, "    %-*s [%s]", longest, P_NAME(i),
+		    skill_level_name(i, sklnambuf));
+	    putstr(win, 0, buf);
+	}
+    }
+    putstr(win, 0, "");
+    display_nhwindow(win, TRUE);
+    destroy_nhwindow(win);
+}
+#endif /* DUMPLOG */
+
 #endif /* OVLB */
 
 /*weapon.c*/

@@ -612,6 +612,7 @@ clear_level_structures()
 
 	/* [DS] - Michael Clarke's Lethe flag */
 	level.flags.lethe = 0;
+	level.flags.sokoban_rules = 0;	/* set by sokoban_detect() */
 
 	nroom = 0;
 	rooms[0].hx = -1;
@@ -985,7 +986,9 @@ void
 mklev()
 {
 	struct mkroom *croom;
+	int ridx;
 
+	init_mapseen(&u.uz);
 	if(getbones()) return;
 	in_mklev = TRUE;
 	makelevel();
@@ -1006,6 +1009,10 @@ mklev()
 #endif
 	}
 	set_wall_state();
+	/* for many room types, rooms[].rtype is zeroed once the room has been
+	   entered; rooms[].orig_rtype always retains original rtype value */
+	for (ridx = 0; ridx < SIZE(rooms); ridx++)
+	    rooms[ridx].orig_rtype = rooms[ridx].rtype;
 }
 
 void

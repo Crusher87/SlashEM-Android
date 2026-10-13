@@ -330,7 +330,8 @@ do_pit:		    chasm = maketrap(x,y,PIT);
 				    You("fall into a chasm!");
 				    u.utrap = rn1(6,2);
 				    u.utraptype = TT_PIT;
-				    losehp(rnd(6),"fell into a chasm",
+				    losehp(Maybe_Half_Phys(rnd(6)),
+					   "fell into a chasm",
 					NO_KILLER_PREFIX);
 				    selftouch("Falling, you");
 			    }
@@ -520,14 +521,20 @@ struct obj *instr;
 	return(0);
     }
     if (instr->otyp != LEATHER_DRUM && instr->otyp != DRUM_OF_EARTHQUAKE) {
-	c = yn("Improvise?");
+	c = ynq("Improvise?");
+	if (c == 'q') goto nevermind;
     }
     if (c == 'n') {
-	if (u.uevent.uheard_tune == 2 && yn("Play the passtune?") == 'y') {
+	if (u.uevent.uheard_tune == 2)
+	    c = ynq("Play the passtune?");
+	if (c == 'q') {
+	    goto nevermind;
+	} else if (c == 'y') {
 	    Strcpy(buf, tune);
 	} else {
 	    getlin("What tune are you playing? [5 notes, A-G]", buf);
 	    (void)mungspaces(buf);
+	    if (*buf == '\033') goto nevermind;
 	    /* convert to uppercase and change any "H" to the expected "B" */
 	    for (s = buf; *s; s++) {
 #ifndef AMIGA
@@ -579,6 +586,9 @@ struct obj *instr;
 		    for(x=u.ux-1;x<=u.ux+1;x++)
 			if(isok(x,y))
 			if(find_drawbridge(&x,&y)) {
+			    if (u.uevent.uheard_tune < 2)
+				livelog_printf(LL_MINORAC,
+					"learned the castle drawbridge's tune");
 			    u.uevent.uheard_tune = 2; /* tune now fully known */
 			    if(levl[x][y].typ == DRAWBRIDGE_DOWN)
 				close_drawbridge(x,y);
@@ -633,7 +643,11 @@ struct obj *instr;
 			/* could only get `gears == 5' by playing five
 			   correct notes followed by excess; otherwise,
 			   tune would have matched above */
-			if (gears == 5) u.uevent.uheard_tune = 2;
+			if (gears == 5 && u.uevent.uheard_tune < 2) {
+			    u.uevent.uheard_tune = 2;
+			    livelog_printf(LL_MINORAC,
+					"learned the castle drawbridge's tune");
+			}
 		    }
 		}
 	    }
@@ -641,6 +655,10 @@ struct obj *instr;
 	return 1;
     } else
 	    return do_improvisation(instr);
+
+nevermind:
+    pline("Never mind.");
+    return 0;
 }
 
 #ifdef UNIX386MUSIC

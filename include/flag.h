@@ -89,6 +89,7 @@ struct flag {
 	boolean  pushweapon;	/* When wielding, push old weapon into second slot */
 	boolean  rest_on_space; /* space means rest */
 	boolean  safe_dog;	/* give complete protection to the dog */
+	boolean  safe_wait;	/* refuse to wait or search next to a hostile */
 #ifdef EXP_ON_BOTL
 	boolean  showexp;	/* show experience points */
 #endif
@@ -103,6 +104,7 @@ struct flag {
 #endif
 	boolean  silent;	/* whether the bell rings or not */
 	boolean  sortpack;	/* sorted inventory */
+	char	 sortloot;	/* 'n'=none, 'l'=loot (pickup), 'f'=full ('l'+invent) */
 	boolean  soundok;	/* ok to tell about sounds heard */
 	boolean  sparkle;	/* show "resisting" special FX (Scott Bigham) */
 	boolean  standout;	/* use standout for --More-- */
@@ -110,7 +112,20 @@ struct flag {
 	boolean  tombstone;	/* print tombstone */
 	boolean  toptenwin;	/* ending list in window instead of stdout */
 	boolean  verbose;	/* max battle info */
-	boolean  prayconfirm;	/* confirm before praying */
+	unsigned paranoia_bits;	/* alternate confirmation prompting */
+#define PARANOID_CONFIRM	0x0001
+#define PARANOID_QUIT		0x0002
+#define PARANOID_DIE		0x0004
+#define PARANOID_BONES		0x0008
+#define PARANOID_HIT		0x0010
+#define PARANOID_PRAY		0x0020
+#define PARANOID_REMOVE		0x0040
+#define PARANOID_BREAKWAND	0x0080
+#define PARANOID_WERECHANGE	0x0100
+#define PARANOID_EATING		0x0200
+#define PARANOID_SWIM		0x0400
+#define PARANOID_TRAP		0x0800
+#define PARANOID_AUTOALL	0x1000
 	int	 end_top, end_around;	/* describe desired score list */
 	unsigned ident;		/* social security number for each monster */
 	unsigned moonphase;
@@ -163,7 +178,7 @@ struct flag {
 	int      boot_count; /* boots from fishing pole */
 	char	 inv_order[MAXOCLASSES];
 	char	 pickup_types[MAXOCLASSES];
-#define NUM_DISCLOSURE_OPTIONS         5
+#define NUM_DISCLOSURE_OPTIONS         6	/* i,a,v,g,c,o (decl.c) */
 #define DISCLOSE_PROMPT_DEFAULT_YES    'y'
 #define DISCLOSE_PROMPT_DEFAULT_NO     'n'
 #define DISCLOSE_YES_WITHOUT_PROMPT    '+'
@@ -197,6 +212,7 @@ struct instance_flags {
 #endif
 	boolean  window_inited; /* true if init_nhwindows() completed */
 	boolean  vision_inited; /* true if vision is ready */
+	boolean  in_dumplog;	/* output goes to the end-of-game dump log */
 	boolean  menu_tab_sep;	/* Use tabs to separate option menu fields */
 	boolean  menu_requested; /* Flag for overloaded use of 'm' prefix
 				  * on some non-move commands */
@@ -208,6 +224,7 @@ struct instance_flags {
 	uchar	bouldersym;	/* symbol for boulder display */
 	boolean	travel1;	/* first travel step */
 	coord	travelcc;	/* coordinates for travel_cache */
+	boolean  pricequotes;	/* show remembered shop prices of unIDed objects */
 #ifdef WIZARD
 	boolean  sanity_check;	/* run sanity checks */
 	boolean  mon_polycontrol;	/* debug: control monster polymorphs */
@@ -305,7 +322,10 @@ struct instance_flags {
 	boolean wc2_softkeyboard;	/* use software keyboard */
 	boolean wc2_wraptext;		/* wrap text */
 
+	boolean  autodescribe;	/* show description of map spot under getpos cursor */
 	boolean  cmdassist;	/* provide detailed assistance for some commands */
+	boolean  fireassist;	/* 'f' readies a launcher or uses a polearm */
+	boolean  item_actions;	/* choosing an item in 'i' offers actions */
 	boolean	 obsolete;	/* obsolete options can point at this, it isn't used */
 	/* Items which belong in flags, but are here to allow save compatibility */
 	boolean  lootabc;	/* use "a/b/c" rather than "o/i/b" when looting */
@@ -347,6 +367,34 @@ struct instance_flags {
 
 extern NEARDATA struct flag flags;
 extern NEARDATA struct instance_flags iflags;
+
+/* paranoid_confirmation option */
+/* require "no" to reject in addition to "yes" to confirm */
+#define ParanoidConfirm	((flags.paranoia_bits & PARANOID_CONFIRM) != 0)
+/* "yes" vs "y" to quit or to enter explore mode */
+#define ParanoidQuit	((flags.paranoia_bits & PARANOID_QUIT) != 0)
+/* "yes" vs "y" to die (explore mode or debug mode) */
+#define ParanoidDie	((flags.paranoia_bits & PARANOID_DIE) != 0)
+/* "yes" vs "y" to save bones data in debug mode */
+#define ParanoidBones	((flags.paranoia_bits & PARANOID_BONES) != 0)
+/* "yes" vs "y" to attack a peaceful monster */
+#define ParanoidHit	((flags.paranoia_bits & PARANOID_HIT) != 0)
+/* "y" to pray (supersedes old "prayconfirm" option) */
+#define ParanoidPray	((flags.paranoia_bits & PARANOID_PRAY) != 0)
+/* always prompt for item to take off or remove, even if only one */
+#define ParanoidRemove	((flags.paranoia_bits & PARANOID_REMOVE) != 0)
+/* "yes" vs "y" to break a wand */
+#define ParanoidBreakwand ((flags.paranoia_bits & PARANOID_BREAKWAND) != 0)
+/* "yes" vs "y" to change into or out of beast form when it's controllable */
+#define ParanoidWerechange ((flags.paranoia_bits & PARANOID_WERECHANGE) != 0)
+/* "yes" vs "y" to continue eating after the "hard time" warning */
+#define ParanoidEating	((flags.paranoia_bits & PARANOID_EATING) != 0)
+/* 'm' prefix needed to step into known water or lava */
+#define ParanoidSwim	((flags.paranoia_bits & PARANOID_SWIM) != 0)
+/* "y" to step onto a known trap unless it is clearly harmless */
+#define ParanoidTrap	((flags.paranoia_bits & PARANOID_TRAP) != 0)
+/* "y" to use menu choice 'A' by itself; otherwise only with filters */
+#define ParanoidAutoAll	((flags.paranoia_bits & PARANOID_AUTOALL) != 0)
 
 /* runmode options */
 #define RUN_TPORT	0	/* don't update display until movement stops */

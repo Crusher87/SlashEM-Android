@@ -1373,7 +1373,7 @@ poly_obj(obj, id)
 	if (obj->otyp == AMULET_OF_UNCHANGING)
 	    return obj;
 
-	if (obj->otyp == BOULDER && In_sokoban(&u.uz))
+	if (obj->otyp == BOULDER && Sokoban)
 	    change_luck(-1);    /* Sokoban guilt */
 #ifdef WIZARD
 	otmp = (struct obj *)0;
@@ -1813,6 +1813,12 @@ struct obj *obj, *otmp;
 		/* target object has now been "seen (up close)" */
 		obj->dknown = 1;
 		if (Is_container(obj) || obj->otyp == STATUE) {
+		    if (Is_box(obj) && !obj->tknown) {
+			/* probing reveals whether a box or chest is trapped */
+			if (obj->otrapped)
+			    pline("%s trapped!", Tobjnam(obj, "are"));
+			obj->tknown = 1;
+		    }
 		    if (!obj->cobj)
 			pline("%s empty.", Tobjnam(obj, "are"));
 		    else {
@@ -2156,7 +2162,7 @@ dozap()
 	    if ((damage = zapyourself(obj, TRUE)) != 0) {
 		char buf[BUFSZ];
 		Sprintf(buf, "zapped %sself with a wand", uhim());
-		losehp(damage, buf, NO_KILLER_PREFIX);
+		losehp(Maybe_Half_Phys(damage), buf, NO_KILLER_PREFIX);
 	    }
 	} else {
 
@@ -2837,7 +2843,8 @@ struct obj *obj;	/* wand or spell */
 		/* similar to zap_dig() */
 		pline("A rock is dislodged from the %s and falls on your %s.",
 		      ceiling(x, y), body_part(HEAD));
-		losehp(rnd((uarmh && is_metallic(uarmh)) ? 2 : 6),
+		losehp(Maybe_Half_Phys(rnd((uarmh && is_metallic(uarmh)) ?
+					   2 : 6)),
 		       "falling rock", KILLED_BY_AN);
 		if ((otmp = mksobj_at(ROCK, x, y, FALSE, FALSE)) != 0) {
 		    (void)xname(otmp);	/* set dknown, maybe bknown */
@@ -3380,7 +3387,7 @@ struct obj **obj_p;			/* object tossed/used */
 			    pline("%s jerks to an abrupt halt.",
 				  The(distant_name(obj, xname))); /* lame */
 			range = 0;
-		    } else if (In_sokoban(&u.uz) && (t = t_at(x, y)) != 0 &&
+		    } else if (Sokoban && (t = t_at(x, y)) != 0 &&
 			       (t->ttyp == PIT || t->ttyp == SPIKED_PIT ||
 				t->ttyp == HOLE || t->ttyp == TRAPDOOR)) {
 			/* hero falls into the trap, so ball stops */
@@ -4505,7 +4512,7 @@ fracture_rock(obj)	/* fractured by pick-axe or wand of striking */
 register struct obj *obj;		   /* no texts here! */
 {
 	/* A little Sokoban guilt... */
-	if (obj->otyp == BOULDER && In_sokoban(&u.uz) && !flags.mon_moving)
+	if (obj->otyp == BOULDER && Sokoban && !flags.mon_moving)
 	    change_luck(-1);
 
 	obj->otyp = ROCK;
@@ -4570,35 +4577,58 @@ register int osym, dmgtyp;
 	register long i, cnt, quan;
 	register int dindx;
 	const char *mult;
-	/*
-	 * [ALI] Because destroy_item() can call wand_explode() which can
-	 * call explode() which can call destroy_item() again, we need to
-	 * be able to deal with the possibility of not only the current
-	 * object we are looking at no longer being in the inventory, but
-	 * also the next object (and the one after that, etc.).
-	 * We do this by taking advantage of the fact that objects in the
-	 * inventory destroyed as a result of calling wand_explode() will
-	 * always be destroyed by this same function. This allows us to
-	 * maintain a list of "next" pointers and to adjust these pointers
-	 * as required when we destroy an object that they might be pointing
-	 * at.
-	 */
-	struct destroy_item_frame {
-	    struct obj *next_obj;
-	    struct destroy_item_frame *next_frame;
-	} frame;
-	static struct destroy_item_frame *destroy_item_stack;
+	unsigned *oids;
+	int n, lo, hi, oidx;
 
 	/* this is to deal with gas spores -- they don't really
 	   destroy objects, but this routine is called a lot in
 	   explode.c for them... hmph... */
 	if (dmgtyp == AD_PHYS) return;
 
-	frame.next_frame = destroy_item_stack;
-	destroy_item_stack = &frame;
+	/*
+	 * Destroying an item can change inventory aside from the item
+	 * itself: wand_explode() can call explode() which calls us again,
+	 * boiling unholy water can make a lycanthrope change form and
+	 * drop or destroy worn armor and wielded weapons, losing a worn
+	 * ring of levitation can drop the hero onto a fire trap, and so on.
+	 * So don't follow the inventory chain across those events; first
+	 * make a list of the candidate objects' o_ids, then look each one
+	 * up again just before handling it.  Objects which have been
+	 * destroyed, dropped, or used up in the meantime are skipped.
+	 *
+	 * Loss of an item which might dump the hero onto a trap (where a
+	 * recursive call could destroy other items) is deferred until the
+	 * rest of inventory has been processed [from NetHack 3.6.2].
+	 */
+	for (n = 0, obj = invent; obj; obj = obj->nobj)
+	    if (obj->oclass == osym) n++;
+	if (!n) return;
+	oids = (unsigned *) alloc((unsigned) (n * sizeof (unsigned)));
+	/* normal items fill oids[0..lo-1], deferred ones oids[hi..n-1];
+	   both loops see the same chain, so lo == hi afterwards */
+	lo = 0;
+	hi = n;
+	for (obj = invent; obj && lo < hi; obj = obj->nobj) {
+	    if (obj->oclass != osym) continue;
+	    if ((obj->owornmask &&
+		    (objects[obj->otyp].oc_oprop == LEVITATION ||
+		     objects[obj->otyp].oc_oprop == FLYING)) ||
+		    /* destroyed wands and potions of polymorph don't
+		       trigger polymorph so don't need to be deferred */
+		    (obj->otyp == POT_WATER && u.ulycn >= LOW_PM &&
+		     (Upolyd ? obj->blessed : obj->cursed)))
+		oids[--hi] = obj->o_id;
+	    else
+		oids[lo++] = obj->o_id;
+	}
 
-	for(obj = invent; obj; obj = frame.next_obj) {
-	    frame.next_obj = obj->nobj;
+	for (oidx = 0; oidx < n; oidx++) {
+	    /* deferred items were stored back to front */
+	    unsigned oid = oids[(oidx < lo) ? oidx : (n - 1) - (oidx - lo)];
+
+	    for (obj = invent; obj; obj = obj->nobj)
+		if (obj->o_id == oid) break;
+	    if (!obj) continue; /* destroyed or dropped meanwhile */
 	    if(obj->oclass != osym) continue; /* test only objs of type osym */
 	    if(obj->oartifact) continue; /* don't destroy artifacts */
 	    if(obj->in_use && obj->quan == 1) continue; /* not available */
@@ -4694,16 +4724,6 @@ register int osym, dmgtyp;
 			setnotworn(obj);
 		}
 		if (obj == current_wand) current_wand = 0;	/* destroyed */
-		if (cnt == obj->quan && frame.next_frame) {
-		    /* Before removing an object from the inventory, adjust
-		     * any "next" pointers that would otherwise become invalid.
-		     */
-		    struct destroy_item_frame *fp;
-		    for(fp = frame.next_frame; fp; fp = fp->next_frame) {
-			if (fp->next_obj == obj)
-			    fp->next_obj = frame.next_obj;
-		    }
-		}
 		if(osym == WAND_CLASS && dmgtyp == AD_ELEC) {
 		    /* MAR use a continue since damage and stuff is taken care of
 		     *  in wand_explode */
@@ -4727,7 +4747,7 @@ register int osym, dmgtyp;
 		}
 	    }
 	}
-	destroy_item_stack = frame.next_frame;
+	free((genericptr_t) oids);
 	return;
 }
 
@@ -4878,15 +4898,17 @@ int damage, tell;
 void
 makewish()
 {
-	char buf[BUFSZ];
+	char buf[BUFSZ], bufcpy[BUFSZ];
 	struct obj *otmp, nothing;
 	int tries = 0;
+	long oldwisharti = u.uconduct.wisharti;
 
 	nothing = zeroobj;  /* lint suppression; only its address matters */
 	if (flags.verbose) You("may wish for an object.");
 retry:
 	getlin("For what do you wish?", buf);
 	if(buf[0] == '\033') buf[0] = 0;
+	Strcpy(bufcpy, buf);	/* readobjnam() modifies buf */
 	/*
 	 *  Note: if they wished for and got a non-object successfully,
 	 *  otmp == &zeroobj.  That includes gold, or an artifact that
@@ -4900,14 +4922,27 @@ retry:
 	    pline(thats_enough_tries);
 	    otmp = readobjnam((char *)0, (struct obj *)0, TRUE);
 	    if (!otmp) return;	/* for safety; should never happen */
+	    Strcpy(bufcpy, "a random object");
 	} else if (otmp == &nothing) {
 	    /* explicitly wished for "nothing", presumeably attempting
 	       to retain wishless conduct */
+	    livelog_printf(LL_WISH, "declined to make a wish");
 	    return;
 	}
 
 	/* KMH, conduct */
-	u.uconduct.wishes++;
+	(void) mungspaces(bufcpy);
+	if (!u.uconduct.wishes++ && gamelog_first(GLF_WISH))
+	    livelog_printf(LL_CONDUCT | LL_WISH
+			   | (u.uconduct.wisharti ? LL_ARTIFACT : 0L),
+			   "made %s first wish - %s", uhis(), bufcpy);
+	else if (!oldwisharti && u.uconduct.wisharti)
+	    livelog_printf(LL_CONDUCT | LL_WISH | LL_ARTIFACT,
+			   "made %s first artifact wish - %s", uhis(), bufcpy);
+	else
+	    livelog_printf(LL_WISH | (u.uconduct.wisharti > oldwisharti
+				      ? LL_ARTIFACT : 0L),
+			   "wished for %s", bufcpy);
 
 	if (otmp != &zeroobj) {
 	    /* The(aobjnam()) is safe since otmp is unidentified -dlc */

@@ -34,16 +34,14 @@ STATIC_DCL void FDECL(saveobjchn, (int,struct obj *,int));
 STATIC_DCL void FDECL(savemonchn, (int,struct monst *,int));
 STATIC_DCL void FDECL(savetrapchn, (int,struct trap *,int));
 STATIC_DCL void FDECL(savegamestate, (int,int));
+STATIC_DCL void FDECL(save_msghistory, (int,int));
 #ifdef MFLOPPY
 STATIC_DCL void FDECL(savelev0, (int,XCHAR_P,int));
 STATIC_DCL boolean NDECL(swapout_oldest);
 STATIC_DCL void FDECL(copyfile, (char *,char *));
 #endif /* MFLOPPY */
-#ifdef GCC_WARN
-static long nulls[10];
-#else
-#define nulls nul
-#endif
+/* zeroed end-of-list records; big enough for a 64-bit struct trap or fruit */
+static long nulls[sizeof(struct trap) + sizeof(struct fruit)];
 
 #if defined(UNIX) || defined(VMS) || defined(__EMX__) || defined(WIN32)
 #define HUP	if (!program_state.done_hup)
@@ -347,6 +345,11 @@ savegamestate(fd, mode)
 register int fd, mode;
 {
 	int uid;
+	struct obj *bc_objs = (struct obj *)0;
+	/* Ball and chain are on no object list while the hero is engulfed.
+	   Check that now: a carried ball is freed along with the inventory. */
+	struct obj *looseball = BALL_IN_MON ? uball : (struct obj *)0,
+		   *loosechain = CHAIN_IN_MON ? uchain : (struct obj *)0;
 
 #ifdef MFLOPPY
 	count_only = (mode & COUNT_SAVE);
@@ -356,11 +359,40 @@ register int fd, mode;
 	bwrite(fd, (genericptr_t) &flags, sizeof(struct flag));
 	bwrite(fd, (genericptr_t) &u, sizeof(struct you));
 
+	/* interrupted activities which can be resumed; must come before
+	   invent is freed (objects are saved by o_id) */
+	bwrite(fd, (genericptr_t) &digging, sizeof(struct dig_info));
+	save_food_context(fd);
+	save_book_context(fd);
+	save_takeoff_context(fd);
+
 	/* must come before migrating_objs and migrating_mons are freed */
 	save_timers(fd, mode, RANGE_GLOBAL);
 	save_light_sources(fd, mode, RANGE_GLOBAL);
 
 	saveobjchn(fd, invent, mode);
+
+	/* save ball and chain if they are currently dangling free (i.e. not on
+	   floor or in inventory) */
+	if (loosechain) {
+	    loosechain->nobj = bc_objs;
+	    bc_objs = loosechain;
+	}
+	if (looseball) {
+	    looseball->nobj = bc_objs;
+	    bc_objs = looseball;
+	}
+	saveobjchn(fd, bc_objs, mode);
+	if (release_data(mode)) {
+	    /* freed; don't use setworn() here, it would look at them */
+	    if (loosechain) uchain = (struct obj *)0;
+	    if (looseball) uball = (struct obj *)0;
+	} else {
+	    /* they are still in play; don't leave them linked to each other */
+	    if (loosechain) loosechain->nobj = (struct obj *)0;
+	    if (looseball) looseball->nobj = (struct obj *)0;
+	}
+
 	saveobjchn(fd, migrating_objs, mode);
 	savemonchn(fd, migrating_mons, mode);
 	if (release_data(mode)) {
@@ -382,6 +414,7 @@ register int fd, mode;
 			sizeof(struct tech) * (MAXTECH + 1));
 	save_artifacts(fd);
 	save_oracles(fd, mode);
+	save_gamelog(fd, mode);
 	if(ustuck_id)
 	    bwrite(fd, (genericptr_t) &ustuck_id, sizeof ustuck_id);
 #ifdef STEED
@@ -394,7 +427,31 @@ register int fd, mode;
 	savefruitchn(fd, mode);
 	savenames(fd, mode);
 	save_waterlevel(fd, mode);
+	save_msghistory(fd, mode);
 	bflush(fd);
+}
+
+/* save the core's message history: each message's length and text,
+   oldest first, then -1 */
+STATIC_OVL void
+save_msghistory(fd, mode)
+int fd, mode;
+{
+	const char *msg;
+	int i, msglen, minusone = -1;
+
+	if (perform_bwrite(mode)) {
+	    for (i = 0; i < MSGHISTORY_COUNT; i++) {
+		if (!(msg = msghist_get(i)) || !*msg) continue;
+		msglen = strlen(msg);
+		if (msglen > BUFSZ - 1) msglen = BUFSZ - 1;
+		bwrite(fd, (genericptr_t) &msglen, sizeof msglen);
+		bwrite(fd, (genericptr_t) msg, msglen);
+	    }
+	    bwrite(fd, (genericptr_t) &minusone, sizeof minusone);
+	}
+	if (release_data(mode))
+	    msghist_free();
 }
 
 #ifdef INSURANCE
@@ -598,6 +655,7 @@ int mode;
 #else
 	bwrite(fd,(genericptr_t) levl,sizeof(levl));
 #endif /* RLECOMP */
+	bwrite(fd, (genericptr_t) lastseentyp, sizeof lastseentyp);
 
 	bwrite(fd,(genericptr_t) &monstermoves,sizeof(monstermoves));
 	bwrite(fd,(genericptr_t) &upstair,sizeof(stairway));
@@ -937,8 +995,10 @@ register struct obj *otmp;
 	    if (Has_contents(otmp))
 		saveobjchn(fd,otmp->cobj,mode);
 	    if (release_data(mode)) {
+		/* remember an interrupted meal or book by its o_id */
+		food_saved(otmp);
+		book_saved(otmp);
 		if (otmp->oclass == FOOD_CLASS) food_disappears(otmp);
-		if (otmp->oclass == SPBOOK_CLASS) book_disappears(otmp);
 		otmp->where = OBJ_FREE;	/* set to free so dealloc will work */
 		otmp->timed = 0;	/* not timed any more */
 		otmp->lamplit = 0;	/* caller handled lights */
@@ -1101,6 +1161,7 @@ freedynamicdata()
 	unload_qtlist();
 	free_invbuf();	/* let_to_name (invent.c) */
 	free_youbuf();	/* You_buf,&c (pline.c) */
+	msghist_free();	/* message history (pline.c) */
 #ifdef MENU_COLOR
         free_menu_coloring();
 #endif
@@ -1145,6 +1206,7 @@ freedynamicdata()
      /* freelevchn();	[folded into free_dungeons()] */
 	free_animals();
 	free_oracles();
+	free_gamelog();
 	freefruitchn();
 	freenames();
 	free_waterlevel();

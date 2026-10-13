@@ -1307,7 +1307,9 @@ struct WinDesc *cw;
     int n, curr_page, page_lines;
     boolean finished, counting, reset_count;
     char *cp, *rp, resp[QBUFSZ], gacc[QBUFSZ],
-	 *msave, *morestr;
+	 *msave, *morestr, really_morc;
+    int resp_len = 0;	/* number of item accelerators at start of resp[] */
+#define MENU_EXPLICIT_CHOICE 0x7f /* pseudo menu command */
 
     curr_page = page_lines = 0;
     page_start = page_end = 0;
@@ -1430,6 +1432,8 @@ struct WinDesc *cw;
 		page_lines = 0;
 	    }
 	    *rp = 0;
+	    /* remember how many explicit menu choices there are */
+	    resp_len = (int) strlen(resp);
 
 	    /* corner window - clear extra lines from last page */
 	    if (cw->offx) {
@@ -1462,7 +1466,14 @@ struct WinDesc *cw;
 	    xwaitforspace(resp);
 	}
 
-	morc = map_menu_cmd(morc);
+	really_morc = morc;	/* (only used with MENU_EXPLICIT_CHOICE) */
+	if ((rp = index(resp, morc)) != 0 && rp < resp + resp_len)
+	    /* explicit menu selection; don't override it if it also
+	       happens to match a menu command (such as '-' to unselect
+	       all vs an item using '-' as its accelerator) */
+	    morc = MENU_EXPLICIT_CHOICE;
+	else
+	    morc = map_menu_cmd(morc);
 	switch (morc) {
 	    case '0':
 		/* special case: '0' is also the default ball class */
@@ -1566,6 +1577,9 @@ struct WinDesc *cw;
 		if (cw->how == PICK_ANY)
 		    invert_all(window, page_start, page_end, 0);
 		break;
+	    case MENU_EXPLICIT_CHOICE:
+		morc = really_morc;
+		/*FALLTHRU*/
 	    default:
 		if (cw->how == PICK_NONE || !index(resp, morc)) {
 		    /* unacceptable input received */

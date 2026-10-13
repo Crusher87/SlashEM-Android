@@ -10,6 +10,7 @@
 struct mkroom {
 	schar lx,hx,ly,hy;	/* usually xchar, but hx may be -1 */
 	schar rtype;		/* type of room (zoo, throne, etc...) */
+	schar orig_rtype;	/* same as rtype, but not zeroed later */
 	schar rlit;			/* is the room lit ? */
 	schar doorct;		/* door count */
 	schar fdoor;		/* index for the first door of the room */

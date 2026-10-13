@@ -58,6 +58,7 @@ static struct Bool_Opt
 #else
 	{"asksavedisk", (boolean *)0, FALSE, SET_IN_GAME},
 #endif
+	{"autodescribe", &iflags.autodescribe, TRUE, SET_IN_GAME},
 	{"autodig", &flags.autodig, FALSE, SET_IN_GAME},
 #ifdef ANDROID
 	{"autokick", &flags.autokick, TRUE, SET_IN_GAME},
@@ -107,6 +108,7 @@ static struct Bool_Opt
 	{"fast_map", (boolean *)0, TRUE, SET_IN_FILE},
 #endif
 	{"female", &flags.female, FALSE, DISP_IN_GAME},
+	{"fireassist", &iflags.fireassist, TRUE, SET_IN_GAME},
 	{"fixinv", &flags.invlet_constant, TRUE, SET_IN_GAME},
 #ifdef AMIFLUSH
 	{"flush", &flags.amiflush, FALSE, SET_IN_GAME},
@@ -135,6 +137,7 @@ static struct Bool_Opt
 #else
 	{"invweight", (boolean *)0, FALSE, SET_IN_FILE},
 #endif
+	{"item_actions", &iflags.item_actions, TRUE, SET_IN_GAME},
 /*WAC the keep savefile option...*/
 #ifdef KEEP_SAVE
 	{"keep_savefile", &flags.keep_savefile, FALSE, SET_IN_FILE},
@@ -195,8 +198,8 @@ static struct Bool_Opt
 	{"perm_invent", &flags.perm_invent, FALSE, SET_IN_GAME},
 	{"pickup_thrown", &flags.pickup_thrown, TRUE, SET_IN_GAME},
 	{"popup_dialog",  &iflags.wc_popup_dialog, FALSE, SET_IN_GAME},	/*WC*/
-	{"prayconfirm", &flags.prayconfirm, TRUE, SET_IN_GAME},
 	{"preload_tiles", &iflags.wc_preload_tiles, TRUE, DISP_IN_GAME},	/*WC*/
+	{"price_quotes", &iflags.pricequotes, FALSE, SET_IN_GAME},
 	{"pushweapon", &flags.pushweapon, FALSE, SET_IN_GAME},
 	{"radar", (boolean *)0, FALSE, SET_IN_FILE},	/* OBSOLETE */
 #if defined(MICRO) && !defined(AMIGA)
@@ -206,6 +209,7 @@ static struct Bool_Opt
 #endif
 	{"rest_on_space", &flags.rest_on_space, FALSE, SET_IN_GAME},
 	{"safe_pet", &flags.safe_dog, TRUE, SET_IN_GAME},
+	{"safe_wait", &flags.safe_wait, TRUE, SET_IN_GAME},
 #if defined(OBJ_SANITY)
 	{"sanity_check", &iflags.sanity_check, TRUE, SET_IN_GAME},
 #elif defined(WIZARD)
@@ -365,6 +369,8 @@ static struct Comp_Opt
 						15, SET_IN_FILE },
 # endif
 #endif
+	{ "paranoid_confirmation", "extra prompting in certain situations",
+						28, SET_IN_GAME },
 	{ "pettype",  "your preferred initial pet type", 4, DISP_IN_GAME },
 	{ "pickup_burden",  "maximum burden picked up before prompt",
 						20, SET_IN_GAME },
@@ -385,6 +391,8 @@ static struct Comp_Opt
 	{ "scroll_amount", "amount to scroll map when scroll_margin is reached",
 						20, DISP_IN_GAME }, /*WC*/
 	{ "scroll_margin", "scroll map when this far from the edge", 20, DISP_IN_GAME }, /*WC*/
+	{ "sortloot", "sort object selection lists by description", 4,
+						SET_IN_GAME },
 #ifdef MSDOS
 	{ "soundcard", "type of sound card to use", 20, SET_IN_FILE },
 #endif
@@ -510,6 +518,58 @@ static short n_menu_mapped = 0;
 
 static boolean initial, from_file;
 
+/* paranoia[] - used by parseoptions() and special_handling() */
+static const struct paranoia_opts {
+	int flagmask;		/* which paranoid option */
+	const char *argname;	/* primary name */
+	int argMinLen;		/* minimum number of letters to match */
+	const char *synonym;	/* alternate name (optional) */
+	int synMinLen;
+	const char *explain;	/* for interactive menu */
+} paranoia[] = {
+	/* there are some initial-letter conflicts: "a"ttack vs "A"utoall vs
+	   "a"ll, "attack" takes precedence and "all" isn't present in the
+	   interactive menu, and "d"ie vs "d"eath, synonyms for each other so
+	   doesn't matter; (also "p"ray vs "P"aranoia, "pray" takes precedence
+	   since "Paranoia" is just a synonym for "Confirm"); "b"ones vs
+	   "br"eak-wand, the latter requires at least two letters; "e"at vs
+	   "ex"plore, "cont"inue eating vs "C"onfirm; "wand"-break vs
+	   "Were"-change, both require at least two letters during config
+	   processing and use case-sensitivity for 'O's interactive menu */
+	{ PARANOID_CONFIRM, "Confirm", 1, "Paranoia", 2,
+	  "for \"yes\" confirmations, require \"no\" to reject" },
+	{ PARANOID_QUIT, "quit", 1, "explore", 2,
+	  "yes vs y to quit or to enter explore mode" },
+	{ PARANOID_DIE, "die", 1, "death", 2,
+	  "yes vs y to die (explore mode or debug mode)" },
+	{ PARANOID_BONES, "bones", 1, 0, 0,
+	  "yes vs y to save bones data when dying in debug mode" },
+	{ PARANOID_HIT, "attack", 1, "hit", 1,
+	  "yes vs y to attack a peaceful monster" },
+	{ PARANOID_BREAKWAND, "wand-break", 2, "break-wand", 2,
+	  "yes vs y to break a wand via (a)pply" },
+	{ PARANOID_EATING, "eat", 1, "continue", 4,
+	  "yes vs y to continue eating after first bite when satiated" },
+	{ PARANOID_WERECHANGE, "Were-change", 2, (const char *)0, 0,
+	  "yes vs y to change form when lycanthropy is controllable" },
+	/* extra y/n questions rather than changing y/n to yes/n[o];
+	   they switch to yes/no if paranoid_confirm:Confirm is also set */
+	{ PARANOID_PRAY, "pray", 1, 0, 0,
+	  "y required to pray (supersedes old \"prayconfirm\" option)" },
+	{ PARANOID_TRAP, "trap", 1, "move-trap", 1,
+	  "y required to enter known trap unless considered harmless" },
+	{ PARANOID_AUTOALL, "Autoall", 2, "autoselect-all", 2,
+	  "y required to pick filter choice 'A' for menustyle:Full" },
+	/* not a yes/n[o] vs y/n change nor a y/n addition */
+	{ PARANOID_SWIM, "swim", 1, 0, 0,
+	  "'m' prefix necessary to deliberately walk into lava or water" },
+	{ PARANOID_REMOVE, "Remove", 1, "Takeoff", 1,
+	  "always pick from inventory for Remove and Takeoff" },
+	/* for config file parsing; interactive menu skips these */
+	{ 0, "none", 4, 0, 0, 0 },	/* require full word match */
+	{ ~0, "all", 3, 0, 0, 0 },	/* ditto */
+};
+
 STATIC_DCL void FDECL(doset_add_menu, (winid,const char *,int));
 STATIC_DCL void FDECL(nmcpy, (char *, const char *, int));
 STATIC_DCL void FDECL(escapes, (const char *, char *));
@@ -605,6 +665,7 @@ initoptions()
 	flags.end_around = 2;
     flags.pile_limit = PILE_LIMIT_DFLT;  /* 5 */
 	iflags.runmode = RUN_LEAP;
+	flags.sortloot = 'l';	/* sort only loot by default */
 	iflags.msg_history = 20;
 #ifdef TTY_GRAPHICS
 	iflags.prevmsg_window = 's';
@@ -635,6 +696,7 @@ initoptions()
 		     (genericptr_t)def_inv_order, sizeof flags.inv_order);
 	flags.pickup_types[0] = '\0';
 	flags.pickup_burden = MOD_ENCUMBER;
+	flags.paranoia_bits = PARANOID_PRAY | PARANOID_SWIM | PARANOID_TRAP;
 
 	for (i = 0; i < NUM_DISCLOSURE_OPTIONS; i++)
 		flags.end_disclose[i] = DISCLOSE_PROMPT_DEFAULT_NO;
@@ -738,35 +800,49 @@ nmcpy(dest, src, maxlen)
  */
 STATIC_OVL void
 escapes(cp, tp)
-const char	*cp;
-char *tp;
+const char	*cp;	/* might be 'tp', updating in place */
+char *tp;		/* result is never longer than 'cp' */
 {
+    static NEARDATA const char oct[] = "01234567", dec[] = "0123456789",
+			hex[] = "00112233445566778899aAbBcCdDeEfF";
+    const char *dp;
+    int cval, meta, dcount;
+
     while (*cp)
     {
-	int	cval = 0, meta = 0;
+	/* \M has to be followed by something to do meta conversion,
+	   otherwise it will just be \M which ultimately yields 'M' */
+	meta = (*cp == '\\' && (cp[1] == 'm' || cp[1] == 'M') && cp[2]);
+	if (meta)
+	    cp += 2;
 
-	if (*cp == '\\' && index("mM", cp[1])) {
-		meta = 1;
-		cp += 2;
-	}
-	if (*cp == '\\' && index("0123456789xXoO", cp[1]))
-	{
-	    const char *dp, *hex = "00112233445566778899aAbBcCdDeEfF";
-	    int dcount = 0;
+	cval = dcount = 0; /* for decimal, octal, hexadecimal cases */
+	if ((*cp != '\\' && *cp != '^') || !cp[1]) {
+	    /* simple character, or nothing left for \ or ^ to escape */
+	    cval = *cp++;
+	} else if (*cp == '^') {	/* expand control-character syntax */
+	    cval = (*++cp & 0x1f);
+	    ++cp;
 
-	    cp++;
-	    if (*cp == 'x' || *cp == 'X')
-		for (++cp; (dp = index(hex, *cp)) && (dcount++ < 2); cp++)
-		    cval = (cval * 16) + (dp - hex) / 2;
-	    else if (*cp == 'o' || *cp == 'O')
-		for (++cp; (index("01234567",*cp)) && (dcount++ < 3); cp++)
-		    cval = (cval * 8) + (*cp - '0');
-	    else
-		for (; (index("0123456789",*cp)) && (dcount++ < 3); cp++)
-		    cval = (cval * 10) + (*cp - '0');
-	}
-	else if (*cp == '\\')		/* C-style character escapes */
-	{
+	/* remaining cases are all for backslash; we know cp[1] is not \0 */
+	} else if (index(dec, cp[1])) {
+	    ++cp;	/* move past backslash to first digit */
+	    do {
+		cval = (cval * 10) + (*cp - '0');
+	    } while (*++cp && index(dec, *cp) && ++dcount < 3);
+	} else if ((cp[1] == 'o' || cp[1] == 'O') && cp[2] &&
+		index(oct, cp[2])) {
+	    cp += 2;	/* move past backslash and 'O' */
+	    do {
+		cval = (cval * 8) + (*cp - '0');
+	    } while (*++cp && index(oct, *cp) && ++dcount < 3);
+	} else if ((cp[1] == 'x' || cp[1] == 'X') && cp[2] &&
+		(dp = index(hex, cp[2])) != 0) {
+	    cp += 2;	/* move past backslash and 'X' */
+	    do {
+		cval = (cval * 16) + ((int)(dp - hex) / 2);
+	    } while (*++cp && (dp = index(hex, *cp)) != 0 && ++dcount < 2);
+	} else {			/* C-style character escapes */
 	    switch (*++cp)
 	    {
 	    case '\\': cval = '\\'; break;
@@ -776,18 +852,12 @@ char *tp;
 	    case 'r': cval = '\r'; break;
 	    default: cval = *cp;
 	    }
-	    cp++;
+	    ++cp;
 	}
-	else if (*cp == '^')		/* expand control-character syntax */
-	{
-	    cval = (*++cp & 0x1f);
-	    cp++;
-	}
-	else
-	    cval = *cp++;
+
 	if (meta)
 	    cval |= 0x80;
-	*tp++ = cval;
+	*tp++ = (char) cval;
     }
     *tp = '\0';
 }
@@ -2072,6 +2142,72 @@ goodfruit:
 		return;
 	}
 
+	/* user can change required response for some prompts (quit, die,
+	   hit), or add an extra prompt (pray, Remove) that isn't ordinarily
+	   there */
+	fullname = "paranoid_confirmation";
+	if (match_optname(opts, fullname, 8, TRUE)) {
+		/* throw away the old settings whenever we process a new one
+		   [clearing old flags is essential for handling the default
+		   paranoid_confirm:pray sanely] */
+		flags.paranoia_bits = 0;	/* clear all */
+		if (negated) {
+		    flags.paranoia_bits = 0;	/* [now redundant...] */
+		} else if ((op = string_for_opt(opts, FALSE)) != 0) {
+		    char *pp, buf[BUFSZ];
+
+		    (void) strncpy(buf, op, sizeof buf - 1);
+		    buf[sizeof buf - 1] = '\0';
+		    op = mungspaces(buf);
+		    for (;;) {
+			/* We're looking to parse
+			   "paranoid_confirm:whichone wheretwo whothree"
+			   and "paranoid_confirm:" prefix has already
+			   been stripped off by the time we get here */
+			pp = index(op, ' ');
+			if (pp) *pp = '\0';
+			/* we aren't matching option names but match_optname
+			   does what we want once we've broken the space
+			   delimited aggregate into separate tokens */
+			for (i = 0; i < SIZE(paranoia); ++i) {
+			    if (match_optname(op, paranoia[i].argname,
+					      paranoia[i].argMinLen, FALSE) ||
+				(paranoia[i].synonym &&
+				 match_optname(op, paranoia[i].synonym,
+					       paranoia[i].synMinLen, FALSE))) {
+				if (paranoia[i].flagmask)
+				    flags.paranoia_bits |= paranoia[i].flagmask;
+				else	/* 0 == "none", so clear all */
+				    flags.paranoia_bits = 0;
+				break;
+			    }
+			}
+			if (i == SIZE(paranoia)) {
+			    /* didn't match anything, so arg is bad;
+			       any flags already set will stay set */
+			    badoption(opts);
+			    break;
+			}
+			/* move on to next token */
+			if (pp)
+			    op = pp + 1;
+			else
+			    break;	/* no next token */
+		    } /* for(;;) */
+		}
+		return;
+	}
+
+	/* accept deprecated boolean; superseded by paranoid_confirm:pray */
+	fullname = "prayconfirm";
+	if (match_optname(opts, fullname, 4, FALSE)) {
+		if (negated)
+		    flags.paranoia_bits &= ~PARANOID_PRAY;
+		else
+		    flags.paranoia_bits |= PARANOID_PRAY;
+		return;
+	}
+
 	/* maximum burden picked up before prompt (Warren Cheung) */
 	fullname = "pickup_burden";
 	if (match_optname(opts, fullname, 8, TRUE)) {
@@ -2214,7 +2350,7 @@ goodfruit:
 		 * There is an array in flags:
 		 *	end_disclose[NUM_DISCLOSURE_OPT];
 		 * with option settings for the each of the following:
-		 * iagvc [see disclosure_options in decl.c]:
+		 * iagvco [see disclosure_options in decl.c]:
 		 * Legal setting values in that array are:
 		 *	DISCLOSE_PROMPT_DEFAULT_YES  ask with default answer yes
 		 *	DISCLOSE_PROMPT_DEFAULT_NO   ask with default answer no
@@ -2333,6 +2469,25 @@ goodfruit:
 				badoption(opts);
 #endif
 	    return;
+	}
+
+	fullname = "sortloot";
+	if (match_optname(opts, fullname, 5, TRUE)) {
+		if (negated) {
+			flags.sortloot = 'n';
+		} else if ((op = string_for_env_opt(fullname, opts, FALSE)) != 0) {
+		    switch (lowc(*op)) {
+		    case 'n':	/* none */
+		    case 'l':	/* loot (pickup) */
+		    case 'f':	/* full (pickup + invent) */
+			flags.sortloot = lowc(*op);
+			break;
+		    default:
+			badoption(opts);
+			break;
+		    }
+		}
+		return;
 	}
 
 	fullname = "suppress_alert";
@@ -2968,6 +3123,8 @@ static NEARDATA const char *runmodes[] = {
 	"teleport", "run", "walk", "crawl"
 };
 
+static NEARDATA const char *sortltype[] = { "none", "loot", "full" };
+
 /*
  * Convert the given string of object classes to a string of default object
  * symbols.
@@ -3216,7 +3373,9 @@ doset()
 			getlin(buf, buf2);
 			if (buf2[0] == '\033')
 			    continue;
-			Sprintf(buf, "%s:%s", compopt[opt_indx].name, buf2);
+			Sprintf(buf, "%s:", compopt[opt_indx].name);
+			(void) strncat(eos(buf), buf2,
+				       (sizeof buf - 1 - strlen(buf)));
 			/* pass the buck */
 			parseoptions(buf, setinitial, fromfile);
 		    }
@@ -3290,6 +3449,37 @@ boolean setinitial,setfromfile;
 	}
 	destroy_nhwindow(tmpwin);
 	retval = TRUE;
+    } else if (!strcmp("paranoid_confirmation", optname)) {
+	menu_item *paranoia_picks = (menu_item *)0;
+
+	tmpwin = create_nhwindow(NHW_MENU);
+	start_menu(tmpwin);
+	for (i = 0; paranoia[i].flagmask != 0; ++i) {
+		if (paranoia[i].flagmask == PARANOID_BONES && !wizard)
+		    continue;
+		any.a_void = 0;
+		any.a_int = paranoia[i].flagmask;
+		add_menu(tmpwin, NO_GLYPH, &any, *paranoia[i].argname, 0,
+			 ATR_NONE, paranoia[i].explain,
+			 (flags.paranoia_bits & paranoia[i].flagmask) ?
+			 MENU_SELECTED : MENU_UNSELECTED);
+	}
+	end_menu(tmpwin, "Actions requiring extra confirmation:");
+	i = select_menu(tmpwin, PICK_ANY, &paranoia_picks);
+	if (i >= 0) {
+		/* player didn't cancel; we reset all the paranoia options
+		   here even if there were no items picked, since user
+		   could have toggled off preselected ones to end up with 0 */
+		flags.paranoia_bits = 0;
+		if (i > 0) {
+		    /* at least 1 item set, either preselected or newly picked */
+		    while (--i >= 0)
+			flags.paranoia_bits |= paranoia_picks[i].item.a_int;
+		    free((genericptr_t)paranoia_picks);
+		}
+	}
+	destroy_nhwindow(tmpwin);
+	retval = TRUE;
     } else if (!strcmp("pickup_types", optname)) {
 	/* parseoptions will prompt for the list of types */
 	parseoptions(strcpy(buf, "pickup_types"), setinitial, setfromfile);
@@ -3302,7 +3492,8 @@ boolean setinitial,setfromfile;
          * must correspond to disclosure_options in decl.h
          */
 	static const char *disclosure_names[] = {
-		"inventory", "attributes", "vanquished", "genocides", "conduct"
+		"inventory", "attributes", "vanquished", "genocides", "conduct",
+		"dungeon overview"
 	};
 	int disc_cat[NUM_DISCLOSURE_OPTIONS];
 	const char *disclosure_name;
@@ -3373,6 +3564,24 @@ boolean setinitial,setfromfile;
 	if (select_menu(tmpwin, PICK_ONE, &mode_pick) > 0) {
 		iflags.runmode = mode_pick->item.a_int - 1;
 		free((genericptr_t)mode_pick);
+	}
+	destroy_nhwindow(tmpwin);
+	retval = TRUE;
+    } else if (!strcmp("sortloot", optname)) {
+	const char *sortl_name;
+	menu_item *sortl_pick = (menu_item *)0;
+	tmpwin = create_nhwindow(NHW_MENU);
+	start_menu(tmpwin);
+	for (i = 0; i < SIZE(sortltype); i++) {
+		sortl_name = sortltype[i];
+		any.a_char = *sortl_name;
+		add_menu(tmpwin, NO_GLYPH, &any, *sortl_name, 0,
+			 ATR_NONE, sortl_name, MENU_UNSELECTED);
+	}
+	end_menu(tmpwin, "Select loot sorting type:");
+	if (select_menu(tmpwin, PICK_ONE, &sortl_pick) > 0) {
+		flags.sortloot = sortl_pick->item.a_char;
+		free((genericptr_t)sortl_pick);
 	}
 	destroy_nhwindow(tmpwin);
 	retval = TRUE;
@@ -3506,7 +3715,7 @@ boolean setinitial,setfromfile;
 	int totalapes = 0, numapes[2] = {0,0};
 	menu_item *pick_list = (menu_item *)0;
 	anything any;
-	char apebuf[BUFSZ];
+	char apebuf[2 + BUFSZ]; /* so &apebuf[1] is BUFSZ long for getlin() */
 	struct autopickup_exception *ape;
 	static const char *action_titles[] = {
 		"a", "add new autopickup exception",
@@ -3754,6 +3963,15 @@ char *buf;
 	else if (!strcmp(optname, "palette")) 
 		Sprintf(buf, "%s", get_color_string());
 #endif
+	else if (!strcmp(optname, "paranoid_confirmation")) {
+		char tmpbuf[BUFSZ];
+
+		tmpbuf[0] = '\0';
+		for (i = 0; paranoia[i].flagmask != 0; ++i)
+		    if (flags.paranoia_bits & paranoia[i].flagmask)
+			Sprintf(eos(tmpbuf), " %s", paranoia[i].argname);
+		Strcpy(buf, tmpbuf[0] ? &tmpbuf[1] : "none");
+	}
 	else if (!strcmp(optname, "pettype")) 
 		Sprintf(buf, "%s", (preferred_pet == 'c') ? "cat" :
 				(preferred_pet == 'd') ? "dog" :
@@ -3771,6 +3989,13 @@ char *buf;
 		Sprintf(buf, "%s", rolestring(flags.initrole, roles, name.m));
 	else if (!strcmp(optname, "runmode"))
 		Sprintf(buf, "%s", runmodes[iflags.runmode]);
+	else if (!strcmp(optname, "sortloot")) {
+		for (i = 0; i < SIZE(sortltype); i++)
+		    if (flags.sortloot == sortltype[i][0]) {
+			Strcpy(buf, sortltype[i]);
+			break;
+		    }
+	}
 	else if (!strcmp(optname, "scores")) {
 		Sprintf(buf, "%d top/%d around%s", flags.end_top,
 				flags.end_around, flags.end_own ? "/own" : "");

@@ -718,9 +718,13 @@ struct monst *magr, *mdef;
 
     mhp = mdef->mhp;
     m_shot.n = multishot;
-    for (m_shot.i = 1; m_shot.i <= m_shot.n; m_shot.i++)
+    for (m_shot.i = 1; m_shot.i <= m_shot.n; m_shot.i++) {
 	m_throw(magr, magr->mx, magr->my, sgn(tbx), sgn(tby),
 		distmin(magr->mx, magr->my, mdef->mx, mdef->my), obj);
+	/* the thrower might have been killed (gas spore explosion,
+	   perhaps), dropping inventory and freeing obj via a merge */
+	if (DEADMONSTER(magr)) break;
+    }
     m_shot.n = m_shot.i = 0;
     m_shot.o = STRANGE_OBJECT;
     m_shot.s = FALSE;
@@ -2010,8 +2014,18 @@ int mdead;
 		    if (!rn2(4)) tmp = 127;
 		    if (magr->mcansee && haseyes(madat) && mdef->mcansee &&
 			(perceives(madat) || !mdef->minvis)) {
-			Sprintf(buf, "%s gaze is reflected by %%s %%s.",
-				s_suffix(mon_nam(mdef)));
+			const char *p;
+			char *q;
+
+			/* buf will be used as a format string by
+			   mon_reflects(); the name might be player-given
+			   and contain '%', so double any of those */
+			for (p = s_suffix(mon_nam(mdef)), q = buf;
+				*p && q < &buf[BUFSZ - 40]; p++) {
+			    if (*p == '%') *q++ = '%';
+			    *q++ = *p;
+			}
+			Strcpy(q, " gaze is reflected by %s %s.");
 			if (mon_reflects(magr,
 					 canseemon(magr) ? buf : (char *)0))
 				return(mdead|mhit);

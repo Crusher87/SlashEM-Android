@@ -1633,6 +1633,10 @@ add_to_migration(obj)
     if (obj->where != OBJ_FREE)
 	panic("add_to_migration: obj not free");
 
+    /* lock picking context becomes stale if it's for this object */
+    if (Is_container(obj))
+	maybe_reset_pick(obj);
+
     obj->where = OBJ_MIGRATING;
     obj->nobj = migrating_objs;
     migrating_objs = obj;

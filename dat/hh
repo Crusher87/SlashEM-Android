@@ -30,6 +30,7 @@ X       explore switch the game to explore (discovery) mode
 ^A      again   redo the previous command (^A denotes the keystroke CTRL-A)
 ^R      redraw  redraw the screen
 ^P      prevmsg repeat previous message (subsequent ^P's repeat earlier ones)
+^O      overview show an overview of the dungeon levels you have visited
 #               introduces an extended command (#? for a list of them)
 
 Game commands:

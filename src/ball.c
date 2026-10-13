@@ -44,7 +44,8 @@ ballfall()
 		    } else if (flags.verbose)
 			Your("%s does not protect you.", xname(uarmh));
 		}
-		losehp(dmg, "crunched in the head by an iron ball",
+		losehp(Maybe_Half_Phys(dmg),
+		       "crunched in the head by an iron ball",
 			NO_KILLER_PREFIX);
 	}
 }
@@ -683,7 +684,8 @@ xchar x, y;
 		    Your("%s %s is severely damaged.",
 					(side == LEFT_SIDE) ? "left" : "right",
 					body_part(LEG));
-		    losehp(2, "leg damage from being pulled out of a bear trap",
+		    losehp(Maybe_Half_Phys(2),
+			   "leg damage from being pulled out of a bear trap",
 					KILLED_BY);
 		}
 		break;
@@ -723,7 +725,7 @@ xchar x, y;
 	newsym(u.ux0,u.uy0);		/* clean up old position */
 	if (u.ux0 != u.ux || u.uy0 != u.uy) {
 	    spoteffects(TRUE);
-	    if (In_sokoban(&u.uz))
+	    if (Sokoban)
 		change_luck(-1);	/* Sokoban guilt */
 	}
     }
@@ -772,20 +774,23 @@ drag_down()
 	if (forward) {
 		if(rn2(6)) {
 			pline_The("iron ball drags you downstairs!");
-			losehp(rnd(6), "dragged downstairs by an iron ball",
+			losehp(Maybe_Half_Phys(rnd(6)),
+			       "dragged downstairs by an iron ball",
 				NO_KILLER_PREFIX);
 			litter();
 		}
 	} else {
 		if(rn2(2)) {
 			pline_The("iron ball smacks into you!");
-			losehp(rnd(20), "iron ball collision", KILLED_BY_AN);
+			losehp(Maybe_Half_Phys(rnd(20)), "iron ball collision",
+			       KILLED_BY_AN);
 			exercise(A_STR, FALSE);
 			dragchance -= 2;
 		}
 		if( (int) dragchance >= rnd(6)) {
 			pline_The("iron ball drags you downstairs!");
-			losehp(rnd(3), "dragged downstairs by an iron ball",
+			losehp(Maybe_Half_Phys(rnd(3)),
+			       "dragged downstairs by an iron ball",
 				NO_KILLER_PREFIX);
 			exercise(A_STR, FALSE);
 			litter();

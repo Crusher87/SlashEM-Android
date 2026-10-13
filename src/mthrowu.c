@@ -711,9 +711,15 @@ struct monst *mtmp;
 	}
 
 	m_shot.n = multishot;
-	for (m_shot.i = 1; m_shot.i <= m_shot.n; m_shot.i++)
+	for (m_shot.i = 1; m_shot.i <= m_shot.n; m_shot.i++) {
 	    m_throw(mtmp, mtmp->mx, mtmp->my, sgn(tbx), sgn(tby),
 		    distmin(mtmp->mx, mtmp->my, mtmp->mux, mtmp->muy), otmp);
+	    /* conceptually all N missiles are in flight at once, but
+	       if mtmp gets killed (shot kills adjacent gas spore and
+	       triggers explosion, perhaps), inventory will be dropped
+	       and otmp might go away via merging into another stack */
+	    if (DEADMONSTER(mtmp)) break;
+	}
 	m_shot.n = m_shot.i = 0;
 	m_shot.o = STRANGE_OBJECT;
 	m_shot.s = FALSE;

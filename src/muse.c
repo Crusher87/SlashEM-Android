@@ -452,7 +452,7 @@ struct monst *mtmp;
 		    && !mtmp->isshk && !mtmp->isgd && !mtmp->ispriest
 		    && !is_floater(mtmp->data)
 		    /* monsters digging in Sokoban can ruin things */
-		    && !In_sokoban(&u.uz)
+		    && !Sokoban
 		    /* digging wouldn't be effective; assume they know that */
 		    && !(levl[x][y].wall_info & W_NONDIGGABLE)
 		    && !(Is_botlevel(&u.uz) || In_endgame(&u.uz))
@@ -1488,6 +1488,7 @@ struct monst *mtmp;
 	    	register int x, y;
 		/* don't use monster fields after killing it */
 		boolean confused = (mtmp->mconf ? TRUE : FALSE);
+		boolean is_cursed = otmp->cursed;
 		int mmx = mtmp->mx, mmy = mtmp->my;
 
 		mreadmsg(mtmp, otmp);
@@ -1570,9 +1571,9 @@ struct monst *mtmp;
 	    	    	}
 		    }
 		}
-		m_useup(mtmp, otmp);
+		m_useup(mtmp, otmp);	/* otmp is now gone */
 		/* Attack the player */
-		if (distmin(mmx, mmy, u.ux, u.uy) == 1 && !otmp->cursed) {
+		if (distmin(mmx, mmy, u.ux, u.uy) == 1 && !is_cursed) {
 		    int dmg;
 		    struct obj *otmp2;
 
@@ -1604,7 +1605,8 @@ struct monst *mtmp;
 			stackobj(otmp2);
 			newsym(u.ux, u.uy);
 		    }
-		    if (dmg) losehp(dmg, "scroll of earth", KILLED_BY_AN);
+		    if (dmg) losehp(Maybe_Half_Phys(dmg), "scroll of earth",
+				    KILLED_BY_AN);
 		}
 	    xxx_noobj:
 
@@ -2347,6 +2349,9 @@ struct obj *obj;
 boolean by_you;
 boolean stoning;
 {
+    boolean acid = (obj->otyp == POT_ACID ||
+		    (obj->otyp == CORPSE && acidic(&mons[obj->corpsenm]))),
+	    lizard = (obj->otyp == CORPSE && obj->corpsenm == PM_LIZARD);
     int nutrit = (obj->otyp == CORPSE) ? dog_nutrition(mon, obj) : 0;
     /* also sets meating */
 
@@ -2365,8 +2370,8 @@ boolean stoning;
     } else if (flags.soundok)
 	You_hear("%s.", (obj->otyp == POT_ACID) ? "drinking" : "chewing");
     m_useup(mon, obj);
-    if (((obj->otyp == POT_ACID) || acidic(&mons[obj->corpsenm])) &&
-		    !resists_acid(mon)) {
+    /* obj is now gone */
+    if (acid && !resists_acid(mon)) {
 	mon->mhp -= rnd(15);
 	pline("%s has a very bad case of stomach acid.",
 	    Monnam(mon));
@@ -2384,7 +2389,7 @@ boolean stoning;
 	else
 	    pline("%s seems limber!", Monnam(mon));
     }
-    if (obj->otyp == CORPSE && obj->corpsenm == PM_LIZARD && mon->mconf) {
+    if (lizard && mon->mconf) {
 	mon->mconf = 0;
 	if (canseemon(mon))
 	    pline("%s seems steadier now.", Monnam(mon));

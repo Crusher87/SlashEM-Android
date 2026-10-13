@@ -161,6 +161,8 @@ vobj_at(x,y)
 }
 #endif	/* else vobj_at() is defined in display.h */
 
+#define remember_topology(x, y) (lastseentyp[x][y] = levl[x][y].typ)
+
 /*
  * magic_map_background()
  *
@@ -193,6 +195,8 @@ magic_map_background(x, y, show)
 	lev->glyph = cmap_to_glyph(cmap);
 #endif
     if (show || transp) show_glyph(x,y, cmap_to_glyph(cmap));
+
+    remember_topology(x, y);
 }
 
 /*
@@ -378,6 +382,8 @@ unmap_object(x, y)
 	map_trap(trap,show);						\
     else								\
 	map_background(x,y,show);					\
+									\
+    remember_topology(x, y);						\
 }
 #else	/* DISPLAY_LAYERS */
 #define _map_location(x,y,show)						\
@@ -391,6 +397,8 @@ unmap_object(x, y)
 	map_trap(trap,show);						\
     else								\
 	map_background(x,y,show);					\
+									\
+    remember_topology(x, y);						\
 }
 #endif	/* DISPLAY_LAYERS */
 
@@ -489,7 +497,11 @@ display_monster(x, y, mon, sightflags, worm_tail)
 #else
 		levl[x][y].glyph = glyph;
 #endif
-		if (!sensed) show_glyph(x,y, glyph);
+		if (!sensed) {
+		    show_glyph(x,y, glyph);
+		    /* override real topology with mimic's fake one */
+		    lastseentyp[x][y] = cmap_to_type(mon->mappearance);
+		}
 		break;
 	    }
 

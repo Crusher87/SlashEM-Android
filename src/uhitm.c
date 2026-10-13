@@ -3,6 +3,7 @@
 /* NetHack may be freely redistributed.  See license for details. */
 
 #include "hack.h"
+#include "eshk.h"
 
 STATIC_DCL boolean FDECL(known_hitum, (struct monst *,int,int *,struct attack *));
 STATIC_DCL void FDECL(steal_it, (struct monst *, struct attack *));
@@ -230,8 +231,16 @@ boolean barehanded;
 			return retval;
 		}
 		if (canspotmon(mtmp)) {
+			/* walking into a shopkeeper you owe money to offers
+			   to pay the bill instead of attacking */
+			if (mtmp->isshk && !flags.forcefight &&
+				!flags.run && !flags.travel && inhishop(mtmp) &&
+				(ESHK(mtmp)->billct || ESHK(mtmp)->debit)) {
+				flags.move = dopay() ? 1 : 0;
+				return 0;
+			}
 			Sprintf(qbuf, "Really attack %s?", mon_nam(mtmp));
-			if (yn(qbuf) != 'y') {
+			if (!paranoid_query(ParanoidHit, qbuf)) {
 				/* Stormbringer is not tricked so easily */
 				if (!barehanded && u.twoweap && uswapwep &&
 				  uswapwep->oartifact == ART_STORMBRINGER) {
@@ -397,10 +406,12 @@ register struct monst *mtmp;
 		    Strcpy(buf, y_monnam(mtmp));
 		    buf[0] = highc(buf[0]);
 		    You("stop.  %s is in the way!", buf);
+		    nomul(0);	/* stop running or travelling */
 		    return(TRUE);
 		} else if ((mtmp->mfrozen || (! mtmp->mcanmove)
 				|| (mtmp->data->mmove == 0)) && rn2(6)) {
 		    pline("%s doesn't seem to move!", Monnam(mtmp));
+		    nomul(0);
 		    return(TRUE);
 		} else return(FALSE);
 	    }
@@ -1546,17 +1557,20 @@ int thrown;
 		char *whom = mon_nam(mon);
 		char silverobjbuf[BUFSZ];
 
+		silverobjbuf[0] = '\0';
 		if (canspotmon(mon)) {
 		    if (barehand_silver_rings == 1)
 			fmt = "Your silver ring sears %s!";
 		    else if (barehand_silver_rings == 2)
 			fmt = "Your silver rings sear %s!";
 		    else if (silverobj && saved_oname[0]) {
-		    	Sprintf(silverobjbuf, "Your %s%s %s %%s!",
+			/* saved_oname[] might contain a player-given name,
+			   so it must not become part of a format string */
+		    	Sprintf(silverobjbuf, "Your %s%s %s",
 		    		strstri(saved_oname, "silver") ?
 					"" : "silver ",
 				saved_oname, vtense(saved_oname, "sear"));
-		    	fmt = silverobjbuf;
+		    	fmt = "%s %s!";
 		    } else
 			fmt = "The silver sears %s!";
 		} else {
@@ -1566,7 +1580,10 @@ int thrown;
 		/* note: s_suffix returns a modifiable buffer */
 		if (!noncorporeal(mdat))
 		    whom = strcat(s_suffix(whom), " flesh");
-		pline(fmt, whom);
+		if (silverobjbuf[0])
+		    pline(fmt, silverobjbuf, whom);
+		else
+		    pline(fmt, whom);
 	}
 
 	if (needpoismsg)

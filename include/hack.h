@@ -105,6 +105,10 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 #define MATCH_WARN_OF_MON(mon)	 (Warn_of_mon && flags.warntype && \
 		   		 (flags.warntype & (mon)->data->mflags2))
 
+/* ball and chain are on no object list while the hero is engulfed */
+#define BALL_IN_MON	(u.uswallow && uball && uball->where == OBJ_FREE)
+#define CHAIN_IN_MON	(u.uswallow && uchain && uchain->where == OBJ_FREE)
+
 #include "trap.h"
 #include "flag.h"
 #include "rm.h"
@@ -113,6 +117,18 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 #include "engrave.h"
 #include "rect.h"
 #include "region.h"
+
+/* sortloot() return type; needed before extern.h */
+struct sortloot_item {
+	struct obj *obj;
+	char *str;	/* result of loot_xname(obj) in some cases, otherwise null */
+	int indx;	/* signed int, because sortloot()'s qsort comparison routine
+			   assumes (a->indx - b->indx) might yield a negative result */
+	xchar orderclass; /* order rather than object class; 0 => not yet init'd */
+	xchar subclass;	/* subclass for some classes */
+	xchar disco;	/* discovery status */
+};
+typedef struct sortloot_item Loot;
 
 #ifdef USE_TRAMPOLI /* This doesn't belong here, but we have little choice */
 #undef NDECL
@@ -159,6 +175,12 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 #define FEEL_COCKATRICE   0x20  /* engage cockatrice checks and react */
 #define SIGNAL_CANCEL	  0x40	/* return -4 rather than 0 if explicit cancel */
 
+/* control flags for sortloot() */
+#define SORTLOOT_PACK	  0x01
+#define SORTLOOT_INVLET	  0x02
+#define SORTLOOT_LOOT	  0x04
+#define SORTLOOT_PETRIFY  0x20	/* override filter func for c-trice corpses */
+
 /* Flags to control query_category() */
 /* BY_NEXTHERE used by query_category() too, so skip 0x01 */
 #define UNPAID_TYPES 0x02
@@ -188,11 +210,13 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 #define NOWEBMSG	0x01	/* suppress stumble into web message */
 #define FORCEBUNGLE	0x02	/* adjustments appropriate for bungling */
 #define RECURSIVETRAP	0x04	/* trap changed into another type this same turn */
+#define TOOKPLUNGE	0x08	/* used '>' to enter pit below you */
 
 /* Flags to control test_move in hack.c */
 #define DO_MOVE		0	/* really doing the move */
 #define TEST_MOVE	1	/* test a normal move (move there next) */
 #define TEST_TRAV	2	/* test a future travel location */
+#define TEST_TRAP	3	/* check if a future travel loc is a trap */
 
 /*** some utility macros ***/
 #define yn(query) yn_function(query,ynchars, 'n')
@@ -297,6 +321,13 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 /* negative armor class is randomly weakened to prevent invulnerability */
 #define AC_VALUE(AC)	((AC) >= 0 ? (AC) : -rnd(-(AC)))
 
+/* physical damage to the hero adjusted for Half_physical_damage (from
+ * NetHack 3.6); dmg is evaluated once, so a dice roll can be passed
+ * directly.  Take care not to apply it twice to the same damage.
+ */
+#define Maybe_Half_Phys(dmg) \
+	((Half_physical_damage) ? (((dmg) + 1) / 2) : (dmg))
+
 #if defined(MICRO) && !defined(__DJGPP__)
 #define getuid() 1
 #define getlogin() ((char *)0)
@@ -352,6 +383,42 @@ extern int repeat_hit;
 #define RAW_STAT_STUNNED	0x00000020
 #define RAW_STAT_HALLUCINATION	0x00000040
 #define RAW_STAT_SLIMED		0x00000080
+
+/* #chronicle (pline.c): kinds of logged events, from NetHack 5.0 */
+#define LL_NONE       0x0000L /* nothing in particular */
+#define LL_WISH       0x0001L /* wishes */
+#define LL_ACHIEVE    0x0002L /* achievements, new branches, invocation */
+#define LL_UMONST     0x0004L /* killed a unique monster */
+#define LL_DIVINEGIFT 0x0008L /* sacrifice gifts, crowning */
+#define LL_LIFESAVE   0x0010L /* death averted */
+#define LL_CONDUCT    0x0020L /* first violation of a conduct */
+#define LL_ARTIFACT   0x0040L /* artifact bestowed, found or made */
+#define LL_GENOCIDE   0x0080L /* genocides */
+#define LL_KILLEDPET  0x0100L /* killed a tame monster */
+#define LL_ALIGNMENT  0x0200L /* changed alignment */
+#define LL_MINORAC    0x1000L /* minor achievements */
+#define LL_SPOILER    0x2000L /* reveals something: not shown in-game
+				 (except in wizard mode) */
+#define LL_DUMP       0x4000L /* none of the above but show at end */
+#define LL_DEBUG      0x8000L /* other details, like each new level */
+
+/* #chronicle events logged only the first time (gamelog_first()) */
+#define GLF_FOOD	  0x00000001L	/* conducts */
+#define GLF_UNVEGAN	  0x00000002L
+#define GLF_UNVEGETARIAN  0x00000004L
+#define GLF_GNOSTIC	  0x00000008L
+#define GLF_WEAPHIT	  0x00000010L
+#define GLF_KILLER	  0x00000020L
+#define GLF_LITERATE	  0x00000040L
+#define GLF_POLYPILE	  0x00000080L
+#define GLF_POLYSELF	  0x00000100L
+#define GLF_WISH	  0x00000200L
+#define GLF_CELIBACY	  0x00000400L
+#define GLF_AMULET	  0x00001000L	/* invocation items and such */
+#define GLF_BELL	  0x00002000L
+#define GLF_CANDELABRUM	  0x00004000L
+#define GLF_BOOK	  0x00008000L
+#define GLF_QUESTART	  0x00010000L
 
 /* The function argument to qsort() requires a particular
  * calling convention under WINCE which is not the default

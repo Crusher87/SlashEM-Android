@@ -10,6 +10,7 @@
 #include "hack.h"
 #include "mfndpos.h"
 #include "edog.h"
+#include "eshk.h"	/* logdeadmon() */
 #include "artifact.h"
 #include "display.h"
 #include "global.h" 
@@ -56,6 +57,7 @@ STATIC_VAR short cham_to_pm[];
 STATIC_DCL struct obj *FDECL(make_corpse,(struct monst *));
 STATIC_DCL void FDECL(m_detach, (struct monst *, struct permonst *));
 STATIC_DCL void FDECL(lifesaved_monster, (struct monst *));
+STATIC_DCL void FDECL(logdeadmon, (struct monst *,int));
 static void FDECL(unpoly_monster, (struct monst *));
 
 /* convert the monster index of an undead to its living counterpart */
@@ -684,6 +686,11 @@ movemon()
     */
 
     for(mtmp = fmon; mtmp; mtmp = nmtmp) {
+	/* end monster movement early if hero is flagged to leave the level */
+	if (u.utotype) {
+	    somebody_can_move = FALSE;
+	    break;
+	}
 	nmtmp = mtmp->nmon;
 
 	/* Find a monster that we have not treated yet.	 */
@@ -1319,7 +1326,7 @@ impossible("A monster looked at a very strange trap of type %d.", ttmp->ttyp);
 				      || (!is_flyer(mdat)
 				    && !is_floater(mdat)
 				    && !is_clinger(mdat))
-				      || In_sokoban(&u.uz))
+				      || Sokoban)
 				&& (ttmp->ttyp != SLP_GAS_TRAP ||
 				    !resists_sleep(mon))
 				&& (ttmp->ttyp != BEAR_TRAP ||
@@ -1490,7 +1497,9 @@ register struct monst *mon;
 
 	if (fmon == (struct monst *)0)  panic ("relmon: no fmon available.");
 
-	remove_monster(mon->mx, mon->my);
+	/* a monster which failed to arrive on this level isn't on the map */
+	if (level.monsters[mon->mx][mon->my] == mon)
+	    remove_monster(mon->mx, mon->my);
 
 	if(mon == fmon) fmon = fmon->nmon;
 	else {
@@ -1614,6 +1623,53 @@ struct monst *mtmp;
 	}
 }
 
+/* #chronicle: log the death of a unique monster or of a shopkeeper
+   (adapted from NetHack 5.0) */
+STATIC_OVL void
+logdeadmon(mtmp, mndx)
+struct monst *mtmp;
+int mndx;
+{
+	extern const struct shclass shtypes[];	/* shknam.c */
+	int howmany = mvitals[mndx].died;
+	char shkdetail[BUFSZ], xtra[40];
+	const char *mkilled;
+	long llevent_type = LL_UMONST;
+	boolean herodidit = !flags.mon_moving;
+
+	if (!(mtmp->data->geno & G_UNIQ) && !(mtmp->isshk && !mtmp->mrevived))
+	    return;
+
+	shkdetail[0] = '\0';
+	if (mtmp->isshk) {
+	    /* the shared kill counter doesn't work for shopkeepers */
+	    howmany = 1;
+	    Sprintf(shkdetail, ", the %s %s%s",
+		    shtypes[ESHK(mtmp)->shoptype - SHOPBASE].name,
+		    mtmp->female ? "proprietrix" : "proprietor",
+		    herodidit ? "" : ",");
+	}
+	/* killing a unique more than once isn't logged every time */
+	if (howmany <= 3 || howmany == 5 || howmany == 10 || howmany == 25
+		|| (howmany % 50) == 0) {
+	    if (howmany == 1 || mtmp->iswiz || is_rider(mtmp->data))
+		llevent_type |= LL_ACHIEVE;
+	    xtra[0] = '\0';
+	    if (howmany > 1)
+		Sprintf(xtra, " (%d%s time)", howmany, ordin(howmany));
+	    mkilled = nonliving(mtmp->data) ? "destroyed" : "killed";
+	    if (herodidit)
+		livelog_printf(llevent_type, "%s %s%s%s", mkilled,
+			       x_monnam(mtmp, ARTICLE_THE, (char *)0,
+					EXACT_NAME, FALSE),
+			       shkdetail, xtra);
+	    else	/* trap, pet, conflict */
+		livelog_printf(llevent_type, "%s%s has been %s%s",
+			       x_monnam(mtmp, ARTICLE_THE, (char *)0,
+					EXACT_NAME, FALSE),
+			       shkdetail, mkilled, xtra);
+	}
+}
 
 void
 mondead(mtmp)
@@ -1680,6 +1736,7 @@ register struct monst *mtmp;
 	/* KMH -- Yes, keep spell monsters in the count */
 	tmp = monsndx(mtmp->data);
 	if (mvitals[tmp].died < 255) mvitals[tmp].died++;
+	logdeadmon(mtmp, tmp);	/* #chronicle */
 
 	/* if it's a (possibly polymorphed) quest leader, mark him as dead */
 	if (mtmp->m_id == quest_status.leader_m_id)
@@ -2019,6 +2076,7 @@ xkilled(mtmp, dest)
 	register struct trap *t;
 	boolean redisp = FALSE;
 	boolean wasinside = u.uswallow && (u.ustuck == mtmp);
+	boolean killedpet = FALSE;
 
 
 	/* KMH, conduct */
@@ -2051,7 +2109,10 @@ xkilled(mtmp, dest)
 			    */
 
 	/* your pet knows who just killed it...watch out */
-	if (mtmp->mtame && !mtmp->isminion) EDOG(mtmp)->killed_by_u = 1;
+	if (mtmp->mtame && !mtmp->isminion) {
+	    EDOG(mtmp)->killed_by_u = 1;
+	    killedpet = TRUE;
+	}
 
 	/* dispose of monster and make cadaver */
 	if(stoned) monstone(mtmp);
@@ -2068,6 +2129,11 @@ xkilled(mtmp, dest)
 		    pline("Maybe not...");
 		return;
 	}
+	if (killedpet)		/* #chronicle */
+	    livelog_printf(LL_KILLEDPET, "murdered %s%s%s faithful %s",
+			   mtmp->mnamelth ? NAME(mtmp) : "",
+			   mtmp->mnamelth ? ", " : "", uhis(),
+			   mtmp->data->mname);
 
 	mdat = mtmp->data; /* note: mondead can change mtmp->data */
 	mndx = monsndx(mdat);
@@ -2220,6 +2286,16 @@ mnexto(mtmp)	/* Make monster mtmp next to you (if possible) */
 	return;
 }
 
+/* A monster could not be placed on the current level (it's full):
+   take it off the level and send it back here, to arrive the next
+   time the hero comes to this level, instead of losing it. */
+void
+m_into_limbo(mtmp)
+struct monst *mtmp;
+{
+	migrate_to_level(mtmp, ledger_no(&u.uz), MIGR_APPROX_XY, (coord *)0);
+}
+
 /* mnearto()
  * Put monster near (or at) location if possible.
  * Returns:
@@ -2243,6 +2319,7 @@ boolean move_other;	/* make sure mtmp gets to x, y! so move m_at(x, y) */
 			remove_worm(othermon);
 		else
 			remove_monster(x, y);
+		othermon->mx = othermon->my = 0; /* 'othermon' is off the map */
 	}
 
 	newx = x;
@@ -2253,15 +2330,23 @@ boolean move_other;	/* make sure mtmp gets to x, y! so move m_at(x, y) */
 		 * migrating_mons that need to be placed will cause
 		 * no end of trouble.
 		 */
-		if (!enexto(&mm, newx, newy, mtmp->data)) return(FALSE);
+		if (!enexto(&mm, newx, newy, mtmp->data)) {
+		    /* don't leave othermon in limbo on the monster list */
+		    if (othermon) m_into_limbo(othermon);
+		    return(FALSE);
+		}
 		newx = mm.x; newy = mm.y;
 	}
 
 	rloc_to(mtmp, newx, newy);
 
 	if (move_other && othermon) {
-	    othermon->mx = othermon->my = 0;
 	    (void) mnearto(othermon, x, y, FALSE);
+	    if (!othermon->mx) {
+		/* no room left for it here */
+		m_into_limbo(othermon);
+		return(TRUE);
+	    }
 	    if ((othermon->mx != x) || (othermon->my != y))
 		return(TRUE);
 	}

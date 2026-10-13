@@ -368,8 +368,20 @@ cutworm(worm, x, y, weap)
      *  it's head at "curr" and its tail at "new_tail".
      */
 
+    new_worm = (struct monst *) 0;
+    new_wnum = !rn2(3) ? get_wormno() : 0;
+    if (new_wnum) {
+	remove_monster(x, y);		/* clone_mon puts new head here */
+	/* clone_mon() will fail if enough long worms have been
+	   created to have them be marked as extinct or if the hit
+	   that cut the current one has dropped it down to 1 HP */
+	new_worm = clone_mon(worm, x, y);
+    }
+
     /* Sometimes the tail end dies. */
-    if (rn2(3) || !(new_wnum = get_wormno())) {
+    if (!new_worm) {
+	if (new_wnum)
+	    place_worm_seg(worm, x, y);	/* put the "head" segment back */
 	if (flags.mon_moving)
 	    pline("Part of the tail of %s is cut off.", mon_nam(worm));
 	else
@@ -379,8 +391,6 @@ cutworm(worm, x, y, weap)
 	return 1;
     }
 
-    remove_monster(x, y);		/* clone_mon puts new head here */
-    new_worm = clone_mon(worm, x, y);
     new_worm->wormno = new_wnum;	/* affix new worm number */
 
     /* Devalue the monster level of both halves of the worm. */
@@ -575,8 +585,11 @@ remove_worm(worm)
 /*  if (!mtmp->wormno) return;  bullet proofing */
 
     while (curr) {
-	remove_monster(curr->wx, curr->wy);
-	newsym(curr->wx, curr->wy);
+	if (curr->wx) {
+	    remove_monster(curr->wx, curr->wy);
+	    newsym(curr->wx, curr->wy);
+	    curr->wx = 0;	/* off the map now */
+	}
 	curr = curr->nseg;
     }
 }

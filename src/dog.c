@@ -256,16 +256,27 @@ losedogs()
 		mon_arrive(mtmp, TRUE);
 	}
 
+	/* time for migrating monsters to arrive;
+	   monsters who belong on this level but fail to arrive get put
+	   back onto the list (at head), so traversing it is tricky */
 	for(mtmp = migrating_mons; mtmp; mtmp = mtmp2) {
 		mtmp2 = mtmp->nmon;
 		if (mtmp->mux == u.uz.dnum && mtmp->muy == u.uz.dlevel) {
-		    if(mtmp == migrating_mons)
+		    /* remove mtmp from migrating_mons list */
+		    if (mtmp == migrating_mons)
 			migrating_mons = mtmp->nmon;
-		    else
-			mtmp0->nmon = mtmp->nmon;
+		    else {
+			for (mtmp0 = migrating_mons; mtmp0;
+						mtmp0 = mtmp0->nmon)
+			    if (mtmp0->nmon == mtmp) {
+				mtmp0->nmon = mtmp->nmon;
+				break;
+			    }
+			if (!mtmp0)
+			    panic("losedogs: can't find migrating mon");
+		    }
 		    mon_arrive(mtmp, FALSE);
-		} else
-		    mtmp0 = mtmp;
+		}
 	}
 }
 
@@ -325,6 +336,8 @@ boolean with_you;
 		rloc_to(mtmp, u.ux, u.uy);
 	    else
 		mnexto(mtmp);
+	    /* no room for it; try again next time hero comes to this level */
+	    if (!mtmp->mx) m_into_limbo(mtmp);
 	    return;
 	}
 	/*
@@ -412,40 +425,16 @@ boolean with_you;
 	mtmp->my = xyflags;
 	if (xlocale)
 	    (void) mnearto(mtmp, xlocale, ylocale, FALSE);
-	else {
-	    if (!rloc(mtmp,TRUE)) {
-		/*
-		 * Failed to place migrating monster,
-		 * probably because the level is full.
-		 * Dump the monster's cargo and leave the monster dead.
-		 */
-	    	struct obj *obj, *corpse;
-		while ((obj = mtmp->minvent) != 0) {
-		    obj_extract_self(obj);
-		    obj_no_longer_held(obj);
-		    if (obj->owornmask & W_WEP)
-			setmnotwielded(mtmp,obj);
-		    obj->owornmask = 0L;
-		    if (xlocale && ylocale)
-			    place_object(obj, xlocale, ylocale);
-		    else {
-		    	rloco(obj);
-			get_obj_location(obj, &xlocale, &ylocale, 0);
-		    }
-		}
-		corpse = mkcorpstat(CORPSE, (struct monst *)0, mtmp->data,
-				xlocale, ylocale, FALSE);
-#ifndef GOLDOBJ
-		if (mtmp->mgold) {
-		    if (xlocale == 0 && ylocale == 0 && corpse) {
-			(void) get_obj_location(corpse, &xlocale, &ylocale, 0);
-			(void) mkgold(mtmp->mgold, xlocale, ylocale);
-		    }
-		    mtmp->mgold = 0L;
-		}
-#endif
-		mongone(mtmp);
-	    }
+	else
+	    (void) rloc(mtmp, TRUE);
+
+	if (!mtmp->mx) {
+	    /*
+	     * Failed to place migrating monster, probably because
+	     * the level is full.  Instead of killing it, try again
+	     * next time hero comes to this level.
+	     */
+	    m_into_limbo(mtmp);
 	}
 }
 
@@ -694,7 +683,7 @@ migrate_to_level(mtmp, tolev, xyloc, cc)
 	relmon(mtmp);
 	mtmp->nmon = migrating_mons;
 	migrating_mons = mtmp;
-	newsym(mtmp->mx,mtmp->my);
+	if (mtmp->mx) newsym(mtmp->mx,mtmp->my);
 
 	new_lev.dnum = ledger_to_dnum((xchar)tolev);
 	new_lev.dlevel = ledger_to_dlev((xchar)tolev);
@@ -944,6 +933,8 @@ aligntyp alignment;
 {
     register struct monst *mon;
     register struct monst *mtmp2;
+
+    if (mnum == NON_PM) return 0;
     mon = makemon(&mons[mnum], u.ux, u.uy, NO_MM_FLAGS);
     if (!mon) return 0;
     /* now tame that puppy... */

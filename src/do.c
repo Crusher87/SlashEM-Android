@@ -23,6 +23,7 @@ STATIC_DCL int FDECL(menu_drop, (int));
 #ifdef OVL2
 STATIC_DCL int NDECL(currentlevel_rewrite);
 STATIC_DCL void NDECL(final_level);
+STATIC_DCL void FDECL(log_new_level, (BOOLEAN_P));
 /* static boolean FDECL(badspot, (XCHAR_P,XCHAR_P)); */
 #endif
 
@@ -115,7 +116,7 @@ boolean pushing;
 			pline("The slime is burned off!");
 			Slimed =0;
 		    }
-		    losehp(d((Fire_resistance ? 1 : 3), 6),
+		    losehp(Maybe_Half_Phys(d((Fire_resistance ? 1 : 3), 6)),
 			   "molten lava", KILLED_BY);
 		} else if (!fills_up && flags.verbose &&
 			   (pushing ? !Blind : cansee(rx,ry)))
@@ -169,7 +170,8 @@ const char *verb;
 			mtmp->mtrapped = 0;
 		    } else {
 			if (!Passes_walls && !throws_rocks(youmonst.data)) {
-			    losehp(rnd(15), "squished under a boulder",
+			    losehp(Maybe_Half_Phys(rnd(15)),
+				   "squished under a boulder",
 				   NO_KILLER_PREFIX);
 			    return FALSE;	/* player remains trapped */
 			} else u.utrap = 0;
@@ -212,7 +214,8 @@ const char *verb;
 		    map_background(x, y, 0);
 		    newsym(x, y);
 		}
-		water_damage(obj, FALSE, FALSE);
+		/* a potion of acid explodes and is gone */
+		if (water_damage(obj, FALSE, FALSE)) return TRUE;
 	} else if (u.ux == x && u.uy == y &&
 		(!u.utrap || u.utraptype != TT_PIT) &&
 		(t = t_at(x,y)) != 0 && t->tseen &&
@@ -678,7 +681,7 @@ int retry;
 #endif
     menu_item *pick_list;
     boolean all_categories = TRUE;
-    boolean drop_everything = FALSE;
+    boolean drop_everything = FALSE, autopick = FALSE;
 
 #ifndef GOLDOBJ
     if (u.ugold) {
@@ -701,14 +704,22 @@ int retry;
 			UNPAID_TYPES | ALL_TYPES | CHOOSE_ALL |
 			BUC_BLESSED | BUC_CURSED | BUC_UNCURSED | BUC_UNKNOWN,
 			&pick_list, PICK_ANY);
+	/* when paranoid_confirm:Autoall is set, 'A' by itself is confirmed
+	   and drops everything; when it isn't, 'A' by itself is rejected by
+	   query_category() and result here will be n==0 */
 	if (!n) goto drop_done;
+	/* 'A' together with other choices drops what they match without
+	   a second menu */
+	drop_everything = TRUE;
 	for (i = 0; i < n; i++) {
 	    if (pick_list[i].item.a_int == ALL_TYPES_SELECTED)
 		all_categories = TRUE;
 	    else if (pick_list[i].item.a_int == 'A')
-		drop_everything = TRUE;
-	    else
+		autopick = TRUE;
+	    else {
 		add_valid_menu_class(pick_list[i].item.a_int);
+		drop_everything = FALSE;
+	    }
 	}
 	free((genericptr_t) pick_list);
     } else if (flags.menu_style == MENU_COMBINATION) {
@@ -723,10 +734,11 @@ int retry;
 	}
     }
 
-    if (drop_everything) {
+    if (autopick) {
 	for(otmp = invent; otmp; otmp = otmp2) {
 	    otmp2 = otmp->nobj;
-	    n_dropped += drop(otmp);
+	    if (drop_everything || all_categories || allow_category(otmp))
+		n_dropped += drop(otmp);
 	}
     } else {
 	/* should coordinate with perm invent, maybe not show worn items */
@@ -825,7 +837,13 @@ dodown()
 	    return (0);   /* didn't move */
 	}
 	if (!stairs_down && !ladder_down) {
-		if (!(trap = t_at(u.ux,u.uy)) ||
+		trap = t_at(u.ux,u.uy);
+		/* '>' while at the edge of a known pit: go into it */
+		if (uteetering_at_seen_pit(trap)) {
+			dotrap(trap, TOOKPLUNGE);
+			return(1);
+		}
+		if (!trap ||
 			(trap->ttyp != TRAPDOOR && trap->ttyp != HOLE)
 			|| !Can_fall_thru(&u.uz) || !trap->tseen) {
 
@@ -875,6 +893,12 @@ dodown()
 int
 doup()
 {
+	/* "up" to get out of a pit... */
+	if (u.utrap && u.utraptype == TT_PIT) {
+		climb_pit();
+		return(1);
+	}
+
 	if( (u.ux != xupstair || u.uy != yupstair)
 	     && (!xupladder || u.ux != xupladder || u.uy != yupladder)
 	     && (!sstairs.sx || u.ux != sstairs.sx || u.uy != sstairs.sy
@@ -1003,8 +1027,10 @@ boolean at_stairs, falling, portal;
 		was_in_W_tower = In_W_tower(u.ux, u.uy, &u.uz),
 		familiar = FALSE;
 	boolean new = FALSE;	/* made a new level? */
+	boolean newbranch;	/* first visit to this dungeon branch? */
 	struct monst *mtmp;
 	char whynot[BUFSZ];
+	char *annotation;
 
 	if (dunlev(newlevel) > dunlevs_in_dungeon(newlevel))
 		newlevel->dlevel = dunlevs_in_dungeon(newlevel);
@@ -1074,6 +1100,13 @@ boolean at_stairs, falling, portal;
 	fd = currentlevel_rewrite();
 	if (fd < 0) return;
 
+	/* discard context which applies to the level we're leaving:
+	   the travel destination, and lock-picking unless the container
+	   is carried (if it's on the floor, it's about to be saved+freed
+	   and maybe_reset_pick() needs to do its carried() check first) */
+	iflags.travelcc.x = iflags.travelcc.y = -1;
+	maybe_reset_pick((struct obj *)0);
+
 	if (falling) /* assuming this is only trap door or hole */
 	    impact_drop((struct obj *)0, u.ux, u.uy, newlevel->dlevel);
 
@@ -1087,6 +1120,7 @@ boolean at_stairs, falling, portal;
 	keepdogs(FALSE);
 	if (u.uswallow)				/* idem */
 		u.uswldtim = u.uswallow = 0;
+	recalc_mapseen(); /* recalculate map overview before we leave the level */
 	/*
 	 *  We no longer see anything on the level.  Make sure that this
 	 *  follows u.uswallow set to null since uswallow overrides all
@@ -1110,9 +1144,14 @@ boolean at_stairs, falling, portal;
 		cant_go_back ? FREE_SAVE : (WRITE_SAVE | FREE_SAVE));
 	bclose(fd);
 	if (cant_go_back) {
+	    extern int n_dgns;	/* from dungeon.c */
+
 	    /* discard unreachable levels; keep #0 */
 	    for (l_idx = maxledgerno(); l_idx > 0; --l_idx)
 		delete_levelfile(l_idx);
+	    /* mark #overview data for all dungeon branches as uninteresting */
+	    for (l_idx = 0; l_idx < n_dgns; ++l_idx)
+		remdun_mapseen(l_idx);
 	}
 
 #ifdef REINCARNATION
@@ -1122,12 +1161,24 @@ boolean at_stairs, falling, portal;
 #ifdef USE_TILES
 	substitute_tiles(newlevel);
 #endif
+	/* record this level transition as a potential seen branch unless using
+	 * some non-standard means of transportation (level teleport).
+	 */
+	if ((at_stairs || falling || portal) && (u.uz.dnum != newlevel->dnum))
+		recbranch_mapseen(&u.uz, newlevel);
+	newbranch = (dunlev_reached(newlevel) == 0);
 	assign_level(&u.uz0, &u.uz);
 	assign_level(&u.uz, newlevel);
 	assign_level(&u.utolev, newlevel);
 	u.utotype = 0;
-	if (dunlev_reached(&u.uz) < dunlev(&u.uz))
+	if (!builds_up(&u.uz)) {	/* usual case */
+	    if (dunlev_reached(&u.uz) < dunlev(&u.uz))
 		dunlev_reached(&u.uz) = dunlev(&u.uz);
+	} else {			/* Vlad's Tower is explored upwards */
+	    if (dunlev_reached(&u.uz) == 0
+		    || dunlev(&u.uz) < dunlev_reached(&u.uz))
+		dunlev_reached(&u.uz) = dunlev(&u.uz);
+	}
 	reset_rndmonst(NON_PM);   /* u.uz change affects monster generation */
 
 	/* set default level change destination areas */
@@ -1233,7 +1284,8 @@ boolean at_stairs, falling, portal;
 			dismount_steed(DISMOUNT_FELL);
 		    else
 #endif
-			losehp(rnd(3), "falling downstairs", KILLED_BY);
+			losehp(Maybe_Half_Phys(rnd(3)), "falling downstairs",
+			       KILLED_BY);
 		    selftouch("Falling, you");
 		} else if (u.dz && at_ladder)
 		    You("climb down the ladder.");
@@ -1296,8 +1348,16 @@ boolean at_stairs, falling, portal;
 		mnexto(mtmp);
 
 	    if ((mtmp = m_at(u.ux, u.uy)) != 0) {
-		impossible("mnexto failed (do.c)?");
-		(void) rloc(mtmp, FALSE);
+		/* there used to be an unconditional impossible("mnexto
+		   failed") here, but it's not impossible and we're prepared
+		   to cope with the situation, so only say something when
+		   debugging */
+#ifdef WIZARD
+		if (wizard) pline("(monster in hero's way)");
+#endif
+		if (!rloc(mtmp, TRUE) || (mtmp = m_at(u.ux, u.uy)) != 0)
+		    /* no room to move it; send it away, to return later */
+		    m_into_limbo(mtmp);
 	    }
 	}
 
@@ -1398,6 +1458,9 @@ boolean at_stairs, falling, portal;
 		    if (!DEADMONSTER(mtmp) && mtmp->msleeping) mtmp->msleeping = 0;
 	}
 
+	if (new)
+	    log_new_level(newbranch);	/* #chronicle */
+
 	if (on_level(&u.uz, &astral_level))
 	    final_level();
 	else
@@ -1408,9 +1471,57 @@ boolean at_stairs, falling, portal;
 	save_currentstate();
 #endif
 
+	if ((annotation = get_annotation(&u.uz)) != 0)
+	    You("remember this level as %s.", annotation);
+
 	/* assume this will always return TRUE when changing level */
 	(void) in_out_region(u.ux, u.uy);
 	(void) pickup(1);
+}
+
+/* #chronicle: the hero has arrived on a level for the first time */
+STATIC_OVL void
+log_new_level(newbranch)
+boolean newbranch;	/* also the first level visited in its dungeon */
+{
+	char dname[BUFSZ];
+	s_level *slev;
+
+	Strcpy(dname, dungeons[u.uz.dnum].dname);
+	if (!strncmp(dname, "The ", 4))
+	    *dname = 't';
+
+	if (In_endgame(&u.uz)) {
+	    if (newbranch)
+		livelog_printf(LL_ACHIEVE, "entered the Elemental Planes");
+	    livelog_printf(LL_ACHIEVE, "entered the %s",
+			   Is_astralevel(&u.uz) ? "Astral Plane" :
+			   Is_earthlevel(&u.uz) ? "Plane of Earth" :
+			   Is_airlevel(&u.uz) ? "Plane of Air" :
+			   Is_firelevel(&u.uz) ? "Plane of Fire" :
+			   Is_waterlevel(&u.uz) ? "Plane of Water" :
+			   "End Game");
+	    return;
+	}
+	/* Gehennom, the Mines, Sokoban, the quest, Ludios, Vlad's Tower and
+	   Slash'EM's extra branches */
+	if (newbranch)
+	    livelog_printf(LL_ACHIEVE, "entered %s", dname);
+	if (Is_bigroom(&u.uz))
+	    livelog_printf(LL_ACHIEVE, "entered the Big Room");
+	else if ((slev = Is_special(&u.uz)) != 0 && slev->flags.town)
+	    livelog_printf(LL_ACHIEVE, "reached %s",
+			   In_mines(&u.uz) ? "Minetown" : "the Mall");
+	/* every quest level is listed among the major events: it shows how
+	   far into the quest the hero got */
+	if (In_quest(&u.uz))
+	    livelog_printf(LL_ACHIEVE, "entered %s, home %d", dname,
+			   dunlev(&u.uz));
+	else if (Is_knox(&u.uz))
+	    ;	/* "entered Fort Ludios" is enough */
+	else
+	    livelog_printf(LL_DEBUG, "entered %s, level %d", dname,
+			   depth(&u.uz));
 }
 
 STATIC_OVL void
@@ -1742,9 +1853,43 @@ long timeout;
     }
 }
 
+/* safe_wait: refuse to rest or search when that looks like a mistake;
+   the 'm' prefix or a count overrides */
+boolean
+cmd_safety_prevention(ucverb, cmddesc, act, flagcounter)
+const char *ucverb;	/* "Waiting" */
+const char *cmddesc;	/* "a no-op (to rest)" */
+const char *act;	/* "Are you waiting to get hit?" */
+int *flagcounter;	/* show the hint about 'm' only the first time */
+{
+	if (flags.safe_wait && !iflags.menu_requested && !multi) {
+	    char buf[QBUFSZ];
+
+	    buf[0] = '\0';
+	    if (iflags.cmdassist || !(*flagcounter)++)
+		Sprintf(buf, "  Use 'm' prefix to force %s.", cmddesc);
+
+	    if (monster_nearby()) {
+		Norep("%s%s", act, buf);
+		return TRUE;
+	    } else if (Stoned || Slimed || Strangled || Sick) {
+		Norep("%s doesn't feel like a good idea right now.", ucverb);
+		return TRUE;
+	    }
+	}
+	*flagcounter = 0;
+	return FALSE;
+}
+
 int
 donull()
 {
+	static int did_nothing_flag = 0;
+
+	if (cmd_safety_prevention("Waiting", "a no-op (to rest)",
+				  "Are you waiting to get hit?",
+				  &did_nothing_flag))
+	    return 0;
 	return(1);	/* Do nothing, but let other things happen */
 }
 

@@ -399,10 +399,50 @@ autoquiver()
 	return;
 }
 
+/* look through the hero's inventory for a launcher matching ammo,
+   avoiding known cursed ones and two-handed ones that a worn shield
+   keeps the hero from wielding (from NetHack 5.0) */
+STATIC_OVL struct obj *
+find_launcher(ammo)
+struct obj *ammo;
+{
+	struct obj *otmp, *oX = (struct obj *)0;
+
+	for (otmp = invent; otmp; otmp = otmp->nobj) {
+	    if ((otmp->cursed && otmp->bknown) || (uarms && bimanual(otmp)))
+		continue;
+	    if (ammo_and_launcher(ammo, otmp)) {
+		if (otmp->bknown)
+		    return otmp;	/* known blessed or uncursed */
+		if (!oX)
+		    oX = otmp;	/* unknown; used if nothing better turns up */
+	    }
+	}
+	return oX;
+}
+
+/* fireassist: after a move spent readying a weapon, fire on the next
+   move unless something interrupts the hero (nomul(0), e.g. a melee
+   attack, cancels it); NetHack 5.0 queues the commands instead */
+static char fireassist_cmd[] = "f";
+static int fireassist_shotlimit = 0;
+
+STATIC_OVL void
+fire_next_move(shotlimit)
+int shotlimit;
+{
+	fireassist_shotlimit = shotlimit;
+	multi = 1;
+	save_cm = fireassist_cmd;	/* moveloop will do rhack(save_cm) */
+}
+
 int
 dofire()
 {
+	struct obj *obj;
 	int result, shotlimit;
+	struct obj *launcher;
+	boolean save_pushweapon;
 
 	if (notake(youmonst.data)) {
 	    You("are physically incapable of doing that.");
@@ -410,19 +450,23 @@ dofire()
 	}
 
 	if(check_capacity((char *)0)) return(0);
-	if (!uquiver) {
-		if (!flags.autoquiver) {
-			/* Don't automatically fill the quiver */
-			You("have no ammunition readied!");
-			return(dothrow());
-		}
-		autoquiver();
-		if (!uquiver) {
-			You("have nothing appropriate for your quiver!");
-			return(dothrow());
-		} else {
-			You("fill your quiver:");
-			prinv((char *)0, uquiver, 0L);
+	if (!uquiver && !flags.autoquiver) {
+		/* use a wielded polearm or bullwhip instead (5.0) */
+		if (uwep && is_pole(uwep)) {
+		    multi = 0;
+		    return use_pole(uwep, TRUE);
+		} else if (uwep && uwep->otyp == BULLWHIP) {
+		    multi = 0;
+		    return use_whip(uwep);
+		} else if (iflags.fireassist && uswapwep
+			   && is_pole(uswapwep)
+			   && !(uswapwep->cursed && uswapwep->bknown)
+			   && !(uwep && welded(uwep))) {
+		    /* swap to the polearm and use it next move */
+		    result = doswapweapon();
+		    if (uwep && is_pole(uwep))
+			fire_next_move(0);
+		    return result;
 		}
 	}
 
@@ -437,10 +481,71 @@ dofire()
 	 * of 3 projectiles will result in 3 being shot, not 5.
 	 */
 	/* kludge to work around parse()'s pre-decrement of `multi' */
-	shotlimit = (multi || save_cm) ? multi + 1 : 0;
+	if (save_cm == fireassist_cmd)	/* continuing a fireassist */
+	    shotlimit = fireassist_shotlimit, save_cm = (char *)0;
+	else
+	    shotlimit = (multi || save_cm) ? multi + 1 : 0;
 	multi = 0;		/* reset; it's been used up */
 
-	if (u.twoweap) {
+	if ((obj = uquiver) == 0) {
+		if (!flags.autoquiver) {
+			/* Don't automatically fill the quiver */
+			You("have no ammunition readied.");
+		} else {
+			autoquiver();
+			if ((obj = uquiver) == 0)
+				You("have nothing appropriate for your quiver.");
+		}
+		/* if autoquiver is disabled or has failed, prompt for
+		   missile; fill quiver with it if it's not wielded or worn */
+		if (!obj) {
+			obj = getobj(uslinging() ? bullets : toss_objs, "throw");
+			/* Q command doesn't allow gold in quiver */
+			if (obj && !obj->owornmask && obj->oclass != COIN_CLASS)
+				setuqwep(obj);	/* demi-autoquiver */
+		}
+		/* give feedback if quiver has now been filled */
+		if (uquiver) {
+			uquiver->owornmask &= ~W_QUIVER;	/* less verbose */
+			prinv("You ready:", uquiver, 0L);
+			uquiver->owornmask |= W_QUIVER;
+		}
+		if (!obj) return 0;
+	}
+
+	/*
+	 * fireassist (from NetHack 5.0): with ammo quivered, use a wielded
+	 * polearm on a monster in reach, or else make sure the matching
+	 * launcher is wielded, swapping to it or wielding it from the pack
+	 * (keeping the old weapon as the alternate one) and then firing
+	 * on the next move.
+	 */
+	if (iflags.fireassist && is_ammo(uquiver)) {
+		if (uwep && is_pole(uwep) && could_pole_mon())
+			return use_pole(uwep, TRUE);
+		if (ammo_and_launcher(uquiver, uwep)
+		    || (uwep && welded(uwep))) {
+			;	/* ready to fire, or stuck with what's wielded */
+		} else if (uswapwep && ammo_and_launcher(uquiver, uswapwep)
+			   && !(uswapwep->cursed && uswapwep->bknown)) {
+			result = doswapweapon();
+			if (ammo_and_launcher(uquiver, uwep))
+				fire_next_move(shotlimit);
+			return result;
+		} else if ((launcher = find_launcher(uquiver)) != 0) {
+			save_pushweapon = flags.pushweapon;
+			flags.pushweapon = TRUE;
+			getobj_answer(launcher, 0, "wield");
+			result = dowield();
+			getobj_answer((struct obj *)0, 0, (const char *)0);
+			flags.pushweapon = save_pushweapon;
+			if (uwep == launcher)
+				fire_next_move(shotlimit);
+			return result;
+		}
+	}
+
+	if (u.twoweap && obj == uquiver) {
 		if (!can_twoweapon()) untwoweapon();
 		else if (ammo_and_launcher(uquiver,uwep) 
 		    && ammo_and_launcher(uquiver, uswapwep)){
@@ -451,7 +556,7 @@ dofire()
 			return(result);
 		}
 	}
-	result = (throw_obj(uquiver, shotlimit, THROW_UWEP));
+	result = throw_obj(obj, shotlimit, THROW_UWEP);
 	
 	return result;
 }
@@ -601,23 +706,26 @@ hurtle_step(arg, x, y)
 		s = "bumping into a wall";
 	    else
 		s = "bumping into a door";
-	    losehp(rnd(2+*range), s, KILLED_BY);
+	    losehp(Maybe_Half_Phys(rnd(2+*range)), s, KILLED_BY);
 	    return FALSE;
 	}
 	if (levl[x][y].typ == IRONBARS) {
 	    You("crash into some iron bars.  Ouch!");
-	    losehp(rnd(2+*range), "crashing into iron bars", KILLED_BY);
+	    losehp(Maybe_Half_Phys(rnd(2+*range)), "crashing into iron bars",
+		   KILLED_BY);
 	    return FALSE;
 	}
 	if ((obj = sobj_at(BOULDER,x,y)) != 0) {
 	    You("bump into a %s.  Ouch!", xname(obj));
-	    losehp(rnd(2+*range), "bumping into a boulder", KILLED_BY);
+	    losehp(Maybe_Half_Phys(rnd(2+*range)), "bumping into a boulder",
+		   KILLED_BY);
 	    return FALSE;
 	}
 	if (!may_pass) {
 	    /* did we hit a no-dig non-wall position? */
 	    You("smack into something!");
-	    losehp(rnd(2+*range), "touching the edge of the universe", KILLED_BY);
+	    losehp(Maybe_Half_Phys(rnd(2+*range)),
+		   "touching the edge of the universe", KILLED_BY);
 	    return FALSE;
 	}
 	if ((u.ux - x) && (u.uy - y) &&
@@ -627,7 +735,8 @@ hurtle_step(arg, x, y)
 	    if (bigmonst(youmonst.data) || too_much) {
 		You("%sget forcefully wedged into a crevice.",
 			too_much ? "and all your belongings " : "");
-		losehp(rnd(2+*range), "wedging into a narrow crevice", KILLED_BY);
+		losehp(Maybe_Half_Phys(rnd(2+*range)),
+		       "wedging into a narrow crevice", KILLED_BY);
 		return FALSE;
 	    }
 	}
@@ -641,7 +750,7 @@ hurtle_step(arg, x, y)
     if ((u.ux - x) && (u.uy - y) &&
 	bad_rock(&youmonst, u.ux, y) && bad_rock(&youmonst, x, u.uy)) {
 	/* Move at a diagonal. */
-	if (In_sokoban(&u.uz)) {
+	if (Sokoban) {
 	    You("come to an abrupt halt!");
 	    return FALSE;
 	}
@@ -670,7 +779,7 @@ hurtle_step(arg, x, y)
     		dotrap(ttmp,0);
 	} else if ((ttmp->ttyp == PIT || ttmp->ttyp == SPIKED_PIT ||
 		    ttmp->ttyp == HOLE || ttmp->ttyp == TRAPDOOR) &&
-		   In_sokoban(&u.uz)) {
+		   Sokoban) {
 		/* Air currents overcome the recoil */
     		dotrap(ttmp,0);
 		*range = 0;
@@ -762,7 +871,7 @@ hurtle(dx, dy, range, verbose)
 	    m_shot.s ? "shoot" : "throw", m_shot.s ? "shot" : "toss");
 	m_shot.n = m_shot.i;	/* make current shot be the last */
     }
-    if (In_sokoban(&u.uz))
+    if (Sokoban)
 	change_luck(-1);	/* Sokoban guilt */
     uc.x = u.ux;
     uc.y = u.uy;
@@ -770,6 +879,13 @@ hurtle(dx, dy, range, verbose)
     cc.x = u.ux + (dx * range);
     cc.y = u.uy + (dy * range);
     (void) walk_path(&uc, &cc, hurtle_step, (genericptr_t)&range);
+    /* if the hero is landing in water, drown() (called via teleds() and
+       spoteffects()) won't let her crawl out while she is still helpless
+       from the hurtle; she can move once she hits the water */
+    if (multi < 0 && is_pool(cc.x, cc.y) &&
+	    ((Is_waterlevel(&u.uz) && levl[cc.x][cc.y].typ == WATER) ||
+	     !(Levitation || Flying || Wwalking)))
+	multi = 0;
     teleds(cc.x, cc.y, FALSE);
 }
 
@@ -926,7 +1042,7 @@ boolean hitsroof;
 	if (dmg > 1 && less_damage) dmg = 1;
 	if (dmg > 0) dmg += u.udaminc;
 	if (dmg < 0) dmg = 0;	/* beware negative rings of increase damage */
-	if (Half_physical_damage) dmg = (dmg + 1) / 2;
+	dmg = Maybe_Half_Phys(dmg);
 
 	if (uarmh) {
 	    if (less_damage && dmg < (Upolyd ? u.mh : u.uhp)) {
@@ -1248,7 +1364,7 @@ int thrown;
 				  body_part(ARM));
 			    (void) artifact_hit((struct monst *)0,
 						&youmonst, obj, &dmg, 0);
-			    losehp(dmg, xname(obj),
+			    losehp(Maybe_Half_Phys(dmg), xname(obj),
 				obj_is_pname(obj) ? KILLED_BY : KILLED_BY_AN);
 			}
 			if (ship_object(obj, u.ux, u.uy, FALSE)) {
@@ -1825,8 +1941,9 @@ boolean from_invent;
 			    change_luck(-2);
 			break;
 		case POT_WATER:		/* really, all potions */
+			obj->in_use = 1;	/* in case it's fatal */
 			if (obj->otyp == POT_OIL && obj->lamplit) {
-			    splatter_burning_oil(x,y);
+			    explode_oil(obj, x, y);
 			} else if ((obj->otyp == POT_VAMPIRE_BLOOD ||
 				   obj->otyp == POT_BLOOD) &&
 				   am != AM_CHAOTIC &&
@@ -2027,7 +2144,8 @@ struct obj *obj;
 		/* see if the gold has a place to move into */
 		odx = u.ux + u.dx;
 		ody = u.uy + u.dy;
-		if(!ZAP_POS(levl[odx][ody].typ) || closed_door(odx, ody)) {
+		if (!isok(odx, ody) ||
+			!ZAP_POS(levl[odx][ody].typ) || closed_door(odx, ody)) {
 			bhitpos.x = u.ux;
 			bhitpos.y = u.uy;
 		} else {

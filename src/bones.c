@@ -81,6 +81,7 @@ boolean restore;
 			if(objects[otmp->otyp].oc_uses_known) otmp->known = 0;
 			otmp->dknown = otmp->bknown = 0;
 			otmp->rknown = 0;
+			otmp->tknown = 0;
 			otmp->invlet = 0;
 			otmp->no_charge = 0;
 			otmp->was_thrown = 0;
@@ -358,6 +359,7 @@ struct obj *corpse;
 	    levl[x][y].seenv = 0;
 	    levl[x][y].waslit = 0;
 	    clear_memory_glyph(x, y, S_stone);
+	    lastseentyp[x][y] = 0;
 	}
 
 	fd = create_bonesfile(&u.uz, &bonesid, whynot);
