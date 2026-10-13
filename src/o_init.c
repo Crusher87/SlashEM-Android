@@ -410,7 +410,10 @@ boolean credit_hero;
 
 	if (mark_as_known) {
 	    objects[oindx].oc_name_known = 1;
-	    if (credit_hero) exercise(A_WIS, TRUE);
+	    if (credit_hero) {
+		exercise(A_WIS, TRUE);
+		codex_identified(oindx);	/* the Armory */
+	    }
 	}
 	if (moves > 1L) update_inventory();
     }

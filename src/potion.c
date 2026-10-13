@@ -390,6 +390,8 @@ dodrink()
 	otmp = getobj(quaffables, "drink");
 	if (otmp == &thisplace) {
 	    if (IS_FOUNTAIN(levl[u.ux][u.uy].typ)) {
+		if (insight_fountain_check())	/* a learned warning */
+		    return 0;
 		drinkfountain();
 		return 1;
 	    }
@@ -2691,6 +2693,8 @@ dodip()
 	/* Is there a fountain to dip into here? */
 	if (IS_FOUNTAIN(here)) {
 		if(yn("Dip it into the fountain?") == 'y') {
+			if (insight_fountain_check())	/* learned warning */
+				return(0);
 			dipfountain(obj);
 			return(1);
 		}

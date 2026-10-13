@@ -2323,8 +2323,10 @@ struct ext_func_tab extcmdlist[] = {
 	{"borrow", "steal from monsters", playersteal, FALSE},  /* jla */        
 	{"chat", "talk to someone", dotalk, TRUE},	/* converse? */
 	{"chronicle", "show a log of the major events of the game", do_gamelog, TRUE},
+	{"codex", "read your Codex: Bestiary, Armory, Atlas, Lessons", docodex, TRUE},
 	{"conduct", "list which challenges you have adhered to", doconduct, TRUE},
 	{"dip", "dip an object into something", dodip, FALSE},
+	{"elbereth", "write Elbereth in the dust (Quick Elbereth)", doelbereth, FALSE},
 	{"enhance", "advance or check weapons skills", enhance_weapon_skill,
 							TRUE},
 #if 0

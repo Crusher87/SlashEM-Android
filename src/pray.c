@@ -868,6 +868,8 @@ pleased(g_align)
 	   the random numbers below never get a range of zero or less. */
 	int prayer_luck = max(Luck, -1);
 
+	insight_count(IC_PRAYERS);	/* toward prayer sense */
+
 	You_feel("that %s is %s.", align_gname(g_align),
 	    u.ualign.record >= DEVOUT ?
 	    Hallucination ? "pleased as punch" : "well-pleased" :
@@ -1841,6 +1843,25 @@ boolean praying;	/* false means no messages should be given */
        This case should be uncommon enough to live with... */
 
     return !praying ? (boolean)(p_type == 3 && !Inhell) : TRUE;
+}
+
+/* would praying now be safe?  For Insight's prayer sense; leaves the
+   prayer state as it was */
+boolean
+prayer_is_safe()
+{
+    int save_type = p_type, save_trouble = p_trouble;
+    aligntyp save_align = p_aligntyp;
+    boolean ok;
+
+    /* undead and demons are never safe, and can_pray() would roll dice */
+    if (is_undead(youmonst.data) || is_demon(youmonst.data) || Inhell)
+	return FALSE;
+    ok = can_pray(FALSE);
+    p_type = save_type;
+    p_trouble = save_trouble;
+    p_aligntyp = save_align;
+    return ok;
 }
 
 int

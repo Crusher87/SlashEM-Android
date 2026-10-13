@@ -496,6 +496,7 @@ doengrave()
 				/* The current engraving */
 	struct obj *otmp;	/* Object selected with which to engrave */
 	char *writer;
+	boolean had_engr = (oep != 0);	/* for Insight's wand sense */
 
 	multi = 0;		/* moves consumed */
 	nomovemsg = (char *)0;	/* occupation end message */
@@ -930,6 +931,13 @@ doengrave()
 
 	/* End of implement setup */
 
+	/* Insight: count the wand test, and name what it could have been */
+	if (zapwand) {
+	    insight_count(IC_WANDS);
+	    if (!doknown && !Blind && !objects[otmp->otyp].oc_name_known)
+		insight_wand_sense(otmp->otyp, had_engr);
+	}
+
 	/* Identify stylus */
 	if (doknown) {
 	    makeknown(otmp->otyp);
@@ -1196,6 +1204,8 @@ doengrave()
 	(void) strncat(buf, ebuf, (BUFSZ - (int)strlen(buf) - 1));
 
 	make_engr_at(u.ux, u.uy, buf, (moves - multi), type);
+	if (strstri(ebuf, "Elbereth"))
+	    insight_count(IC_ELBERETH);	/* toward Quick Elbereth */
 
 	if (post_engr_text[0]) pline(post_engr_text);
 
@@ -1354,5 +1364,73 @@ const char *str;
 
 
 #endif /* OVLB */
+
+/* Insight's Quick Elbereth: write Elbereth in the dust with a finger,
+   with no prompts */
+int
+doelbereth()
+{
+	struct engr *oep = engr_at(u.ux, u.uy);
+	char buf[BUFSZ];
+	xchar type = DUST;
+
+	if (!insight_on(INS_ELBERETH)) {
+	    insight_progress(INS_ELBERETH, buf);
+	    if (insight_earned(INS_ELBERETH))
+		pline("Quick Elbereth is switched off in the Hall's Settings.");
+	    else
+		pline("You haven't earned Quick Elbereth yet (%s).", buf);
+	    return 0;
+	}
+	if (u.uswallow) {
+	    You_cant("reach the %s.", surface(u.ux, u.uy));
+	    return 0;
+	}
+	if (is_lava(u.ux, u.uy) || is_pool(u.ux, u.uy)
+		|| IS_FOUNTAIN(levl[u.ux][u.uy].typ)) {
+	    You_cant("write on the %s!", surface(u.ux, u.uy));
+	    return 0;
+	}
+	if (Is_airlevel(&u.uz) || Is_waterlevel(&u.uz)) {
+	    You_cant("write in thin air!");
+	    return 0;
+	}
+	if (cantwield(youmonst.data)) {
+	    You_cant("even hold anything!");
+	    return 0;
+	}
+	if (check_capacity((char *)0))
+	    return 0;
+	if (!freehand()) {
+	    You("have no free %s to write with!", body_part(HAND));
+	    return 0;
+	}
+	if (!can_reach_floor()) {
+	    You_cant("reach the %s!", surface(u.ux, u.uy));
+	    return 0;
+	}
+	if (IS_ALTAR(levl[u.ux][u.uy].typ) || IS_GRAVE(levl[u.ux][u.uy].typ)) {
+	    You("can't write in the dust here.");
+	    return 0;
+	}
+	if (is_demon(youmonst.data) || youmonst.data->mlet == S_VAMPIRE)
+	    type = ENGR_BLOOD;
+	if (oep) {
+	    if (oep->engr_type != DUST && oep->engr_type != ENGR_BLOOD) {
+		pline("Something is engraved here for good; use E to add to it.");
+		return 0;
+	    }
+	    if (!Blind)
+		You("wipe out the message that was written here.");
+	    del_engr(oep);
+	}
+	u.uconduct.literate++;
+	You("%s \"Elbereth\" in the %s with your %s.",
+	    type == ENGR_BLOOD ? "scrawl" : "write", surface(u.ux, u.uy),
+	    body_part(FINGERTIP));
+	make_engr_at(u.ux, u.uy, "Elbereth", moves, type);
+	insight_count(IC_ELBERETH);
+	return 1;
+}
 
 /*engrave.c*/

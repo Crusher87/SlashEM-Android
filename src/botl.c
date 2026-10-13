@@ -601,6 +601,9 @@ bot2str(char *newbot2)
 		ADD_COND("Held", "Hld");
 	if (cap > UNENCUMBERED)
 		ADD_COND(enc_stat[cap], enc_abbrev_stat[cap]);
+	/* Slash'EM Legacy: Insight's prayer sense */
+	if (insight_pray_marker())
+		ADD_COND("Pray", "Pry");
 
 	abbrev = (bot2_abbrev >= 2);
 #ifdef ANDROID

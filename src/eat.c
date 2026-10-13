@@ -1540,6 +1540,8 @@ eatcorpse(otmp)		/* called when a corpse is selected as food */
 				!poly_when_stoned(youmonst.data));
 
 
+	insight_count(IC_CORPSES);	/* toward corpse sense */
+
 	/* KMH, conduct */
 	if (!vegan(&mons[mnum])) u.uconduct.unvegan++;
 	if (!vegetarian(&mons[mnum])) violated_vegetarian();
@@ -2390,6 +2392,9 @@ doeat()		/* generic "eat" command funtion (see cmd.c) */
 	}
 	if (!(otmp = floorfood("eat"))) return 0;
 	if (check_capacity((char *)0)) return 0;
+
+	/* Insight: corpse sense (blessed food detection does more) */
+	if (!u.uedibility && insight_corpse_check(otmp)) return 0;
 
 	if (u.uedibility) {
 		int res = edibility_prompts(otmp);

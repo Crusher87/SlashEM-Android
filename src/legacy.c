@@ -87,6 +87,15 @@ static const struct lin_track {
 static const int ward_feat[LIN_MAXRANK] = { F_LESSONS10, F_MEDUSA, F_GEHENNOM };
 
 #define FG_DESCENT	0
+/* names used for Insight in legacy.dat */
+static const char *const icounter_keys[NUM_ICOUNTERS] = {
+	"corpses", "prayers", "wands", "elbereth"
+};
+static const char *const insight_keys[NUM_INSIGHT] = {
+	"facts", "threat", "warnings", "corpse", "prayer", "price", "wand",
+	"elbereth", "sokoban"
+};
+
 #define FG_BRANCHES	1
 #define FG_SKILL	2
 #define FG_KNOWLEDGE	3
@@ -152,6 +161,10 @@ static const struct feat_def {
 	{ "ghost", "Meet an ancestor's ghost", 50, FG_ANCESTRY,
 	  "the Necromancer" },
 	{ "ancestors25", "Record 25 ancestors", 25, FG_ANCESTRY, 0 },
+	{ "id50", "Identify 50 object types, across games", 50, FG_KNOWLEDGE,
+	  0 },
+	{ "bestiary100", "Fill 100 Bestiary entries", 50, FG_KNOWLEDGE, 0 },
+	{ "insight", "Earn every Insight item", 100, FG_KNOWLEDGE, 0 },
 };
 
 /* roles and races that are not open from the start of a Legacy profile */
@@ -217,6 +230,9 @@ STATIC_DCL void FDECL(add_lesson, (const char *));
 STATIC_DCL boolean FDECL(know_lesson, (const char *));
 STATIC_DCL void FDECL(lesson_key, (char *, const char *));
 STATIC_DCL void FDECL(landmark, (int));
+STATIC_DCL char FDECL(soko_glyph, (int, int));
+STATIC_DCL void FDECL(soko_start, (int));
+STATIC_DCL void FDECL(soko_finish, (int, BOOLEAN_P));
 STATIC_DCL boolean FDECL(lore_ok, (int));
 STATIC_DCL void FDECL(know_random, (int));
 STATIC_DCL boolean NDECL(first_pet_alive);
@@ -234,6 +250,7 @@ legacy_init()
 	legacy_loaded = TRUE;
 	(void) memset((genericptr_t) &lprof, 0, sizeof lprof);
 	lprof.last_mode = LMODE_LEGACY;
+	codex_init();
 	if (!read_profile(LEGACY_PROFILE))
 	    (void) read_profile(LEGACY_BACKUP);
 	lprof.dirty = FALSE;
@@ -385,7 +402,20 @@ const char *name;
 		    add_lesson(rest);
 	    } else if (!strcmp(key, "ancestor")) {
 		read_ancestor(rest);
-	    }
+	    } else if (!strcmp(key, "insight")) {
+		char iname[BUFSZ];
+		long n = 0;
+
+		if (sscanf(rest, "%s %ld", iname, &n) == 2)
+		    for (i = 0; i < NUM_ICOUNTERS; i++)
+			if (!strcmp(iname, icounter_keys[i]))
+			    lprof.icount[i] = n;
+	    } else if (!strcmp(key, "insightoff")) {
+		for (i = 0; i < NUM_INSIGHT; i++)
+		    if (!strcmp(rest, insight_keys[i]))
+			lprof.ins_off[i] = TRUE;
+	    } else
+		(void) codex_read(key, rest);
 	    /* anything else was written by a newer version: skip it */
 	}
 	(void) fclose(fp);
@@ -436,6 +466,14 @@ boolean force;
 		fprintf(fp, "race %s\n", races[i].noun);
 	for (i = 0; i < lprof.nlessons; i++)
 	    fprintf(fp, "lesson %s\n", lprof.lessons[i]);
+	for (i = 0; i < NUM_ICOUNTERS; i++)
+	    if (lprof.icount[i])
+		fprintf(fp, "insight %s %ld\n", icounter_keys[i],
+			lprof.icount[i]);
+	for (i = 0; i < NUM_INSIGHT; i++)
+	    if (lprof.ins_off[i])
+		fprintf(fp, "insightoff %s\n", insight_keys[i]);
+	codex_write(fp);
 
 	/* ancestors, oldest first, at most MAX_ANCESTORS of them */
 	for (n = 0, a = lprof.ancestors; a; a = a->next)
@@ -517,6 +555,12 @@ const char *death;
 	boolean again;
 
 	clean_field(buf, death, BUFSZ);
+	/* being frozen by a floating eye is the real cause, whatever then
+	   did the killing */
+	if (strstri(buf, "frozen by a floating eye")) {
+	    Strcpy(key, "frozen by a floating eye");
+	    return;
+	}
 	if ((p = strstr(buf, ", while")) != 0) *p = '\0';
 	if ((p = strstr(buf, " (with")) != 0) *p = '\0';
 	if ((p = strstr(buf, " (in")) != 0) *p = '\0';
@@ -536,6 +580,37 @@ const char *death;
 	    } while (again);
 	}
 	Strcpy(key, buf);
+}
+
+void
+legacy_lesson_key(key, death)
+char *key;
+const char *death;
+{
+	lesson_key(key, death);
+}
+
+/* has any Lesson so far contained this text? */
+boolean
+legacy_know_lesson_like(s)
+const char *s;
+{
+	int i;
+
+	legacy_init();
+	for (i = 0; i < lprof.nlessons; i++)
+	    if (strstri(lprof.lessons[i], s))
+		return TRUE;
+	return FALSE;
+}
+
+void
+legacy_clean_field(dst, src, size)
+char *dst;
+const char *src;
+int size;
+{
+	clean_field(dst, src, size);
 }
 
 /* ------------------------------------------------------------------ */
@@ -847,6 +922,13 @@ struct monst *pet;
 	lrun.gen = ++lprof.generation;
 	lprof.last_mode = lrun.mode;
 	lprof.dirty = TRUE;
+	/* where Insight and the Codex stood, for the recap */
+	lrun.ins_had = insight_mask();
+	lrun.ins_told = lrun.ins_had;
+	for (r = 0; r < NUM_ICOUNTERS; r++)
+	    lrun.ic_start[r] = lprof.icount[r];
+	lrun.kills_start = codex_total_kills();
+	lrun.ids_start = codex_armory_count();
 	if (pet)
 	    lrun.first_pet = pet->m_id;
 	if (lrun.mode == LMODE_LEGACY) {
@@ -1107,6 +1189,10 @@ boolean newbranch;
 		legacy_feat(F_PETDL8);
 	}
 
+	codex_arrived();	/* the Atlas */
+	if (In_sokoban(&u.uz))
+	    legacy_soko_arrived();	/* Sokoban memory */
+
 	/* bones left by one of this profile's own characters */
 	if (lrun.ghost_ledger == -1) {
 	    struct legacy_ancestor *a;
@@ -1148,12 +1234,169 @@ boolean byhero;
 	}
 	if (!byhero || mtmp->mtame)
 	    return;
+	codex_killed(ptr);
 	if (is_undead(ptr))
 	    legacy_count(LC_UNDEAD);
 	if (ptr->mlet == S_VAMPIRE)
 	    legacy_feat(F_VAMPIRE);
 	if (legacy_throwing && ++lrun.thrown_kills >= 20)
 	    legacy_feat(F_THROWN20);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sokoban memory: record each level as first seen and the pushes made,
+   so a layout got through can be shown again in the Codex */
+
+STATIC_OVL char
+soko_glyph(x, y)
+int x, y;
+{
+	struct trap *t = t_at(x, y);
+	int glyph;
+
+	if (t && (t->ttyp == HOLE || t->ttyp == TRAPDOOR || t->ttyp == PIT
+		  || t->ttyp == SPIKED_PIT))
+	    return '^';
+	if (levl[x][y].typ == STONE)
+	    return ' ';
+	/* the default (plain text) symbol for the map feature */
+	glyph = back_to_glyph(x, y);
+	return glyph_is_cmap(glyph) ? defsyms[glyph_to_cmap(glyph)].sym : '.';
+}
+
+/* first arrival on Sokoban level 'lev': draw it, letter its boulders */
+STATIC_OVL void
+soko_start(lev)
+int lev;
+{
+	int x, y, x0 = COLNO, x1 = 0, y0 = ROWNO, y1 = 0, nb = 0;
+	struct obj *otmp;
+
+	lrun.soko_state[lev] = SOKO_RECORDING;
+	lrun.soko_nlog[lev] = 0;
+	for (x = 1; x < COLNO; x++)
+	    for (y = 0; y < ROWNO; y++)
+		if (levl[x][y].typ != STONE) {
+		    if (x < x0) x0 = x;
+		    if (x > x1) x1 = x;
+		    if (y < y0) y0 = y;
+		    if (y > y1) y1 = y;
+		}
+	if (x1 < x0 || x1 - x0 + 1 >= SOKO_COLS || y1 - y0 + 1 > SOKO_ROWS) {
+	    lrun.soko_state[lev] = SOKO_LOST;
+	    return;
+	}
+	(void) memset((genericptr_t) lrun.soko_map[lev], 0,
+		      sizeof lrun.soko_map[lev]);
+	for (y = y0; y <= y1; y++) {
+	    char *row = lrun.soko_map[lev][y - y0];
+
+	    for (x = x0; x <= x1; x++) {
+		char c = soko_glyph(x, y);
+
+		if (x == u.ux && y == u.uy)
+		    c = '@';
+		else if ((otmp = sobj_at(BOULDER, x, y)) != 0) {
+		    if (nb < SOKO_MAXB) {
+			lrun.soko_bx[lev][nb] = x;
+			lrun.soko_by[lev][nb] = y;
+			c = (nb < 26) ? 'A' + nb : 'a' + nb - 26;
+		    } else
+			lrun.soko_state[lev] = SOKO_LOST;
+		    nb++;
+		}
+		row[x - x0] = c;
+	    }
+	    /* no trailing blanks */
+	    for (x = x1 - x0; x >= 0 && row[x] == ' '; x--)
+		row[x] = '\0';
+	}
+	lrun.soko_nb[lev] = (uchar) min(nb, SOKO_MAXB);
+}
+
+/* the hero pushes the boulder at sx,sy to rx,ry on a Sokoban level */
+void
+legacy_soko_push(sx, sy, rx, ry)
+int sx, sy, rx, ry;
+{
+	int lev = dunlev(&u.uz), i, dir;
+	struct trap *t = t_at(rx, ry);
+	boolean fills;
+
+	if (lev < 1 || lev >= SOKO_LEVS
+		|| lrun.soko_state[lev] != SOKO_RECORDING)
+	    return;
+	for (i = 0; i < lrun.soko_nb[lev]; i++)
+	    if (lrun.soko_bx[lev][i] == sx && lrun.soko_by[lev][i] == sy)
+		break;
+	if (i >= lrun.soko_nb[lev] || lrun.soko_nlog[lev] >= SOKO_LOG) {
+	    lrun.soko_state[lev] = SOKO_LOST;
+	    return;
+	}
+	dir = (rx < sx) ? 0 : (rx > sx) ? 1 : (ry < sy) ? 2 : 3;
+	fills = (t && (t->ttyp == HOLE || t->ttyp == TRAPDOOR
+		       || t->ttyp == PIT || t->ttyp == SPIKED_PIT));
+	lrun.soko_log[lev][lrun.soko_nlog[lev]++] =
+	    (uchar) ((i << 3) | (dir << 1) | (fills ? 1 : 0));
+	if (fills)
+	    lrun.soko_bx[lev][i] = lrun.soko_by[lev][i] = -1;
+	else
+	    lrun.soko_bx[lev][i] = rx, lrun.soko_by[lev][i] = ry;
+}
+
+/* Sokoban level 'lev' was got through: hand its pushes to the Codex;
+   'solved' if every hole was filled */
+STATIC_OVL void
+soko_finish(lev, solved)
+int lev;
+boolean solved;
+{
+	static const char *const dirname[4] = { "left", "right", "up", "down" };
+	char name[20], buf[BUFSZ], *map[SOKO_ROWS], *steps[SOKO_LOG];
+	int nmap = 0, nsteps = 0, k, n, i, j;
+
+	if (lev < 1 || lev >= SOKO_LEVS || !lrun.soko_layout[lev]
+		|| lrun.soko_state[lev] == SOKO_UNSEEN
+		|| lrun.soko_state[lev] == SOKO_DONE)
+	    return;
+	if (!lrun.soko_nlog[lev]) {	/* got past it without a push */
+	    lrun.soko_state[lev] = SOKO_DONE;
+	    return;
+	}
+	Sprintf(name, "soko%d-%d", lev, (int) lrun.soko_layout[lev]);
+	for (i = 0; i < SOKO_ROWS && lrun.soko_map[lev][i][0]; i++)
+	    map[nmap++] = lrun.soko_map[lev][i];
+	/* one step per run of pushes on the same boulder, such as
+	   "3. B: left 2, down 1 (fills a hole)" */
+	n = lrun.soko_nlog[lev];
+	for (k = 0; k < n; ) {
+	    int b = lrun.soko_log[lev][k] >> 3;
+	    boolean filled = FALSE;
+
+	    Sprintf(buf, "%2d. %c:", nsteps + 1, (b < 26) ? 'A' + b : 'a' + b - 26);
+	    while (k < n && (lrun.soko_log[lev][k] >> 3) == b) {
+		int d = (lrun.soko_log[lev][k] >> 1) & 3;
+
+		for (j = 0; k < n && lrun.soko_log[lev][k] >> 3 == b
+			    && ((lrun.soko_log[lev][k] >> 1) & 3) == d; k++, j++)
+		    if (lrun.soko_log[lev][k] & 1)
+			filled = TRUE;
+		if (strlen(buf) < BUFSZ - 40)
+		    Sprintf(eos(buf), "%s %s %d",
+			    (*(eos(buf) - 1) == ':') ? "" : ",", dirname[d], j);
+	    }
+	    if (filled)
+		Strcat(buf, " (fills a hole)");
+	    steps[nsteps] = (char *) alloc((unsigned) strlen(buf) + 1);
+	    Strcpy(steps[nsteps], buf);
+	    nsteps++;
+	}
+	codex_soko_remember(name, map, nmap, steps, nsteps,
+			    lrun.soko_state[lev] == SOKO_LOST ? SQ_LOST
+			    : solved ? SQ_SOLVED : SQ_PARTIAL);
+	for (i = 0; i < nsteps; i++)
+	    free((genericptr_t) steps[i]);
+	lrun.soko_state[lev] = SOKO_DONE;
 }
 
 /* the n-th Sokoban level (counted from the entrance) was finished */
@@ -1163,10 +1406,39 @@ int n;
 {
 	lrun.soko_solved++;
 	legacy_feat(F_SOKO1);
+	soko_finish(dunlev(&u.uz), TRUE);
 	if (n >= dunlevs_in_dungeon(&u.uz)) {
 	    landmark(LM_SOKOBAN);
 	    legacy_feat(F_SOKOBAN);
 	}
+}
+
+/* mkmaze() built a Sokoban level from layout 'proto', such as "soko4-2" */
+void
+legacy_soko_layout(proto)
+const char *proto;
+{
+	int lev, var;
+
+	if (sscanf(proto, "soko%d-%d", &lev, &var) == 2 && lev >= 1
+		&& lev < SOKO_LEVS)
+	    lrun.soko_layout[lev] = (xchar) var;
+}
+
+/* the hero has arrived on a Sokoban level */
+void
+legacy_soko_arrived()
+{
+	int lev = dunlev(&u.uz);
+
+	if (lev < 1 || lev >= SOKO_LEVS)
+	    return;
+	if (lrun.soko_state[lev] == SOKO_UNSEEN)
+	    soko_start(lev);
+	/* reaching it from below means the level below was got through,
+	   whatever was left unfilled */
+	if (lev + 1 < SOKO_LEVS)
+	    soko_finish(lev + 1, FALSE);
 }
 
 /* the hero picked up an object */
@@ -1207,6 +1479,14 @@ void
 legacy_turn()
 {
 	struct monst *mtmp;
+
+	/* the Bestiary: every monster the hero can see */
+	if (!Hallucination)
+	    for (mtmp = fmon; mtmp; mtmp = mtmp->nmon)
+		if (!DEADMONSTER(mtmp) && canspotmon(mtmp)
+			&& !mtmp->m_ap_type && !mtmp->mundetected)
+		    codex_saw(mtmp->data);
+	insight_turn();
 
 	/* lycanthropy caught and later cured (the race doesn't count) */
 	if (!Race_if(PM_HUMAN_WEREWOLF)) {

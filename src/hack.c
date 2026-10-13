@@ -480,6 +480,8 @@ moverock()
 		goto cannot_push;
 	    }
 
+	    if (Sokoban && !closed_door(rx, ry))
+		legacy_soko_push(sx, sy, rx, ry);	/* Sokoban memory */
 	    if (ttmp)
 		switch(ttmp->ttyp) {
 		case LANDMINE:
@@ -1348,7 +1350,10 @@ int x, y;
 		    (is_lava(x, y) && !Known_lwalking && !is_lava(u.ux, u.uy))) {
 		if (flags.nopick && !flags.travel) {
 		    return FALSE;	/* moving with m-prefix */
-		} else if (ParanoidSwim) {
+		} else if (ParanoidSwim
+			   /* Insight: a learned warning */
+			   || insight_warning(is_lava(x, y) ? LW_LAVA
+							    : LW_WATER)) {
 		    You("avoid stepping into the %s.", surface(x, y));
 		    if (iflags.cmdassist && !swim_tip_given) {
 			swim_tip_given = TRUE;
@@ -2866,6 +2871,7 @@ unmul(msg_override)
 const char *msg_override;
 {
 	multi = 0;	/* caller will usually have done this already */
+	legacy_frozen_by = 0;
 	if (msg_override) nomovemsg = msg_override;
 	else if (!nomovemsg) nomovemsg = You_can_move_again;
 	if (*nomovemsg) pline(nomovemsg);
