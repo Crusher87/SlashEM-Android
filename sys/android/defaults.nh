@@ -80,8 +80,9 @@ STATUSCOLOR=hal:yellow,cnf:orange,stn:red&bold
 
 ## Health
 STATUSCOLOR=ill:red&inverse,foodpois:red&inverse,slime:red&inverse
+STATUSCOLOR=stone:red&inverse,strngl:red&inverse
 # abbreviated
-STATUSCOLOR=fps:red&inverse,slm:red&inverse
+STATUSCOLOR=fps:red&inverse,slm:red&inverse,sto:red&inverse,sgl:red&inverse
 
 ## Other
 STATUSCOLOR=held:red&inverse,blind:red&inverse
