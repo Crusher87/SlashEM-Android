@@ -482,6 +482,7 @@ struct levelflags {
 	Bitfield(arboreal, 1);		/* Trees replace rock */
 	Bitfield(spooky,1);		/* Spooky sounds (Tina Hall) */
 	Bitfield(lethe, 1);			/* All water on level causes amnesia */
+	Bitfield(sokoban_rules, 1);	/* fill pits and holes w/ boulders */
 };
 
 typedef struct
@@ -512,6 +513,10 @@ extern dlevel_t level;	/* structure describing the current level */
 #define levl		level.locations
 #define fobj		level.objlist
 #define fmon		level.monlist
+
+/* Sokoban puzzle rules (no diagonal boulder pushing, luck penalties...)
+   apply until the last pit or hole on the level has been filled */
+#define Sokoban		level.flags.sokoban_rules
 
 /*
  * Covert a trap number into the defsym graphics array.

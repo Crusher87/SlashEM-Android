@@ -427,7 +427,7 @@ moverock()
 	    mtmp = m_at(rx, ry);
 
 		/* KMH -- Sokoban doesn't let you push boulders diagonally */
-	    if (In_sokoban(&u.uz) && u.dx && u.dy) {
+	    if (Sokoban && u.dx && u.dy) {
 	    	if (Blind) feel_location(sx,sy);
 	    	pline("%s won't roll diagonally on this %s.",
 	        		The(xname(otmp)), surface(sx, sy));
@@ -601,16 +601,16 @@ moverock()
 #ifdef STEED
 		if (u.usteed && P_SKILL(P_RIDING) < P_BASIC) {
 		    You("aren't skilled enough to %s %s from %s.",
-			(flags.pickup && !In_sokoban(&u.uz))
+			(flags.pickup && !Sokoban)
 			    ? "pick up" : "push aside",
 			the(xname(otmp)), y_monnam(u.usteed));
 		} else
 #endif
 		{
 		    pline("However, you can easily %s.",
-			(flags.pickup && !In_sokoban(&u.uz))
+			(flags.pickup && !Sokoban)
 			    ? "pick it up" : "push it aside");
-		    if (In_sokoban(&u.uz))
+		    if (Sokoban)
 			change_luck(-1);	/* Sokoban guilt */
 		    break;
 		}
@@ -626,7 +626,7 @@ moverock()
 				     && IS_ROCK(levl[sx][u.uy].typ))))
 		|| verysmall(youmonst.data))) {
 		pline("However, you can squeeze yourself into a small opening.");
-		if (In_sokoban(&u.uz))
+		if (Sokoban)
 		    change_luck(-1);	/* Sokoban guilt */
 		break;
 	    } else
@@ -861,7 +861,7 @@ register xchar x,y;
 {
 	struct permonst *mdat = mon->data;
 	boolean passwall = mon == &youmonst ? Passes_walls : passes_walls(mdat);
-	return((boolean) ((In_sokoban(&u.uz) && sobj_at(BOULDER,x,y)) ||
+	return((boolean) ((Sokoban && sobj_at(BOULDER,x,y)) ||
 	       (IS_ROCK(levl[x][y].typ)
 		    && (!tunnels(mdat) || needspick(mdat) || !may_dig(x,y))
 		    && !(passwall && may_passwall(x,y)))));
@@ -1005,7 +1005,7 @@ int mode;
     if (dx && dy
 	    && bad_rock(&youmonst,ux,y) && bad_rock(&youmonst,x,uy)) {
 	/* Move at a diagonal. */
-	if (In_sokoban(&u.uz)) {
+	if (Sokoban) {
 	    if (mode == DO_MOVE)
 		You("cannot pass that way.");
 	    return FALSE;
@@ -1048,13 +1048,13 @@ int mode;
 	return FALSE;
     }
 
-    if (sobj_at(BOULDER,x,y) && (In_sokoban(&u.uz) || !Passes_walls)) {
+    if (sobj_at(BOULDER,x,y) && (Sokoban || !Passes_walls)) {
 	if (!(Blind || Hallucination) && (flags.run >= 2) && mode != TEST_TRAV)
 	    return FALSE;
 	if (mode == DO_MOVE) {
 	    /* tunneling monsters will chew before pushing */
 	    if (tunnels(youmonst.data) && !needspick(youmonst.data) &&
-		!In_sokoban(&u.uz)) {
+		!Sokoban) {
 		if (still_chewing(x,y)) return FALSE;
 	    } else
 		if (moverock() < 0) return FALSE;
@@ -1062,7 +1062,7 @@ int mode;
 	    struct obj* obj;
 
 	    /* don't pick two boulders in a row, unless there's a way thru */
-	    if (sobj_at(BOULDER,ux,uy) && !In_sokoban(&u.uz)) {
+	    if (sobj_at(BOULDER,ux,uy) && !Sokoban) {
 		if (!Passes_walls &&
 		    !(tunnels(youmonst.data) && !needspick(youmonst.data)) &&
 		    !carrying(PICK_AXE) && !carrying(DWARVISH_MATTOCK) &&
@@ -1531,38 +1531,7 @@ domove()
 	}
 	if(u.utrap) {
 		if(u.utraptype == TT_PIT) {
-		    if (!rn2(2) && sobj_at(BOULDER, u.ux, u.uy)) {
-			Your("%s gets stuck in a crevice.", body_part(LEG));
-			display_nhwindow(WIN_MESSAGE, FALSE);
-			clear_nhwindow(WIN_MESSAGE);
-			You("free your %s.", body_part(LEG));
-		    } else if (Flying && !In_sokoban(&u.uz)) {
-			/* eg fell in pit, poly'd to a flying monster */
-			You("fly from the pit.");
-			u.utrap = 0;
-			fill_pit(u.ux, u.uy);
-			vision_full_recalc = 1;	/* vision limits change */
-		    } else if (!(--u.utrap)) {
-			You("%s to the edge of the pit.",
-				(In_sokoban(&u.uz) && Levitation) ?
-				"struggle against the air currents and float" :
-#ifdef STEED
-				u.usteed ? "ride" :
-#endif
-				"crawl");
-			fill_pit(u.ux, u.uy);
-			vision_full_recalc = 1;	/* vision limits change */
-		    } else if (flags.verbose) {
-#ifdef STEED
-			if (u.usteed)
-			    Norep("%s is still in a pit.",
-				  upstart(y_monnam(u.usteed)));
-			else
-#endif
-			Norep( (Hallucination && !rn2(5)) ?
-				"You've fallen, and you can't get up." :
-				"You are still in a pit." );
-		    }
+		    climb_pit();
 		} else if (u.utraptype == TT_LAVA) {
 		    if(flags.verbose) {
 			predicament = "stuck in the lava";

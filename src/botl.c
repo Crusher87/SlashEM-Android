@@ -472,6 +472,13 @@ bot2str(char *newbot2)
 #ifdef ALLEG_FX
 	int w;
 #endif
+#define MAXCONDS 20
+	const char *condl[MAXCONDS], *conds[MAXCONDS];	/* long, short */
+	char hubuf[BUFSZ];
+	int ncond, i;
+	boolean abbrev;
+#define ADD_COND(l,s) ((void) (ncond < MAXCONDS && \
+			(condl[ncond] = (l), conds[ncond++] = (s))))
 
 	hp = Upolyd ? u.mh : u.uhp;
 	hpmax = Upolyd ? u.mhmax : u.uhpmax;
@@ -547,96 +554,79 @@ bot2str(char *newbot2)
         }
 #endif
 	        
-        if (bot2_abbrev >= 2) {
-		if (hu_abbrev_stat[u.uhs][0]!='\0') {
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-			add_colored_text(hu_abbrev_stat[u.uhs], newbot2);
-#else
-			Sprintf(nb = eos(nb), " ");
-			Strcat(newbot2, hu_abbrev_stat[u.uhs]);
-#endif
-		}
-	}
-	else if(strcmp(hu_stat[u.uhs], "        ")) {
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-		add_colored_text(hu_stat[u.uhs], newbot2);
-#else
-		Sprintf(nb = eos(nb), " ");
-		Strcat(newbot2, hu_stat[u.uhs]);
-#endif
-	}
-/* WAC further Up
-#ifdef SCORE_ON_BOTL
-	if (flags.showscore)
-                Sprintf(nb,"%c:%-2ld  Score:%ld", oc_syms[COIN_CLASS],
-                   u.ugold, botl_score());
-#endif
-*/
-	/* KMH -- changed to Lev */
-	if (Levitation)
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-	     	add_colored_text("Lev", newbot2);
-#else
-		Strcat(nb = eos(nb), " Lev");
-#endif
-	if(Confusion)
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-	     	add_colored_text(bot2_abbrev >= 2 ? " Cnf" : " Conf", newbot2);
-#else
-		Strcat(nb = eos(nb), bot2_abbrev >= 2 ? " Cnf" : " Conf");
-#endif
-	if(Sick) {
+	/*
+	 * Status conditions.  They are collected first (long and short
+	 * form) so that all of them can be shortened together when the
+	 * long forms would not fit.  The order follows 3.6: hunger, then
+	 * the fatal ones, then the rest.
+	 */
+	ncond = 0;
+	/* hu_stat[] is padded with spaces (all blank when not hungry) */
+	Strcpy(hubuf, hu_stat[u.uhs]);
+	for (i = (int)strlen(hubuf); i > 0 && hubuf[i-1] == ' '; i--)
+		hubuf[i-1] = '\0';
+	if (*hubuf)
+		ADD_COND(hubuf, hu_abbrev_stat[u.uhs]);
+	if (Stoned)
+		ADD_COND("Stone", "Sto");
+	if (Slimed)
+		ADD_COND("Slime", "Slm");
+	if (Strangled)
+		ADD_COND("Strngl", "Sgl");
+	if (Sick) {
 		if (u.usick_type & SICK_VOMITABLE)
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-			add_colored_text(bot2_abbrev >= 2 ? " FPs" : " FoodPois", newbot2);
-#else
-			Strcat(nb = eos(nb), bot2_abbrev >= 2 ? " FPs" : " FoodPois");
-#endif
+			ADD_COND("FoodPois", "FPs");
 		if (u.usick_type & SICK_NONVOMITABLE)
+			ADD_COND("Ill", "Ill");
+	}
+	/* KMH -- changed to Lev */
+	/* levitation and flying are mutually exclusive; riding is not */
+	if (Levitation)
+		ADD_COND("Lev", "Lev");
+	else if (Flying)
+		ADD_COND("Fly", "Fly");
+#ifdef STEED
+	if (u.usteed)
+		ADD_COND("Ride", "Rid");
+#endif
+	if (Confusion)
+		ADD_COND("Conf", "Cnf");
+	if (Blind)
+		ADD_COND("Blind", "Bnd");
+	if (Stunned)
+		ADD_COND("Stun", "Stn");
+	if (Hallucination)
+		ADD_COND("Hallu", "Hal");
+	if (u.ustuck && !u.uswallow && !sticks(youmonst.data))
+		ADD_COND("Held", "Hld");
+	if (cap > UNENCUMBERED)
+		ADD_COND(enc_stat[cap], enc_abbrev_stat[cap]);
+
+	abbrev = (bot2_abbrev >= 2);
+#ifdef ANDROID
+	/* The Android status line is not shortened by the window port;
+	 * use the short forms when the long ones would pass 80 columns. */
+	if (!abbrev) {
+		int len = (int)strlen(newbot2);
+
+		for (i = 0; i < ncond; i++)
+			len += 1 + (int)strlen(condl[i]);
+		if (len > COLNO)
+			abbrev = TRUE;
+	}
+#endif
+	for (i = 0; i < ncond; i++) {
+		const char *ctxt = abbrev ? conds[i] : condl[i];
+
+		if (!*ctxt) continue;
 #if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-			add_colored_text("Ill", newbot2);
+		add_colored_text(ctxt, newbot2);
 #else
-			Strcat(nb = eos(nb), " Ill");
+		Sprintf(nb = eos(newbot2), " %s", ctxt);
 #endif
 	}
-
-	if(Blind)
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-	     	add_colored_text(bot2_abbrev >= 2 ? " Bnd" : " Blind", newbot2);
-#else
-		Strcat(nb = eos(nb), bot2_abbrev >= 2 ? " Bnd" : " Blind");
-#endif
-	if(Stunned)
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-	     	add_colored_text(bot2_abbrev >= 2 ? " Stn" : " Stun", newbot2);
-#else
-		Strcat(nb = eos(nb), bot2_abbrev >= 2 ? " Stn" : " Stun");
-#endif
-	if(Hallucination)
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-		add_colored_text(bot2_abbrev >= 2 ? " Hal" : " Hallu", newbot2);
-#else
-		Strcat(nb = eos(nb), bot2_abbrev >= 2 ? " Hal" : " Hallu");
-#endif
-	if(Slimed)
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-		add_colored_text(bot2_abbrev >= 2 ? " Slm" : " Slime", newbot2);
-#else
-		Strcat(nb = eos(nb), bot2_abbrev >= 2 ? " Slm" : " Slime");
-#endif
-	if(u.ustuck && !u.uswallow && !sticks(youmonst.data))
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-		add_colored_text(bot2_abbrev >= 2 ? " Hld" : "Held", newbot2);
-#else
-		Strcat(nb = eos(nb), bot2_abbrev >= 2 ? " Hld" : "Held");
-#endif
-	if(cap > UNENCUMBERED)
-#if defined(STATUS_COLORS) && defined(TEXTCOLOR)
-		add_colored_text(bot2_abbrev >= 2 ? enc_abbrev_stat[cap] : enc_stat[cap], newbot2);
-#else
-		Sprintf(nb = eos(nb), " %s",
-		  bot2_abbrev >= 2 ? enc_abbrev_stat[cap] : enc_stat[cap]);
-#endif
+#undef ADD_COND
+#undef MAXCONDS
 }
 
 STATIC_OVL void

@@ -709,7 +709,7 @@ forget_map(howmuch)
 {
 	register int zx, zy;
 
-	if (In_sokoban(&u.uz))
+	if (Sokoban)
 	    return;
 
 	known = TRUE;
@@ -1477,7 +1477,7 @@ register struct obj	*sobj;
 	    	pline_The("%s rumbles %s you!", ceiling(u.ux,u.uy),
 	    			sobj->blessed ? "around" : "above");
 	    	known = 1;
-	    	if (In_sokoban(&u.uz))
+	    	if (Sokoban)
 	    	    change_luck(-1);	/* Sokoban guilt */
 
 	    	/* Loop through the surrounding squares */
@@ -1950,9 +1950,15 @@ int how;
 		    pline(thats_enough_tries);
 		    return;
 		}
-		getlin("What monster do you want to genocide? [type the name]",
+		getlin("What monster do you want to genocide? [type the name, or ? for list]",
 			buf);
 		(void)mungspaces(buf);
+		/* "?" lists the species genocided so far, then asks again */
+		if (!strcmp(buf, "?") || !strcmp(buf, "'?'")) {
+		    list_genocided('g', FALSE);
+		    i--;	/* don't count this as one of the tries */
+		    continue;
+		}
 		/* choosing "none" preserves genocideless conduct */
 		if (!strcmpi(buf, "none") || !strcmpi(buf, "nothing")) {
 		    /* ... but no free pass if cursed */

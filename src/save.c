@@ -354,6 +354,13 @@ register int fd, mode;
 	bwrite(fd, (genericptr_t) &flags, sizeof(struct flag));
 	bwrite(fd, (genericptr_t) &u, sizeof(struct you));
 
+	/* interrupted activities which can be resumed; must come before
+	   invent is freed (objects are saved by o_id) */
+	bwrite(fd, (genericptr_t) &digging, sizeof(struct dig_info));
+	save_food_context(fd);
+	save_book_context(fd);
+	save_takeoff_context(fd);
+
 	/* must come before migrating_objs and migrating_mons are freed */
 	save_timers(fd, mode, RANGE_GLOBAL);
 	save_light_sources(fd, mode, RANGE_GLOBAL);
@@ -959,8 +966,10 @@ register struct obj *otmp;
 	    if (Has_contents(otmp))
 		saveobjchn(fd,otmp->cobj,mode);
 	    if (release_data(mode)) {
+		/* remember an interrupted meal or book by its o_id */
+		food_saved(otmp);
+		book_saved(otmp);
 		if (otmp->oclass == FOOD_CLASS) food_disappears(otmp);
-		if (otmp->oclass == SPBOOK_CLASS) book_disappears(otmp);
 		otmp->where = OBJ_FREE;	/* set to free so dealloc will work */
 		otmp->timed = 0;	/* not timed any more */
 		otmp->lamplit = 0;	/* caller handled lights */

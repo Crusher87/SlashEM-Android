@@ -845,7 +845,7 @@ not_special:
 			&& pctload < 75);
 		likeobjs = (likes_objs(ptr) && pctload < 75);
 		likemagic = (likes_magic(ptr) && pctload < 85);
-		likerock = (throws_rocks(ptr) && pctload < 50 && !In_sokoban(&u.uz));
+		likerock = (throws_rocks(ptr) && pctload < 50 && !Sokoban);
 		conceals = hides_under(ptr);
 		setlikes = TRUE;
 	    }
@@ -1236,7 +1236,7 @@ postmov:
 		    likeobjs = (likes_objs(ptr) && pctload < 75);
 		    likemagic = (likes_magic(ptr) && pctload < 85);
 		    likerock = (throws_rocks(ptr) && pctload < 50 &&
-				!In_sokoban(&u.uz));
+				!Sokoban);
 		    conceals = hides_under(ptr);
 		}
 

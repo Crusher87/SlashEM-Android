@@ -9,6 +9,8 @@
 static NEARDATA int delay;            /* moves left for this spell */
 static NEARDATA int end_delay;        /* when to stop studying */
 static NEARDATA struct obj *book;	/* last/current book being xscribed */
+static NEARDATA unsigned book_id;	/* o_id of that book while it is not in
+					   memory (saved game or other level) */
 
 /* spellmenu arguments; 0 thru n-1 used as spl_book[] index when swapping */
 #define SPELLMENU_CAST (-2)
@@ -47,6 +49,7 @@ STATIC_DCL void NDECL(do_reset_learn);
 STATIC_DCL boolean FDECL(getspell, (int *));
 STATIC_DCL boolean FDECL(dospellmenu, (const char *,int,int *));
 STATIC_DCL int FDECL(percent_success, (int));
+STATIC_DCL char *FDECL(spellretention, (int, char *));
 STATIC_DCL void NDECL(cast_protection);
 STATIC_DCL void FDECL(spell_backfire, (int));
 STATIC_DCL const char *FDECL(spelltypemnemonic, (int));
@@ -572,6 +575,7 @@ register struct obj *spellbook;
 	}
 
 	book = spellbook;
+	book_id = 0;		/* forget any book left on another level */
 	set_occupation(learn, "studying", 0);
 	return(1);
 }
@@ -583,6 +587,54 @@ book_disappears(obj)
 struct obj *obj;
 {
 	if (obj == book) book = (struct obj *)0;
+}
+
+/* the level holding the book being studied is being saved and its objects
+   freed (leaving the level or saving the game); remember the book by o_id
+   so that studying it can still be continued once it is restored */
+void
+book_saved(obj)
+struct obj *obj;
+{
+	if (obj == book) {
+	    book_id = obj->o_id;
+	    book = (struct obj *)0;
+	}
+}
+
+/* an object has been restored from a save or level file; if it is the
+   remembered book, point at it again (not for bones objects) */
+void
+book_restored(obj)
+struct obj *obj;
+{
+	if (book_id && obj->o_id == book_id) {
+	    book = obj;
+	    book_id = 0;
+	}
+}
+
+/* save the state of interrupted studying, so that it can be continued
+   after restore instead of starting over (and risking failure again) */
+void
+save_book_context(fd)
+int fd;
+{
+	unsigned id = book ? book->o_id : book_id;
+
+	bwrite(fd, (genericptr_t) &id, sizeof id);
+	bwrite(fd, (genericptr_t) &delay, sizeof delay);
+	bwrite(fd, (genericptr_t) &end_delay, sizeof end_delay);
+}
+
+void
+rest_book_context(fd)
+int fd;
+{
+	mread(fd, (genericptr_t) &book_id, sizeof book_id);
+	mread(fd, (genericptr_t) &delay, sizeof delay);
+	mread(fd, (genericptr_t) &end_delay, sizeof end_delay);
+	book = (struct obj *)0;		/* relinked by book_restored() */
 }
 
 /* renaming an object usually results in it having a different address;
@@ -1218,7 +1270,7 @@ int *spell_no;
 {
 	winid tmpwin;
 	int i, n, how;
-	char buf[BUFSZ];
+	char buf[BUFSZ], retentionbuf[24];
 	menu_item *selected;
 	anything any;
 
@@ -1236,19 +1288,21 @@ int *spell_no;
 	 * in the window-ports (say via a tab character).
 	 */
 	if (!iflags.menu_tab_sep)
-		Sprintf(buf, "%-20s     Level  %-12s Fail", "    Name", "Category");
+		Sprintf(buf, "%-20s     Level  %-12s Fail Retention",
+			"    Name", "Category");
 	else
-		Sprintf(buf, "Name\tLevel\tCategory\tFail");
+		Sprintf(buf, "Name\tLevel\tCategory\tFail\tRetention");
 	if (flags.menu_style == MENU_TRADITIONAL)
 		Strcat(buf, iflags.menu_tab_sep ? "\tKey" : "  Key");
 	add_menu(tmpwin, NO_GLYPH, &any, 0, 0, ATR_BOLD, buf, MENU_UNSELECTED);
 	for (i = 0; i < MAXSPELL && spellid(i) != NO_SPELL; i++) {
 		Sprintf(buf, iflags.menu_tab_sep ?
-			"%s\t%-d%s\t%s\t%-d%%" : "%-20s  %2d%s   %-12s %3d%%",
+			"%s\t%-d\t%s\t%-d%%\t%s" :
+			"%-20s  %2d    %-12s %3d%% %9s",
 			spellname(i), spellev(i),
-			spellknow(i) ? " " : "*",
 			spelltypemnemonic(spell_skilltype(spellid(i))),
-			100 - percent_success(i));
+			100 - percent_success(i),
+			spellretention(i, retentionbuf));
 		if (flags.menu_style == MENU_TRADITIONAL)
 			Sprintf(eos(buf), iflags.menu_tab_sep ?
 				"\t%c" : "%4c ", spellet(i) ? spellet(i) : ' ');
@@ -1300,6 +1354,50 @@ int val;
     return rt;
 }
 
+/* how well the hero still remembers a spell, for the spell menu */
+STATIC_OVL char *
+spellretention(idx, outbuf)
+int idx;
+char *outbuf;
+{
+	long turnsleft, percent, accuracy;
+	int skill;
+
+	skill = P_SKILL(spell_skilltype(spellid(idx)));
+	if (skill < P_UNSKILLED) skill = P_UNSKILLED;	/* restricted */
+	turnsleft = spellknow(idx);
+
+	if (turnsleft < 1L) {
+	    /* spell has expired; hero can't successfully cast it anymore */
+	    Strcpy(outbuf, "(gone)");
+	} else if (turnsleft >= (long) KEEN) {
+	    /* full retention: at least as much as reading the book gives
+	       (casting and rereading can raise it further, up to MAX_KNOW) */
+	    Strcpy(outbuf, "100%");
+	} else {
+	    /*
+	     * Retention is displayed as a range of percentages of the
+	     * amount of time left until memory of the spell expires;
+	     * the precision of the range depends upon hero's skill
+	     * in this spell.
+	     *    expert:  2% intervals; 1-2,   3-4,  ...,   99-100;
+	     *   skilled:  5% intervals; 1-5,   6-10, ...,   95-100;
+	     *     basic: 10% intervals; 1-10, 11-20, ...,   91-100;
+	     * unskilled: 25% intervals; 1-25, 26-50, 51-75, 76-100.
+	     *
+	     * At the low end of each range, a value of N% really means
+	     * (N-1)%+1 through N%; so 1% is "greater than 0, at most 100".
+	     * KEEN is a multiple of 100; KEEN/100 loses no precision.
+	     */
+	    percent = (turnsleft - 1L) / ((long) KEEN / 100L) + 1L;
+	    accuracy = (skill >= P_EXPERT) ? 2L : (skill == P_SKILLED) ? 5L :
+			(skill == P_BASIC) ? 10L : 25L;
+	    /* round up to the high end of this range */
+	    percent = accuracy * ((percent - 1L) / accuracy + 1L);
+	    Sprintf(outbuf, "%ld%%-%ld%%", percent - accuracy + 1L, percent);
+	}
+	return outbuf;
+}
 
 STATIC_OVL int
 percent_success(spell)

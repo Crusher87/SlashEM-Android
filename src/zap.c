@@ -1373,7 +1373,7 @@ poly_obj(obj, id)
 	if (obj->otyp == AMULET_OF_UNCHANGING)
 	    return obj;
 
-	if (obj->otyp == BOULDER && In_sokoban(&u.uz))
+	if (obj->otyp == BOULDER && Sokoban)
 	    change_luck(-1);    /* Sokoban guilt */
 #ifdef WIZARD
 	otmp = (struct obj *)0;
@@ -1813,6 +1813,12 @@ struct obj *obj, *otmp;
 		/* target object has now been "seen (up close)" */
 		obj->dknown = 1;
 		if (Is_container(obj) || obj->otyp == STATUE) {
+		    if (Is_box(obj) && !obj->tknown) {
+			/* probing reveals whether a box or chest is trapped */
+			if (obj->otrapped)
+			    pline("%s trapped!", Tobjnam(obj, "are"));
+			obj->tknown = 1;
+		    }
 		    if (!obj->cobj)
 			pline("%s empty.", Tobjnam(obj, "are"));
 		    else {
@@ -3381,7 +3387,7 @@ struct obj **obj_p;			/* object tossed/used */
 			    pline("%s jerks to an abrupt halt.",
 				  The(distant_name(obj, xname))); /* lame */
 			range = 0;
-		    } else if (In_sokoban(&u.uz) && (t = t_at(x, y)) != 0 &&
+		    } else if (Sokoban && (t = t_at(x, y)) != 0 &&
 			       (t->ttyp == PIT || t->ttyp == SPIKED_PIT ||
 				t->ttyp == HOLE || t->ttyp == TRAPDOOR)) {
 			/* hero falls into the trap, so ball stops */
@@ -4506,7 +4512,7 @@ fracture_rock(obj)	/* fractured by pick-axe or wand of striking */
 register struct obj *obj;		   /* no texts here! */
 {
 	/* A little Sokoban guilt... */
-	if (obj->otyp == BOULDER && In_sokoban(&u.uz) && !flags.mon_moving)
+	if (obj->otyp == BOULDER && Sokoban && !flags.mon_moving)
 	    change_luck(-1);
 
 	obj->otyp = ROCK;

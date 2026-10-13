@@ -1545,7 +1545,7 @@ int magic; /* 0=Physical, otherwise skill level */
 	    (void) walk_path(&uc, &cc, hurtle_step, (genericptr_t)&range);
 
 	    /* A little Sokoban guilt... */
-	    if (In_sokoban(&u.uz))
+	    if (Sokoban)
 		change_luck(-1);
 
 	    teleds(cc.x, cc.y, TRUE);

@@ -673,6 +673,10 @@ boolean with_price;
 		Strcat(prefix, "uncursed ");
 	}
 
+	/* a box or chest whose trap has been found */
+	if (Is_box(obj) && obj->otrapped && obj->tknown && obj->dknown)
+		Strcat(prefix, "trapped ");
+
 	if (Hallucination ? !rn2(100) : obj->greased) Strcat(prefix, "greased ");
 
 	switch(obj->oclass) {
@@ -1624,7 +1628,7 @@ const char *oldstr;
 		goto bottom;
 	}
 	if (len >= 5 && (!strcmp(spot-4, "matzo")
-					|| !strcmp(spot-5, "matza"))) {
+					|| !strcmp(spot-4, "matza"))) {
 		Strcpy(spot, "ot");
 		goto bottom;
 	}

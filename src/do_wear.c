@@ -2218,6 +2218,35 @@ reset_remarm()
 	disrobing = nul;
 }
 
+/* save the state of an interrupted 'A', so that it can be continued after
+   restore; disrobing[] is saved as 0 (none), 1 (disrobing), 2 (disarming) */
+void
+save_takeoff_context(fd)
+int fd;
+{
+	int verb = !*disrobing ? 0 : !strcmp(disrobing, "disarming") ? 2 : 1;
+
+	bwrite(fd, (genericptr_t) &takeoff_mask, sizeof takeoff_mask);
+	bwrite(fd, (genericptr_t) &taking_off, sizeof taking_off);
+	bwrite(fd, (genericptr_t) &todelay, sizeof todelay);
+	bwrite(fd, (genericptr_t) &cancelled_don, sizeof cancelled_don);
+	bwrite(fd, (genericptr_t) &verb, sizeof verb);
+}
+
+void
+rest_takeoff_context(fd)
+int fd;
+{
+	int verb;
+
+	mread(fd, (genericptr_t) &takeoff_mask, sizeof takeoff_mask);
+	mread(fd, (genericptr_t) &taking_off, sizeof taking_off);
+	mread(fd, (genericptr_t) &todelay, sizeof todelay);
+	mread(fd, (genericptr_t) &cancelled_don, sizeof cancelled_don);
+	mread(fd, (genericptr_t) &verb, sizeof verb);
+	disrobing = (verb == 2) ? "disarming" : (verb == 1) ? "disrobing" : nul;
+}
+
 /* the 'A' command -- remove multiple worn items */
 int
 doddoremarm()
