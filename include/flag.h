@@ -306,6 +306,7 @@ struct instance_flags {
 	boolean wc2_wraptext;		/* wrap text */
 
 	boolean  cmdassist;	/* provide detailed assistance for some commands */
+	boolean  item_actions;	/* choosing an item in 'i' offers actions */
 	boolean	 obsolete;	/* obsolete options can point at this, it isn't used */
 	/* Items which belong in flags, but are here to allow save compatibility */
 	boolean  lootabc;	/* use "a/b/c" rather than "o/i/b" when looting */

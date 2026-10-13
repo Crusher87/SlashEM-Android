@@ -135,6 +135,7 @@ static struct Bool_Opt
 #else
 	{"invweight", (boolean *)0, FALSE, SET_IN_FILE},
 #endif
+	{"item_actions", &iflags.item_actions, TRUE, SET_IN_GAME},
 /*WAC the keep savefile option...*/
 #ifdef KEEP_SAVE
 	{"keep_savefile", &flags.keep_savefile, FALSE, SET_IN_FILE},
