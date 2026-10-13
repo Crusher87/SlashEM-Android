@@ -58,6 +58,7 @@ static struct Bool_Opt
 #else
 	{"asksavedisk", (boolean *)0, FALSE, SET_IN_GAME},
 #endif
+	{"autodescribe", &iflags.autodescribe, TRUE, SET_IN_GAME},
 	{"autodig", &flags.autodig, FALSE, SET_IN_GAME},
 #ifdef ANDROID
 	{"autokick", &flags.autokick, TRUE, SET_IN_GAME},

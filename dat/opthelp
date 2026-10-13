@@ -2,6 +2,8 @@ Boolean options not under specific compile flags (with default values in []):
 (You can learn which options exist in your version by checking your current
 option setting, which is reached via the 'O' cmd.)
 
+autodescribe   describe what is under the cursor when picking a
+               location on the map                                [TRUE]
 autodig        dig if moving and wielding digging tool            [FALSE]
 autopickup     automatically pick up objects you move over        [TRUE]
 autoquiver     when firing with an empty quiver, select some

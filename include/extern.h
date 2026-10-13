@@ -357,6 +357,7 @@ E void NDECL(heal_legs);
 
 /* ### do_name.c ### */
 
+E void FDECL(getpos_sethilite, (boolean FDECL((*),(int,int))));
 E int FDECL(getpos, (coord *,BOOLEAN_P,const char *));
 E struct monst *FDECL(christen_monst, (struct monst *,const char *));
 E int NDECL(do_mname);
@@ -1540,6 +1541,7 @@ E void NDECL(free_autopickup_exceptions);
 
 E int NDECL(dowhatis);
 E int NDECL(doquickwhatis);
+E int FDECL(do_screen_description, (coord,BOOLEAN_P,int,char *,const char **,struct permonst **));
 E int NDECL(doidtrap);
 E int NDECL(dowhatdoes);
 E char *FDECL(dowhatdoes_core,(CHAR_P, char *));

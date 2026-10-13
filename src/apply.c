@@ -35,7 +35,10 @@ STATIC_DCL void FDECL(use_grease, (struct obj *));
 STATIC_DCL void FDECL(use_trap, (struct obj *));
 STATIC_DCL void FDECL(use_stone, (struct obj *));
 STATIC_PTR int NDECL(set_trap);		/* occupation callback */
+STATIC_DCL boolean FDECL(is_valid_jump_pos, (int,int,int,BOOLEAN_P));
+STATIC_PTR boolean FDECL(get_valid_jump_position, (int,int));
 STATIC_DCL void FDECL(pole_range, (struct obj *, int *, int *));
+STATIC_PTR boolean FDECL(get_valid_polearm_position, (int,int));
 STATIC_DCL boolean FDECL(find_poleable_mon, (coord *, int, int));
 STATIC_DCL int FDECL(use_cream_pie, (struct obj *));
 STATIC_DCL int FDECL(use_grapple, (struct obj *));
@@ -1376,6 +1379,43 @@ dojump()
 	return jump(0);
 }
 
+/* could the hero jump to <x,y>?  (split out of jump() in NetHack 3.6) */
+STATIC_OVL boolean
+is_valid_jump_pos(x, y, magic, showmsg)
+int x, y, magic;
+boolean showmsg;
+{
+	if (!magic && !(HJumping & ~INTRINSIC) && !EJumping &&
+			distu(x, y) != 5) {
+		/* The Knight jumping restriction still applies when riding a
+		 * horse.  After all, what shape is the knight piece in chess?
+		 */
+		if (showmsg) pline("Illegal move!");
+		return FALSE;
+	} else if (distu(x, y) > (magic ? 6+magic*3 : 9)) {
+		if (showmsg) pline("Too far!");
+		return FALSE;
+	} else if (!isok(x, y)) {
+		if (showmsg) You("cannot jump there!");
+		return FALSE;
+	} else if (!cansee(x, y)) {
+		if (showmsg) You("cannot see where to land!");
+		return FALSE;
+	}
+	return TRUE;
+}
+
+static int jumping_is_magic;
+
+/* getpos() callback: spots worth highlighting as jump destinations */
+STATIC_PTR boolean
+get_valid_jump_position(x, y)
+int x, y;
+{
+	return (isok(x, y) && (ACCESSIBLE(levl[x][y].typ) || Passes_walls)
+		&& is_valid_jump_pos(x, y, jumping_is_magic, FALSE));
+}
+
 int
 jump(magic)
 int magic; /* 0=Physical, otherwise skill level */
@@ -1463,23 +1503,11 @@ int magic; /* 0=Physical, otherwise skill level */
 	pline("Where do you want to jump?");
 	cc.x = u.ux;
 	cc.y = u.uy;
+	jumping_is_magic = magic;
+	getpos_sethilite(get_valid_jump_position);
 	if (getpos(&cc, TRUE, "the desired position") < 0)
 		return 0;	/* user pressed ESC */
-	if (!magic && !(HJumping & ~INTRINSIC) && !EJumping &&
-			distu(cc.x, cc.y) != 5) {
-		/* The Knight jumping restriction still applies when riding a
-		 * horse.  After all, what shape is the knight piece in chess?
-		 */
-		pline("Illegal move!");
-		return 0;
-	} else if (distu(cc.x, cc.y) > (magic ? 6+magic*3 : 9)) {
-		pline("Too far!");
-		return 0;
-	} else if (!cansee(cc.x, cc.y)) {
-		You("cannot see where to land!");
-		return 0;
-	} else if (!isok(cc.x, cc.y)) {
-		You("cannot jump there!");
+	if (!is_valid_jump_pos(cc.x, cc.y, magic, TRUE)) {
 		return 0;
 	} else {
 	    coord uc;
@@ -2815,6 +2843,21 @@ int min_range, max_range;
 	return TRUE;
 }
 
+static int polearm_range_min = -1;
+static int polearm_range_max = -1;
+static boolean polearm_fishing = FALSE;
+
+/* getpos() callback: spots worth highlighting as pole-weapon targets */
+STATIC_PTR boolean
+get_valid_polearm_position(x, y)
+int x, y;
+{
+	return (isok(x, y) && distu(x, y) >= polearm_range_min
+		&& distu(x, y) <= polearm_range_max && couldsee(x, y)
+		&& (ACCESSIBLE(levl[x][y].typ)
+		    || (polearm_fishing && is_pool(x, y))));
+}
+
 /* is the hero wielding a pole-weapon with exactly one target in reach? */
 boolean
 could_pole_mon()
@@ -2863,6 +2906,10 @@ use_pole(obj, autohit)
 	if (!autohit || !found
 		|| Confusion || Stunned || Hallucination) {
 	    pline(where_to_hit);
+	    polearm_range_min = min_range;
+	    polearm_range_max = max_range;
+	    polearm_fishing = (obj->otyp == FISHING_POLE);
+	    getpos_sethilite(get_valid_polearm_position);
 	    if (getpos(&cc, TRUE, "the spot to hit") < 0)
 		return res;	/* ESC; uses a turn iff the pole became wielded */
 	}
