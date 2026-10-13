@@ -344,6 +344,11 @@ savegamestate(fd, mode)
 register int fd, mode;
 {
 	int uid;
+	struct obj *bc_objs = (struct obj *)0;
+	/* Ball and chain are on no object list while the hero is engulfed.
+	   Check that now: a carried ball is freed along with the inventory. */
+	struct obj *looseball = BALL_IN_MON ? uball : (struct obj *)0,
+		   *loosechain = CHAIN_IN_MON ? uchain : (struct obj *)0;
 
 #ifdef MFLOPPY
 	count_only = (mode & COUNT_SAVE);
@@ -358,6 +363,28 @@ register int fd, mode;
 	save_light_sources(fd, mode, RANGE_GLOBAL);
 
 	saveobjchn(fd, invent, mode);
+
+	/* save ball and chain if they are currently dangling free (i.e. not on
+	   floor or in inventory) */
+	if (loosechain) {
+	    loosechain->nobj = bc_objs;
+	    bc_objs = loosechain;
+	}
+	if (looseball) {
+	    looseball->nobj = bc_objs;
+	    bc_objs = looseball;
+	}
+	saveobjchn(fd, bc_objs, mode);
+	if (release_data(mode)) {
+	    /* freed; don't use setworn() here, it would look at them */
+	    if (loosechain) uchain = (struct obj *)0;
+	    if (looseball) uball = (struct obj *)0;
+	} else {
+	    /* they are still in play; don't leave them linked to each other */
+	    if (loosechain) loosechain->nobj = (struct obj *)0;
+	    if (looseball) looseball->nobj = (struct obj *)0;
+	}
+
 	saveobjchn(fd, migrating_objs, mode);
 	savemonchn(fd, migrating_mons, mode);
 	if (release_data(mode)) {

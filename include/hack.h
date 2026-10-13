@@ -105,6 +105,10 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 #define MATCH_WARN_OF_MON(mon)	 (Warn_of_mon && flags.warntype && \
 		   		 (flags.warntype & (mon)->data->mflags2))
 
+/* ball and chain are on no object list while the hero is engulfed */
+#define BALL_IN_MON	(u.uswallow && uball && uball->where == OBJ_FREE)
+#define CHAIN_IN_MON	(u.uswallow && uchain && uchain->where == OBJ_FREE)
+
 #include "trap.h"
 #include "flag.h"
 #include "rm.h"

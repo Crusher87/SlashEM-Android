@@ -362,7 +362,7 @@ unsigned int *stuckid, *steedid;	/* STEED */
 {
 	/* discover is actually flags.explore */
 	boolean remember_discover = discover;
-	struct obj *otmp;
+	struct obj *otmp, *bc_obj;
 	int uid;
 
 	mread(fd, (genericptr_t) &uid, sizeof uid);
@@ -406,6 +406,18 @@ unsigned int *stuckid, *steedid;	/* STEED */
 	restore_timers(fd, RANGE_GLOBAL, FALSE, 0L);
 	restore_light_sources(fd);
 	invent = restobjchn(fd, FALSE, FALSE);
+
+	/* restore dangling (not on floor or in inventory) ball and/or chain */
+	bc_obj = restobjchn(fd, FALSE, FALSE);
+	while (bc_obj) {
+	    struct obj *nobj = bc_obj->nobj;
+
+	    if (bc_obj->owornmask)
+		setworn(bc_obj, bc_obj->owornmask);
+	    bc_obj->nobj = (struct obj *)0;
+	    bc_obj = nobj;
+	}
+
 	migrating_objs = restobjchn(fd, FALSE, FALSE);
 	migrating_mons = restmonchn(fd, FALSE);
 	mread(fd, (genericptr_t) mvitals, sizeof(mvitals));
@@ -695,6 +707,13 @@ register int fd;
 	for(otmp = fobj; otmp; otmp = otmp->nobj)
 		if(otmp->owornmask)
 			setworn(otmp, otmp->owornmask);
+
+	if ((uball && !uchain) || (uchain && !uball)) {
+	    impossible("dorecover: lost ball & chain");
+	    /* poor man's unpunish() */
+	    setworn((struct obj *)0, W_CHAIN);
+	    setworn((struct obj *)0, W_BALL);
+	}
 
 	/* in_use processing must be after:
 	 *    + The inventory has been read so that freeinv() works.
