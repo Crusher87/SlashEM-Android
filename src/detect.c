@@ -704,6 +704,7 @@ register struct obj *sobj;
     }
     for (obj = fobj; obj; obj = obj->nobj) {
 	if ((obj->otyp==LARGE_BOX || obj->otyp==CHEST) && obj->otrapped) {
+	    obj->tknown = 1;	/* the hero now knows of this trap */
 	    if (obj->ox != u.ux || obj->oy != u.uy)
 		goto outtrapmap;
 	    else found = TRUE;
@@ -735,8 +736,10 @@ outtrapmap:
 	sense_trap(ttmp, 0, 0, sobj && sobj->cursed);
 
     for (obj = fobj; obj; obj = obj->nobj)
-	if ((obj->otyp==LARGE_BOX || obj->otyp==CHEST) && obj->otrapped)
-	sense_trap((struct trap *)0, obj->ox, obj->oy, sobj && sobj->cursed);
+	if ((obj->otyp==LARGE_BOX || obj->otyp==CHEST) && obj->otrapped) {
+	    obj->tknown = 1;
+	    sense_trap((struct trap *)0, obj->ox, obj->oy, sobj && sobj->cursed);
+	}
 
     for (door = 0; door < doorindex; door++) {
 	x = doors[door].x;

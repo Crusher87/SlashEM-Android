@@ -1813,6 +1813,12 @@ struct obj *obj, *otmp;
 		/* target object has now been "seen (up close)" */
 		obj->dknown = 1;
 		if (Is_container(obj) || obj->otyp == STATUE) {
+		    if (Is_box(obj) && !obj->tknown) {
+			/* probing reveals whether a box or chest is trapped */
+			if (obj->otrapped)
+			    pline("%s trapped!", Tobjnam(obj, "are"));
+			obj->tknown = 1;
+		    }
 		    if (!obj->cobj)
 			pline("%s empty.", Tobjnam(obj, "are"));
 		    else {

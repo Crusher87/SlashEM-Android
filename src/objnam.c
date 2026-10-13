@@ -673,6 +673,10 @@ boolean with_price;
 		Strcat(prefix, "uncursed ");
 	}
 
+	/* a box or chest whose trap has been found */
+	if (Is_box(obj) && obj->otrapped && obj->tknown && obj->dknown)
+		Strcat(prefix, "trapped ");
+
 	if (Hallucination ? !rn2(100) : obj->greased) Strcat(prefix, "greased ");
 
 	switch(obj->oclass) {

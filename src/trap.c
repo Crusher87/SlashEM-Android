@@ -3800,12 +3800,23 @@ boolean force;
 	if(!u.dx && !u.dy) {
 	    for(otmp = level.objects[x][y]; otmp; otmp = otmp->nexthere)
 		if(Is_box(otmp)) {
-		    Sprintf(qbuf, "There is %s here. Check it for traps?",
-			safe_qbuf("", sizeof("There is  here. Check it for traps?"),
+		    /* a trap found earlier is remembered; no need to search */
+		    boolean known_trap = (otmp->tknown && otmp->otrapped &&
+					  otmp->dknown);
+
+		    if (known_trap)
+			Sprintf(qbuf, "Disarm %s?",
+			    safe_qbuf("", sizeof("Disarm ?"),
+				the(xname(otmp)), the(simple_typename(otmp->otyp)),
+				"the box"));
+		    else
+			Sprintf(qbuf, "There is %s here. Check it for traps?",
+			    safe_qbuf("", sizeof("There is  here. Check it for traps?"),
 				doname(otmp), an(simple_typename(otmp->otyp)), "a box"));
 		    switch (ynq(qbuf)) {
 			case 'q': return(0);
-			case 'n': continue;
+			case 'n': if (known_trap) trap_skipped = TRUE;
+				  continue;
 		    }
 #ifdef STEED
 		    if (u.usteed && P_SKILL(P_RIDING) < P_BASIC) {
@@ -3814,16 +3825,20 @@ boolean force;
 			return(0);
 		    }
 #endif
-		    if((otmp->otrapped && (force || (!confused
+		    if (known_trap ||
+		       (otmp->otrapped && (force || (!confused
 				&& rn2(MAXULEV + 1 - u.ulevel) < 10)))
 		       || (!force && confused && !rn2(3))) {
+		      if (!known_trap) {
 			You("find a trap on %s!", the(xname(otmp)));
+			otmp->tknown = 1;	/* remember it */
 			if (!confused) exercise(A_WIS, TRUE);
 
 			switch (ynq("Disarm it?")) {
 			    case 'q': return(1);
 			    case 'n': trap_skipped = TRUE;  continue;
 			}
+		      }
 
 			if(otmp->otrapped) {
 			    exercise(A_DEX, TRUE);
@@ -3835,8 +3850,12 @@ boolean force;
 			    } else {
 				You("disarm it!");
 				otmp->otrapped = 0;
+				otmp->tknown = 1;	/* known not trapped */
 			    }
-			} else pline("That %s was not trapped.", xname(otmp));
+			} else {
+			    pline("That %s was not trapped.", xname(otmp));
+			    otmp->tknown = 1;
+			}
 			return(1);
 		    } else {
 			You("find no traps on %s.", the(xname(otmp)));
@@ -3927,6 +3946,7 @@ boolean disarm;
 	if (get_obj_location(obj, &cc.x, &cc.y, 0))	/* might be carried */
 	    obj->ox = cc.x,  obj->oy = cc.y;
 
+	otmp->tknown = 0;	/* for xname(); set again below */
 	otmp->otrapped = 0;	/* trap is one-shot; clear flag first in case
 				   chest kills you and ends up in bones file */
 	You(disarm ? "set it off!" : "trigger a trap!");
@@ -4089,6 +4109,7 @@ boolean disarm;
 	    }
 	    bot();			/* to get immediate botl re-display */
 	}
+	obj->tknown = 1;	/* hero knows it is no longer trapped */
 	return FALSE;
 }
 
