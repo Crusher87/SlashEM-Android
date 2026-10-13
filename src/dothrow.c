@@ -1825,8 +1825,9 @@ boolean from_invent;
 			    change_luck(-2);
 			break;
 		case POT_WATER:		/* really, all potions */
+			obj->in_use = 1;	/* in case it's fatal */
 			if (obj->otyp == POT_OIL && obj->lamplit) {
-			    splatter_burning_oil(x,y);
+			    explode_oil(obj, x, y);
 			} else if ((obj->otyp == POT_VAMPIRE_BLOOD ||
 				   obj->otyp == POT_BLOOD) &&
 				   am != AM_CHAOTIC &&

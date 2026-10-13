@@ -3517,7 +3517,10 @@ struct trap *ttmp;
 	if (obj->otyp == POT_OIL)
 	{
 		Your("potion of oil explodes!");
-		splatter_burning_oil(ttmp->tx,ttmp->ty);
+		if (obj->lamplit)
+		    explode_oil(obj, ttmp->tx, ttmp->ty);
+		else
+		    splatter_burning_oil(ttmp->tx,ttmp->ty);
 		delobj(obj);
 		return 1;
 	}

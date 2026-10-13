@@ -1232,7 +1232,7 @@ boolean your_fault;
 	switch (obj->otyp) {
 	case POT_OIL:
 		if (obj->lamplit)
-		    splatter_burning_oil(u.ux, u.uy);
+		    explode_oil(obj, u.ux, u.uy);
 		break;
 	case POT_POLYMORPH:
 		You_feel("a little %s.", Hallucination ? "normal" : "strange");
@@ -1483,7 +1483,7 @@ boolean your_fault;
 		break;
 	case POT_OIL:
 		if (obj->lamplit)
-			splatter_burning_oil(mon->mx, mon->my);
+			explode_oil(obj, mon->mx, mon->my);
 		break;
 /*
 	case POT_GAIN_LEVEL:
