@@ -2164,7 +2164,9 @@ gulpmu(mtmp, mattk)	/* monster swallows you, or damage if u.uswallow */
 	mdamageu(mtmp, tmp);
 	if (tmp) stop_occupation();
 
-	if (touch_petrifies(youmonst.data) && !resists_ston(mtmp)) {
+	if (!u.uswallow) {
+	    ;	/* life-saving has already expelled swallowed hero */
+	} else if (touch_petrifies(youmonst.data) && !resists_ston(mtmp)) {
 	    pline("%s very hurriedly %s you!", Monnam(mtmp),
 		  is_animal(mtmp->data)? "regurgitates" : "expels");
 	    expels(mtmp, mtmp->data, FALSE);

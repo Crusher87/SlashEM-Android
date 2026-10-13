@@ -76,7 +76,7 @@ register struct obj *pen;
 	char namebuf[BUFSZ], *nm, *bp;
 	register struct obj *new_obj;
 	int basecost, actualcost;
-	int curseval;
+	int curseval, cap;
 	char qbuf[QBUFSZ];
 	int first, last, i;
 	boolean by_descr = FALSE;
@@ -224,6 +224,7 @@ found:
 	}
 
 	/* useup old scroll / spellbook */
+	cap = near_capacity();	/* the new one replaces it */
 	useup(paper);
 
 	/* success */
@@ -237,9 +238,10 @@ found:
 #ifdef MAIL
 	if (new_obj->otyp == SCR_MAIL) new_obj->spe = 1;
 #endif
-	new_obj = hold_another_object(new_obj, "Oops!  %s out of your grasp!",
-					       The(aobjnam(new_obj, "slip")),
-					       (const char *)0);
+	new_obj = hold_returned_object(new_obj, cap,
+				       "Oops!  %s out of your grasp!",
+				       The(aobjnam(new_obj, "slip")),
+				       (const char *)0);
 	return(1);
 }
 

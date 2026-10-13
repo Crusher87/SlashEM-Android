@@ -186,7 +186,8 @@ cursed_book(bp)
 		} else {
 		    pline("As you read the book, it %s in your %s!",
 			  explodes, body_part(FACE));
-		    losehp(2*rnd(10)+5, "exploding rune", KILLED_BY_AN);
+		    losehp(Maybe_Half_Phys(2*rnd(10)+5), "exploding rune",
+			   KILLED_BY_AN);
 		}
 		return TRUE;
 	default:
@@ -818,6 +819,12 @@ boolean atme;
 	skill = spell_skilltype(spellid(spell));
 	role_skill = P_SKILL(skill);
 
+	/* spells need to be spoken */
+	if (!can_chant(&youmonst)) {
+	    You("are unable to chant the incantation.");
+	    return(0);	/* no time elapses */
+	}
+
 	/*
 	 * Spell casting no longer affects knowledge of the spell. A
 	 * decrement of spell knowledge is done every turn.
@@ -979,6 +986,8 @@ boolean atme;
 			    if ((damage = zapyourself(pseudo, TRUE)) != 0) {
 				char buf[BUFSZ];
 				Sprintf(buf, "zapped %sself with a spell", uhim());
+				if (pseudo->otyp == SPE_FORCE_BOLT)
+				    damage = Maybe_Half_Phys(damage);
 				losehp(damage, buf, NO_KILLER_PREFIX);
 			    }
 			} else weffects(pseudo);

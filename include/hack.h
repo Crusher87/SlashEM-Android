@@ -297,6 +297,13 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 /* negative armor class is randomly weakened to prevent invulnerability */
 #define AC_VALUE(AC)	((AC) >= 0 ? (AC) : -rnd(-(AC)))
 
+/* physical damage to the hero adjusted for Half_physical_damage (from
+ * NetHack 3.6); dmg is evaluated once, so a dice roll can be passed
+ * directly.  Take care not to apply it twice to the same damage.
+ */
+#define Maybe_Half_Phys(dmg) \
+	((Half_physical_damage) ? (((dmg) + 1) / 2) : (dmg))
+
 #if defined(MICRO) && !defined(__DJGPP__)
 #define getuid() 1
 #define getlogin() ((char *)0)

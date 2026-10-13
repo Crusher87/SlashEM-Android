@@ -711,7 +711,8 @@ long timeout;
 			    uqwepgone();
 			    stop_occupation();
 			}
-		    	losehp(d(2,5), "carrying live explosives", KILLED_BY);
+		    	losehp(Maybe_Half_Phys(d(2,5)),
+			       "carrying live explosives", KILLED_BY);
 		    	break;
 		    case OBJ_FLOOR:
 			underwater = is_pool(x, y);

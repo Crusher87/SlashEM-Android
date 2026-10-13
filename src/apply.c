@@ -963,6 +963,7 @@ struct obj **optr;
 	register struct obj *otmp;
 	const char *s = (obj->quan != 1) ? "candles" : "candle";
 	char qbuf[QBUFSZ];
+	boolean was_lamplit;
 
 	if(u.uswallow) {
 		You(no_elbow_room);
@@ -995,11 +996,19 @@ struct obj **optr;
 		if ((long)otmp->spe + obj->quan > 7L)
 		    obj = splitobj(obj, 7L - (long)otmp->spe);
 		else *optr = 0;
+
+		/* The candle's age field doesn't correctly reflect the amount
+		   of fuel in it while it's lit, because the fuel is measured
+		   by the timer.  So to get accurate age updating, we need to
+		   end the burn temporarily while attaching the candle. */
+		was_lamplit = obj->lamplit;
+		if (was_lamplit) end_burn(obj, TRUE);
+
 		You("attach %ld%s %s to %s.",
 		    obj->quan, !otmp->spe ? "" : " more",
 		    s, the(xname(otmp)));
 		if (obj->otyp == MAGIC_CANDLE) {
-		    if (obj->lamplit)
+		    if (was_lamplit)
 			pline_The("new %s %s very ordinary.", s,
 				vtense(s, "look"));
 		    else
@@ -1011,9 +1020,9 @@ struct obj **optr;
 		if (!otmp->spe || otmp->age > obj->age)
 		    otmp->age = obj->age;
 		otmp->spe += (int)obj->quan;
-		if (otmp->lamplit && !obj->lamplit)
+		if (otmp->lamplit && !was_lamplit)
 		    pline_The("new %s magically %s!", s, vtense(s, "ignite"));
-		else if (!otmp->lamplit && obj->lamplit)
+		else if (!otmp->lamplit && was_lamplit)
 		    pline("%s out.", (obj->quan > 1L) ? "They go" : "It goes");
 		if (obj->unpaid)
 		    verbalize("You %s %s, you bought %s!",
@@ -1025,9 +1034,8 @@ struct obj **optr;
 			  The(xname(otmp)), otmp->lamplit ? " lit" : "");
 		/* candelabrum's light range might increase */
 		if (otmp->lamplit) obj_merge_light_sources(otmp, otmp);
-		/* candles are no longer a separate light source */
-		if (obj->lamplit) end_burn(obj, TRUE);
-		/* candles are now gone */
+		/* candles are no longer a separate light source (the burn
+		   was ended above); candles are now gone */
 		useupall(obj);
 	}
 }
@@ -1201,10 +1209,11 @@ struct obj *obj;
 		    if (obj->quan > 1L && (yn(qbuf) == 'n')) {
 			/* Check if player wants to light all the candles */
 			struct obj *rest;	     /* the remaining candles */
+			int cap = near_capacity();
 			rest = splitobj(obj, obj->quan - 1L);
 			obj_extract_self(rest);	     /* free from inv */
 			obj->spe++;	/* this prevents merging */
-			(void)hold_another_object(rest, "You drop %s!",
+			(void)hold_returned_object(rest, cap, "You drop %s!",
 					  doname(rest), (const char *)0);
 			obj->spe--;
 		    }
@@ -1317,12 +1326,14 @@ light_cocktail(obj)
 #endif
 
 	if (obj->quan > 1L) {
+	    int cap = near_capacity();
+
 	    obj = splitobj(obj, 1L);
 	    begin_burn(obj, FALSE);	/* burn before free to get position */
 	    obj_extract_self(obj);	/* free from inv */
 
 	    /* shouldn't merge */
-	    obj = hold_another_object(obj, "You drop %s!",
+	    obj = hold_returned_object(obj, cap, "You drop %s!",
 				      doname(obj), (const char *)0);
 	} else
 	    begin_burn(obj, FALSE);
@@ -1493,7 +1504,8 @@ int magic; /* 0=Physical, otherwise skill level */
 #ifdef STEED
 			if (!u.usteed)
 #endif
-		    losehp(rnd(10), "jumping out of a bear trap", KILLED_BY);
+		    losehp(Maybe_Half_Phys(rnd(10)),
+			   "jumping out of a bear trap", KILLED_BY);
 		    set_wounded_legs(side, rn1(1000,500));
 		    break;
 		  }
@@ -2571,7 +2583,7 @@ struct obj *obj;
 	if (dam <= 0) dam = 1;
 	You("hit your %s with your bullwhip.", body_part(FOOT));
 	Sprintf(buf, "killed %sself with %s bullwhip", uhim(), uhis());
-	losehp(dam, buf, NO_KILLER_PREFIX);
+	losehp(Maybe_Half_Phys(dam), buf, NO_KILLER_PREFIX);
 	flags.botl = 1;
 	return 1;
 
@@ -2820,7 +2832,8 @@ use_pole (obj)
 		case 1:
 		    /* Snag yourself */
 		    You("hook yourself!");
-		    losehp(rn1(10,10), "a fishing hook", KILLED_BY);
+		    losehp(Maybe_Half_Phys(rn1(10,10)), "a fishing hook",
+			   KILLED_BY);
 		    return 1;
 		case 2:
 		    /* Reel in a fish */
@@ -3059,14 +3072,17 @@ use_grapple (obj)
 		pline_The("hook slices through the %s.", surface(cc.x, cc.y));
 	    else {
 		You("are yanked toward the %s!", surface(cc.x, cc.y));
+		/* hurtle() ends with teleds(), which calls spoteffects();
+		   doing that again here would trigger a trap or drowning
+		   at the hero's new spot twice */
 		hurtle(sgn(cc.x-u.ux), sgn(cc.y-u.uy), 1, FALSE);
-		spoteffects(TRUE);
 	    }
 	    return (1);
 	default:	/* Yourself (oops!) */
 	    if (P_SKILL(typ) <= P_BASIC) {
 		You("hook yourself!");
-		losehp(rn1(10,10), "a grappling hook", KILLED_BY);
+		losehp(Maybe_Half_Phys(rn1(10,10)), "a grappling hook",
+		       KILLED_BY);
 		return (1);
 	    }
 	    break;
@@ -3277,9 +3293,10 @@ wand_explode(obj, hero_broke)
 		if (damage) {
 		    if (hero_broke) {
 		    Sprintf(buf, "killed %sself by breaking a wand", uhim());
-		    losehp(damage, buf, NO_KILLER_PREFIX);
+		    losehp(Maybe_Half_Phys(damage), buf, NO_KILLER_PREFIX);
 		    } else
-			losehp(damage, "exploding wand", KILLED_BY_AN);
+			losehp(Maybe_Half_Phys(damage), "exploding wand",
+			       KILLED_BY_AN);
 		}
 		if (flags.botl) bot();		/* blindness */
 	    } else if ((mon = m_at(x, y)) != 0 && !DEADMONSTER(mon)) {

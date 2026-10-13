@@ -850,6 +850,8 @@ E void FDECL(addinv_core2, (struct obj *));
 E struct obj *FDECL(addinv, (struct obj *));
 E struct obj *FDECL(hold_another_object,
 			(struct obj *,const char *,const char *,const char *));
+E struct obj *FDECL(hold_returned_object,
+		(struct obj *,int,const char *,const char *,const char *));
 E void FDECL(useupall, (struct obj *));
 E void FDECL(useup, (struct obj *));
 E void FDECL(consume_obj_charge, (struct obj *,BOOLEAN_P));
@@ -1276,6 +1278,7 @@ E boolean FDECL(resists_blnd, (struct monst *));
 E boolean FDECL(can_blnd, (struct monst *,struct monst *,UCHAR_P,struct obj *));
 E boolean FDECL(ranged_attk, (struct permonst *));
 E boolean FDECL(passes_bars, (struct permonst *));
+E boolean FDECL(can_chant, (struct monst *));
 E boolean FDECL(can_track, (struct permonst *));
 E boolean FDECL(breakarm, (struct permonst *));
 E boolean FDECL(sliparm, (struct permonst *));
@@ -1450,6 +1453,7 @@ E void NDECL(synch_cursor);
 /* ### o_init.c ### */
 
 E void NDECL(init_objects);
+E void FDECL(obj_shuffle_range, (int,int *,int *));
 E int NDECL(find_skates);
 E void NDECL(oinit);
 E void FDECL(savenames, (int,int));

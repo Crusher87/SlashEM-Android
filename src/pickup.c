@@ -293,8 +293,10 @@ struct obj *obj;
     return (obj->quan >= val_for_n_or_more);
 }
 
-/* List of valid menu classes for query_objlist() and allow_category callback */
-static char valid_menu_classes[MAXOCLASSES + 2];
+/* List of valid menu classes for query_objlist() and allow_category callback
+   (with room for all object classes, 'u'npaid, BUCX, and terminator) */
+static char valid_menu_classes[MAXOCLASSES + 1 + 4 + 1];
+static boolean class_filter, bucx_filter, shop_filter;
 
 void
 add_valid_menu_class(c)
@@ -302,10 +304,27 @@ int c;
 {
 	static int vmc_count = 0;
 
-	if (c == 0)  /* reset */
-	  vmc_count = 0;
-	else
-	  valid_menu_classes[vmc_count++] = (char)c;
+	if (c == 0) {  /* reset */
+	    vmc_count = 0;
+	    class_filter = bucx_filter = shop_filter = FALSE;
+	} else if (!index(valid_menu_classes, c)) {
+	    valid_menu_classes[vmc_count++] = (char)c;
+	    /* categorize the new class */
+	    switch (c) {
+	    case 'B':
+	    case 'U':
+	    case 'C':
+	    case 'X':
+		bucx_filter = TRUE;
+		break;
+	    case 'u':
+		shop_filter = TRUE;
+		break;
+	    default:
+		class_filter = TRUE;
+		break;
+	    }
+	}
 	valid_menu_classes[vmc_count] = '\0';
 }
 
@@ -330,24 +349,56 @@ boolean
 allow_category(obj)
 struct obj *obj;
 {
+    /* For coins, if any class filter is specified, accept if coins
+     * are included regardless of whether either unpaid or BUC-status
+     * is also specified since player has explicitly requested coins.
+     * Coins never match a bless/curse state.
+     */
+    if (obj->oclass == COIN_CLASS)
+	return class_filter ?
+		(index(valid_menu_classes, COIN_CLASS) ? TRUE : FALSE) :
+	       shop_filter ? (obj->unpaid ? TRUE : FALSE) :
+	       !bucx_filter;
+
     if (Role_if(PM_PRIEST)) obj->bknown = TRUE;
-    if (((index(valid_menu_classes,'u') != (char *)0) && obj->unpaid) ||
-	(index(valid_menu_classes, obj->oclass) != (char *)0))
-	return TRUE;
-    else if (((index(valid_menu_classes,'U') != (char *)0) &&
-	(obj->oclass != COIN_CLASS && obj->bknown && !obj->blessed && !obj->cursed)))
-	return TRUE;
-    else if (((index(valid_menu_classes,'B') != (char *)0) &&
-	(obj->oclass != COIN_CLASS && obj->bknown && obj->blessed)))
-	return TRUE;
-    else if (((index(valid_menu_classes,'C') != (char *)0) &&
-	(obj->oclass != COIN_CLASS && obj->bknown && obj->cursed)))
-	return TRUE;
-    else if (((index(valid_menu_classes,'X') != (char *)0) &&
-	(obj->oclass != COIN_CLASS && !obj->bknown)))
-	return TRUE;
-    else
+
+    /*
+     * There are three types of filters possible and the first and
+     * third can have more than one entry:
+     *	1) object class (armor, potion, &c);
+     *	2) unpaid shop item;
+     *	3) bless/curse state (blessed, uncursed, cursed, BUC-unknown).
+     * When only one type is present, the situation is simple:
+     * to be accepted, obj's status must match one of the entries.
+     * When more than one type is present, the obj will now only
+     * be accepted when it matches one entry of each type.
+     * So ?!B will accept blessed scrolls or potions, and [u will
+     * accept unpaid armor.  (Previously, an object was accepted by
+     * this filter if it met any entry of any type, so ?!B resulted
+     * in accepting all scrolls and potions regardless of bless/curse
+     * state plus all blessed non-scroll, non-potion objects.)
+     */
+
+    /* if class is expected but obj's class is not in the list, reject */
+    if (class_filter && !index(valid_menu_classes, obj->oclass))
 	return FALSE;
+    /* if unpaid is expected and obj isn't unpaid, reject (treat a container
+       holding any unpaid object as unpaid even if isn't unpaid itself) */
+    if (shop_filter && !obj->unpaid &&
+	    !(Has_contents(obj) && count_unpaid(obj->cobj) > 0))
+	return FALSE;
+    /* check for particular bless/curse state */
+    if (bucx_filter) {
+	/* first categorize this object's bless/curse state */
+	char bucx = !obj->bknown ? 'X' :
+		    obj->blessed ? 'B' : obj->cursed ? 'C' : 'U';
+
+	/* if its category is not in the list, reject */
+	if (!index(valid_menu_classes, bucx))
+	    return FALSE;
+    }
+    /* obj didn't fail any of the filter checks, so accept */
+    return TRUE;
 }
 
 #if 0 /* not used */
@@ -720,6 +771,11 @@ boolean FDECL((*allow), (OBJ_P));/* allow function */
 
 	if (n == 0)	/* nothing to pick here */
 	    return (qflags & SIGNAL_NOMENU) ? -1 : 0;
+
+	/* don't autoselect an item worn by an engulfer; the menu shows it */
+	if (n == 1 && last->where == OBJ_MINVENT && last->owornmask != 0L &&
+		u.uswallow && last->ocarry == u.ustuck)
+	    qflags &= ~AUTOSELECT_SINGLE;
 
 	if (n == 1 && (qflags & AUTOSELECT_SINGLE)) {
 	    *pick_list = (menu_item *) alloc(sizeof(menu_item));
@@ -1274,6 +1330,11 @@ boolean telekinesis;	/* not picking it up directly by hand */
 
 	if (obj == uchain) {    /* do not pick up attached chain */
 	    return 0;
+	} else if (obj->where == OBJ_MINVENT && obj->owornmask != 0L &&
+		    u.uswallow && obj->ocarry == u.ustuck) {
+	    /* engulfer is wearing or wielding it */
+	    You_cant("pick %s up.", ysimple_name(obj));
+	    return 0;
 	} else if (obj->oartifact && !touch_artifact(obj,&youmonst)) {
 	    return 0;
 #ifndef GOLDOBJ
@@ -1338,6 +1399,21 @@ boolean telekinesis;	/* not picking it up directly by hand */
 		return -1;
 	    }
 	} else  if (obj->otyp == SCR_SCARE_MONSTER) {
+	    int old_wt, new_wt;
+
+	    /* process a count before altering/deleting scrolls;
+	       tricky because being unable to lift full stack imposes an
+	       implicit count; unliftable ones should be treated as if
+	       the count excluded them so that they don't change state */
+	    if ((count = carry_count(obj, (struct obj *)0,
+				     count ? count : obj->quan,
+				     telekinesis, &old_wt, &new_wt)) < 1L)
+		return -1;	/* couldn't even pick up 1; effectively untouched */
+	    /* the other half of a split is left as-is; whatever already
+	       follows 'obj' will still be processed next */
+	    if (count < obj->quan)
+		obj = splitobj(obj, count);
+
 	    if (obj->blessed) obj->blessed = 0;
 	    else if (!obj->spe && !obj->cursed) obj->spe = 1;
 	    else {
@@ -1576,7 +1652,7 @@ lootcont:
 		    You("carefully open the bag...");
 		    pline("It develops a huge set of teeth and bites you!");
 		    tmp = rnd(10);
-		    if (Half_physical_damage) tmp = (tmp+1) / 2;
+		    tmp = Maybe_Half_Phys(tmp);
 		    losehp(tmp, "carnivorous bag", KILLED_BY_AN);
 		    makeknown(BAG_OF_TRICKS);
 		    timepassed = 1;
@@ -1821,7 +1897,8 @@ boolean silent;
 		    uqwepgone();
 		    stop_occupation();
 		}
-		losehp(d(6,6), "carrying live explosives", KILLED_BY);
+		losehp(Maybe_Half_Phys(d(6,6)), "carrying live explosives",
+		       KILLED_BY);
 		break;
 	    case OBJ_FLOOR:
 		underwater = is_pool(x, y);

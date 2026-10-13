@@ -728,7 +728,7 @@ unsigned trflags;
 		    stackobj(otmp);
 		    newsym(u.ux,u.uy);	/* map the rock */
 
-		    losehp(dmg, "falling rock", KILLED_BY_AN);
+		    losehp(Maybe_Half_Phys(dmg), "falling rock", KILLED_BY_AN);
 		    exercise(A_STR, FALSE);
 		}
 		break;
@@ -940,12 +940,14 @@ glovecheck:		(void) rust_dmg(uarmg, "gauntlets", 1, TRUE, &youmonst);
 		if (!steedintrap(trap, (struct obj *)0)) {
 #endif
 		if (ttype == SPIKED_PIT) {
-		    losehp(rnd(10),"fell into a pit of iron spikes",
+		    losehp(Maybe_Half_Phys(rnd(10)),
+			   "fell into a pit of iron spikes",
 			NO_KILLER_PREFIX);
 		    if (!rn2(6))
 			poisoned("spikes", A_STR, "fall onto poison spikes", 8);
 		} else
-		    losehp(rnd(6),"fell into a pit", NO_KILLER_PREFIX);
+		    losehp(Maybe_Half_Phys(rnd(6)),"fell into a pit",
+			   NO_KILLER_PREFIX);
 		if (Punished && !carried(uball)) {
 		    unplacebc();
 		    ballfall();
@@ -1174,7 +1176,7 @@ glovecheck:		(void) rust_dmg(uarmg, "gauntlets", 1, TRUE, &youmonst);
 			(void)keep_saddle_with_steedcorpse(steed_mid, fobj, saddle);
 #endif
 		newsym(u.ux,u.uy);		/* update trap symbol */
-		losehp(rnd(16), "land mine", KILLED_BY_AN);
+		losehp(Maybe_Half_Phys(rnd(16)), "land mine", KILLED_BY_AN);
 		/* fall recursively into the pit... */
 		if ((trap = t_at(u.ux, u.uy)) != 0) dotrap(trap, RECURSIVETRAP);
 		fill_pit(u.ux, u.uy);
@@ -3084,7 +3086,7 @@ drown()
 	    (void)split_mon(&youmonst, (struct monst *)0);
 	else if (u.umonnum == PM_IRON_GOLEM) {
 	    You("rust!");
-	    i = d(2,6);
+	    i = Maybe_Half_Phys(d(2,6));
 	    if (u.mhmax > i) u.mhmax -= i;
 	    losehp(i, "rusting away", KILLED_BY);
 	}
@@ -3972,19 +3974,26 @@ boolean disarm;
 			      loss += stolen_value(obj, ox, oy,
 				      (boolean)shkp->mpeaceful, TRUE, TRUE);
 			  delete_contents(obj);
-			  /* we're about to delete all things at this location,
+			  /* the explosion takes place at the chest's
+			   * location, not necessarily at the hero's (it
+			   * might have been kicked from one step away).
+			   * We're about to delete all things at that location,
 			   * which could include the ball & chain.
 			   * If we attempt to call unpunish() in the
 			   * for-loop below we can end up with otmp2
 			   * being invalid once the chain is gone.
 			   * Deal with ball & chain right now instead.
 			   */
-			  if (Punished && !carried(uball) &&
-				((uchain->ox == u.ux && uchain->oy == u.uy) ||
-				 (uball->ox == u.ux && uball->oy == u.uy)))
+			  if (Punished &&
+				((uchain->where == OBJ_FLOOR &&
+				  uchain->ox == ox && uchain->oy == oy) ||
+				 (uball->where == OBJ_FLOOR &&
+				  uball->ox == ox && uball->oy == oy)))
 				unpunish();
 
-			  for(otmp = level.objects[u.ux][u.uy];
+			  /* usually the chest is destroyed along with the
+			     stuff at its spot, but not if it is carried */
+			  for(otmp = level.objects[ox][oy];
 							otmp; otmp = otmp2) {
 			      otmp2 = otmp->nexthere;
 			      if(costly)
@@ -3993,8 +4002,9 @@ boolean disarm;
 					  TRUE, TRUE);
 			      delobj(otmp);
 			  }
+			  newsym(ox, oy);
 			  wake_nearby();
-			  losehp(d(6,6), buf, KILLED_BY_AN);
+			  losehp(Maybe_Half_Phys(d(6,6)), buf, KILLED_BY_AN);
 			  exercise(A_STR, FALSE);
 			  if(costly && loss) {
 			      if(insider)
@@ -4164,7 +4174,7 @@ register int bodypart;
 
 	pline("KABOOM!!  %s was booby-trapped!", The(item));
 	wake_nearby();
-	losehp(dmg, "explosion", KILLED_BY_AN);
+	losehp(Maybe_Half_Phys(dmg), "explosion", KILLED_BY_AN);
 	exercise(A_STR, FALSE);
 	if (bodypart) exercise(A_CON, FALSE);
 	make_stunned(HStun + dmg, TRUE);
