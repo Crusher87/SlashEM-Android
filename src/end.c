@@ -114,7 +114,7 @@ extern const char * const killed_by_prefix[];	/* from topten.c */
 int
 done2()
 {
-	if(yn("Really quit?") == 'n') {
+	if (!paranoid_query(ParanoidQuit, "Really quit?")) {
 #ifndef NO_SIGNAL
 		(void) signal(SIGINT, (SIG_RET_TYPE) done1);
 #endif
@@ -651,7 +651,7 @@ int how;
 			wizard ||
 #endif
 			discover) && (how <= GENOCIDED || how == TURNED_SLIME)) {
-		if(yn("Die?") == 'y') goto die;
+		if (paranoid_query(ParanoidDie, "Die?")) goto die;
 		pline("OK, so you don't %s.",
 			(how == CHOKING) ? "choke" : "die");
 		if(u.uhpmax <= 0) u.uhpmax = u.ulevel * 8;	/* arbitrary */
@@ -787,7 +787,7 @@ die:
 	if (bones_ok) {
 #ifdef WIZARD
 		/* KMH -- We need the "Save bones?" prompt for testing! */
-	    if (!wizard || yn("Save bones?") == 'y')
+	    if (!wizard || paranoid_query(ParanoidBones, "Save bones?"))
 #endif
 		savebones(corpse);
 	    /* corpse may be invalid pointer now so

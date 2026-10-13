@@ -2145,6 +2145,34 @@ Specify the order to list object types in (default ``")[%?+!=/(*`0_'').
 The value of this option should be a string containing the
 symbols for the various object types.  Any omitted types are filled in
 at the end from the previous order.
+.lp paranoid_confirmation
+A space separated list of specific situations where alternate
+prompting is desired.  The default is ``paranoid_confirmation:pray swim trap''.
+.sd
+.si
+Confirm - for any prompts which are set to require ``yes'' rather than `y',
+          also require ``no'' to reject instead of accepting any non-yes
+          response as no;
+quit    - ``yes'' vs `y' to confirm quitting or to enter explore mode;
+die     - ``yes'' vs `y' to confirm dying (in explore or debug mode);
+bones   - ``yes'' vs `y' to save bones data when dying in debug mode;
+attack  - ``yes'' vs `y' to confirm attacking a peaceful monster;
+wand-break - ``yes'' vs `y' to confirm breaking a wand;
+eat     - ``yes'' vs `y' to continue eating after the first warning;
+Were-change - ``yes'' vs `y' to confirm changing form due to lycanthropy;
+pray    - `y' to confirm an attempt to pray (replaces ``prayconfirm'');
+trap    - `y' to confirm stepping onto a known trap, unless it is harmless;
+swim    - refuse to step into known water or lava unless the move is
+          prefixed with `m';
+Autoall - `y' to confirm choosing `A' (auto-select every relevant item)
+          by itself in a menustyle:full menu; without it, `A' only takes
+          effect together with other choices;
+Remove  - always pick from inventory for `R' and `T' even when wearing
+          just one applicable item.
+.ei
+.ed
+By default, the pray, swim and trap choices are enabled, the others disabled.
+To disable them all, use ``paranoid_confirmation:none''.
 .lp perm_invent
 If true, always display your current inventory in a window.  This only
 makes sense for windowing system interfaces that implement this feature.
@@ -2173,8 +2201,6 @@ compile time option AUTOPICKUP_EXCEPTIONS included, you may be able to use
 configuration file lines to further refine
 .op autopickup
 behavior.
-.lp prayconfirm
-Prompt for confirmation before praying (default on).
 .lp pushweapon
 Using the `w' (wield) command when already wielding
 something pushes the old item into your alternate weapon slot (default off).

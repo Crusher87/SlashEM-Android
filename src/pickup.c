@@ -807,6 +807,8 @@ boolean FDECL((*allow), (OBJ_P));/* allow function */
 /*
  * allow menu-based category (class) selection (for Drop,take off etc.)
  *
+ * 'A' (CHOOSE_ALL) only takes effect together with other choices, unless
+ * paranoid_confirm:Autoall is set, in which case choosing it asks first.
  */
 int
 query_category(qstr, olist, qflags, pick_list, how)
@@ -827,7 +829,9 @@ int how;			/* type of query */
 	boolean do_unpaid = FALSE;
 	boolean do_blessed = FALSE, do_cursed = FALSE, do_uncursed = FALSE,
 	    do_buc_unknown = FALSE;
+	boolean verify_All = FALSE;
 	int num_buc_types = 0;
+	static int A_first_hint = 0, A_second_hint = 0;
 
 	*pick_list = (menu_item *) 0;
 	if (!olist) return 0;
@@ -931,7 +935,20 @@ int how;			/* type of query */
 		add_menu(win, NO_GLYPH, &any, invlet, 0, ATR_NONE,
 			(qflags & WORN_TYPES) ?
 			"Auto-select every item being worn" :
-			"Auto-select every item", MENU_UNSELECTED);
+			"Auto-select every relevant item", MENU_UNSELECTED);
+		verify_All = (how == PICK_ANY) && ParanoidAutoAll;
+		any.a_void = 0;
+		if (!verify_All) {
+		    if (!A_first_hint++ || iflags.cmdassist)
+			add_menu(win, NO_GLYPH, &any, 0, 0, ATR_NONE,
+		    "    (ignored unless some other choices are also picked)",
+				 MENU_UNSELECTED);
+		} else if ((qflags & ALL_TYPES) && ccount > 1) {
+		    if (!A_second_hint++ || iflags.cmdassist)
+			add_menu(win, NO_GLYPH, &any, 0, 0, ATR_NONE,
+		    "    (if no other choices are picked, 'a' is implied)",
+				 MENU_UNSELECTED);
+		}
 	}
 	/* items with b/u/c/unknown if there are any */
 	if (do_blessed) {
@@ -968,6 +985,52 @@ int how;			/* type of query */
 	destroy_nhwindow(win);
 	if (n < 0)
 	    n = 0;	/* caller's don't expect -1 */
+
+	/* handle paranoid_confirm:Autoall by confirming 'A' choice */
+	if (n > 0 && verify_All) {
+	    int i, j;
+
+	    for (i = 0; i < n; ++i)
+		if ((*pick_list)[i].item.a_int == 'A') {
+		    /* if paranoid_confirm:Confirm is also set, require "yes"
+		       rather than just "y" to accept */
+		    switch (paranoid_ynq(ParanoidConfirm,
+					 "Really autoselect All?", TRUE)) {
+		    case 'y':
+			/* yes => honor Auto-select All */
+			break;
+		    case 'n':
+			/* no => remove 'A' from the list; if that would make
+			   it empty then replace it with 'a' */
+			if (n > 1) {
+			    for (j = i + 1; j < n; ++j)
+				(*pick_list)[j - 1] = (*pick_list)[j];
+			    --n;
+			    break;
+			} else if (qflags & ALL_TYPES) {
+			    /* 'A' was the only choice; convert it to 'a' and
+			       let the next menu offer a choice of all */
+			    (*pick_list)[0].item.a_int = ALL_TYPES_SELECTED;
+			    break;
+			}
+			/* FALLTHRU */
+		    case 'q':
+		    default:
+			/* quit or ESC => cancel, no Auto-select, no 2nd menu */
+			n = 0;
+			free((genericptr_t) *pick_list);
+			*pick_list = (menu_item *) 0;
+			break;
+		    }
+		    break;
+		}
+	} else if (n == 1 && !verify_All && (*pick_list)[0].item.a_int == 'A') {
+	    /* without paranoid_confirm:Autoall, 'A' by itself is rejected */
+	    n = 0;
+	    free((genericptr_t) *pick_list);
+	    *pick_list = (menu_item *) 0;
+	    pline("No relevant items selected.");
+	}
 	return n;
 }
 
@@ -2480,7 +2543,7 @@ struct obj *container;
 boolean put_in;
 {
     int n, i, n_looted = 0;
-    boolean all_categories = TRUE, loot_everything = FALSE;
+    boolean all_categories = TRUE, loot_everything = FALSE, autopick = FALSE;
     char buf[BUFSZ];
     const char *takeout = "Take out", *putin = "Put in";
     struct obj *otmp, *otmp2;
@@ -2498,22 +2561,31 @@ boolean put_in;
 	n = query_category(buf, put_in ? invent : container->cobj,
 			   mflags, &pick_list, PICK_ANY);
 	if (!n) return 0;
+	/* 'A' together with other choices auto-selects the items they
+	   match; 'A' alone (only when confirmed for paranoid_confirm:Autoall)
+	   takes out everything */
+	loot_everything = TRUE;
 	for (i = 0; i < n; i++) {
 	    if (pick_list[i].item.a_int == 'A')
-		loot_everything = TRUE;
+		autopick = TRUE;
 	    else if (pick_list[i].item.a_int == ALL_TYPES_SELECTED)
 		all_categories = TRUE;
-	    else
+	    else {
 		add_valid_menu_class(pick_list[i].item.a_int);
+		loot_everything = FALSE;
+	    }
 	}
 	free((genericptr_t) pick_list);
     }
 
-    if (loot_everything) {
+    if (autopick) {
 	for (otmp = container->cobj; otmp; otmp = otmp2) {
 	    otmp2 = otmp->nobj;
+	    if (!loot_everything && !all_categories && !allow_category(otmp))
+		continue;
 	    res = out_container(otmp);
 	    if (res < 0) break;
+	    n_looted += res;
 	}
     } else {
 	mflags = INVORDER_SORT;

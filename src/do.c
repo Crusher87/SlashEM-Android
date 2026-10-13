@@ -678,7 +678,7 @@ int retry;
 #endif
     menu_item *pick_list;
     boolean all_categories = TRUE;
-    boolean drop_everything = FALSE;
+    boolean drop_everything = FALSE, autopick = FALSE;
 
 #ifndef GOLDOBJ
     if (u.ugold) {
@@ -701,14 +701,22 @@ int retry;
 			UNPAID_TYPES | ALL_TYPES | CHOOSE_ALL |
 			BUC_BLESSED | BUC_CURSED | BUC_UNCURSED | BUC_UNKNOWN,
 			&pick_list, PICK_ANY);
+	/* when paranoid_confirm:Autoall is set, 'A' by itself is confirmed
+	   and drops everything; when it isn't, 'A' by itself is rejected by
+	   query_category() and result here will be n==0 */
 	if (!n) goto drop_done;
+	/* 'A' together with other choices drops what they match without
+	   a second menu */
+	drop_everything = TRUE;
 	for (i = 0; i < n; i++) {
 	    if (pick_list[i].item.a_int == ALL_TYPES_SELECTED)
 		all_categories = TRUE;
 	    else if (pick_list[i].item.a_int == 'A')
-		drop_everything = TRUE;
-	    else
+		autopick = TRUE;
+	    else {
 		add_valid_menu_class(pick_list[i].item.a_int);
+		drop_everything = FALSE;
+	    }
 	}
 	free((genericptr_t) pick_list);
     } else if (flags.menu_style == MENU_COMBINATION) {
@@ -723,10 +731,11 @@ int retry;
 	}
     }
 
-    if (drop_everything) {
+    if (autopick) {
 	for(otmp = invent; otmp; otmp = otmp2) {
 	    otmp2 = otmp->nobj;
-	    n_dropped += drop(otmp);
+	    if (drop_everything || all_categories || allow_category(otmp))
+		n_dropped += drop(otmp);
 	}
     } else {
 	/* should coordinate with perm invent, maybe not show worn items */

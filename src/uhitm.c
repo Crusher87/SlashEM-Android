@@ -231,7 +231,7 @@ boolean barehanded;
 		}
 		if (canspotmon(mtmp)) {
 			Sprintf(qbuf, "Really attack %s?", mon_nam(mtmp));
-			if (yn(qbuf) != 'y') {
+			if (!paranoid_query(ParanoidHit, qbuf)) {
 				/* Stormbringer is not tricked so easily */
 				if (!barehanded && u.twoweap && uswapwep &&
 				  uswapwep->oartifact == ART_STORMBRINGER) {

@@ -14,6 +14,10 @@ STATIC_DCL void NDECL(dosinkfall);
 #endif
 STATIC_DCL boolean FDECL(findtravelpath, (BOOLEAN_P));
 STATIC_DCL boolean FDECL(monstinroom, (struct permonst *,int));
+STATIC_DCL schar FDECL(u_simple_floortyp, (int,int));
+STATIC_DCL boolean FDECL(swim_move_danger, (int,int));
+STATIC_DCL boolean FDECL(u_trap_harmless, (int));
+STATIC_DCL boolean FDECL(avoid_known_trap, (int,int));
 
 STATIC_DCL void FDECL(move_update, (BOOLEAN_P));
 
@@ -25,6 +29,14 @@ static boolean door_opened;	/* set to true if door was opened during test_move *
 			!Stunned))
 
 #define IS_SHOP(x)	(rooms[x].rtype >= SHOPBASE)
+
+/* XXX: if more sources of water walking than just boots are added,
+   these should account for them */
+#define Known_wwalking (uarmf && uarmf->otyp == WATER_WALKING_BOOTS && \
+			objects[WATER_WALKING_BOOTS].oc_name_known && \
+			!u.usteed)
+#define Known_lwalking (Known_wwalking && Fire_resistance && \
+			uarmf->oerodeproof && uarmf->rknown)
 
 #ifdef OVL2
 
@@ -1281,6 +1293,141 @@ found:
     return FALSE;
 }
 
+/* water or lava as far as the hero's own feet are concerned */
+STATIC_OVL schar
+u_simple_floortyp(x, y)
+int x, y;
+{
+	if (!Levitation && !Flying) {
+	    if (is_pool(x, y)) return POOL;
+	    if (is_lava(x, y)) return LAVAPOOL;
+	}
+	return ROOM;
+}
+
+/* paranoid_confirm:swim (from NetHack 5.0) - is it dangerous for the
+   hero to move to x,y due to water or lava?  The 'm' prefix overrides;
+   travel (tapping the map) doesn't, so a mis-tap can't drown you */
+STATIC_OVL boolean
+swim_move_danger(x, y)
+int x, y;
+{
+	static boolean swim_tip_given = FALSE;
+
+	if (Underwater && is_pool(x, y))
+	    return FALSE;
+
+	if (u_simple_floortyp(x, y) != u_simple_floortyp(u.ux, u.uy) &&
+		!Stunned && !Confusion && levl[x][y].seenv &&
+		(is_pool(x, y) || is_lava(x, y))) {
+	    if ((is_pool(x, y) && !Known_wwalking) ||
+		    /* don't move onto lava without known lava-walking,
+		       but do continue to move over lava if already doing so */
+		    (is_lava(x, y) && !Known_lwalking && !is_lava(u.ux, u.uy))) {
+		if (flags.nopick && !flags.travel) {
+		    return FALSE;	/* moving with m-prefix */
+		} else if (ParanoidSwim) {
+		    You("avoid stepping into the %s.", surface(x, y));
+		    if (iflags.cmdassist && !swim_tip_given) {
+			swim_tip_given = TRUE;
+			pline("(Use the 'm' prefix to step in if you really want to.)");
+		    }
+		    return TRUE;
+		}
+	    }
+	}
+	return FALSE;
+}
+
+/* can a known trap of this type obviously not hurt the hero?
+   (a simplified, hero-only version of NetHack 5.0's immune_to_trap()) */
+STATIC_OVL boolean
+u_trap_harmless(ttyp)
+int ttyp;
+{
+	struct permonst *ptr = youmonst.data;
+	struct obj *otmp;
+
+	switch (ttyp) {
+	    case BEAR_TRAP:
+		if (amorphous(ptr) || is_whirly(ptr) || unsolid(ptr))
+		    return TRUE;
+#ifdef STEED
+		if (!u.usteed && ptr->msize <= MZ_SMALL)
+#else
+		if (ptr->msize <= MZ_SMALL)
+#endif
+		    return TRUE;
+		/* FALLTHRU */
+	    case SQKY_BOARD:
+	    case PIT:
+	    case SPIKED_PIT:
+	    case HOLE:
+	    case TRAPDOOR:
+		/* Sokoban's air currents pull you down regardless */
+		if (In_sokoban(&u.uz) && ttyp != SQKY_BOARD &&
+			ttyp != BEAR_TRAP)
+		    return FALSE;
+		return (boolean)(Levitation || Flying);
+	    case WEB:
+		return (boolean)(amorphous(ptr) || is_whirly(ptr) ||
+				 unsolid(ptr) || webmaker(ptr));
+	    case TELEP_TRAP:
+	    case LEVEL_TELEP:
+		/* these don't work in the endgame or with the Amulet */
+		return (boolean)(In_endgame(&u.uz) || u.uhave.amulet);
+	    case RUST_TRAP:
+		/* harmful if wearing or wielding anything rustable */
+		if (u.umonnum == PM_IRON_GOLEM) return FALSE;
+		for (otmp = invent; otmp; otmp = otmp->nobj)
+		    if (is_rustprone(otmp) && otmp->owornmask &&
+			    otmp != uquiver && (otmp != uswapwep || u.twoweap))
+			return FALSE;
+		return TRUE;
+	    default:	/* arrow, dart, falling rock, land mine (even when
+			   flying), rolling boulder, sleeping gas, fire, magic,
+			   anti-magic, polymorph, statue trap, magic portal */
+		return FALSE;
+	}
+}
+
+/* paranoid_confirm:trap (from NetHack 5.0) - ask before stepping onto a
+   known trap unless the 'm' prefix was used; TRUE means don't move */
+STATIC_OVL boolean
+avoid_known_trap(x, y)
+int x, y;
+{
+	struct trap *trap;
+	char qbuf[QBUFSZ];
+	int ttyp;
+
+	if (ParanoidTrap && !Stunned && !Confusion &&
+		/* skip if player used 'm' prefix (but not when travelling) */
+		(!flags.nopick || flags.run) &&
+		(trap = t_at(x, y)) != 0 && trap->tseen &&
+		/* check whether attempted move will be viable; test_move()
+		   refuses every known trap during travel, but travel has
+		   already picked this step */
+		(flags.run == 8 ||
+		 test_move(u.ux, u.uy, x - u.ux, y - u.uy, TEST_MOVE)) &&
+		/* Hallucination: the hero can't tell what the trap is */
+		(Hallucination || !u_trap_harmless(trap->ttyp))) {
+	    ttyp = Hallucination ? rnd(TRAPNUM - 1) : trap->ttyp;
+	    Sprintf(qbuf, "Really step %s that %s?",
+		    (ttyp == BEAR_TRAP || ttyp == PIT || ttyp == SPIKED_PIT ||
+		     ttyp == HOLE || ttyp == TELEP_TRAP || ttyp == LEVEL_TELEP ||
+		     ttyp == MAGIC_PORTAL || ttyp == WEB) ? "into" : "onto",
+		    defsyms[trap_to_defsym(ttyp)].explanation);
+	    /* when paranoid_confirm:Confirm is also set, ask for yes/no */
+	    if (!paranoid_query(ParanoidConfirm, qbuf)) {
+		nomul(0);
+		flags.move = 0;
+		return TRUE;
+	    }
+	}
+	return FALSE;
+}
+
 void
 domove()
 {
@@ -1578,6 +1725,9 @@ domove()
 		nomul(0);
 		return;
 	}
+	/* paranoid_confirm:trap */
+	if (avoid_known_trap(x, y))
+		return;
 	if(u.utrap) {
 		if(u.utraptype == TT_PIT) {
 		    if (!rn2(2) && sobj_at(BOULDER, u.ux, u.uy)) {
@@ -1710,6 +1860,13 @@ domove()
 			door_opened = 0;
 		}
 	    return;
+	}
+
+	/* paranoid_confirm:swim - is it dangerous to step into water or lava? */
+	if (swim_move_danger(x, y)) {
+		flags.move = 0;
+		nomul(0);
+		return;
 	}
 
 	} else if (!test_move(u.ux, u.uy, x-u.ux, y-u.uy, TEST_MOVE)) {

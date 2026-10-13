@@ -536,7 +536,8 @@ enter_explore_mode()
 {
 	if(!discover && !wizard) {
 		pline("Beware!  From explore mode there will be no return to normal game.");
-		if (yn("Do you want to enter explore mode?") == 'y') {
+		if (paranoid_query(ParanoidQuit,
+				   "Do you want to enter explore mode?")) {
 			clear_nhwindow(WIN_MESSAGE);
 			You("are now in non-scoring explore mode.");
 			discover = TRUE;
@@ -3562,6 +3563,79 @@ char def;
 	qbuf[truncspot] = '\0';
 	Strcat(qbuf,"...");
 	return (*windowprocs.win_yn_function)(qbuf, resp, def);
+}
+
+/* for paranoid_confirm:quit,die,attack,&c prompting (from NetHack 3.6
+   and 5.0); returns 'y', 'n' or (only when accept_q) 'q' */
+char
+paranoid_ynq(be_paranoid, prompt, accept_q)
+boolean be_paranoid;
+const char *prompt;
+boolean accept_q;
+{
+	char c = 'n';	/* default result */
+
+	/* when paranoid, player must respond with "yes" rather than just 'y'
+	   to give the go-ahead for this query; default is "no" unless the
+	   ParanoidConfirm flag is set in which case there's no default */
+	if (be_paranoid) {
+	    char pbuf[QBUFSZ], qbuf[BUFSZ], ans[BUFSZ];
+	    const char *promptprefix = "",	/* empty for first iteration */
+		       *responsetype = ParanoidConfirm ?
+				(accept_q ? "[yes|no|quit]" : "[yes|no]") :
+				(accept_q ? "[yes|n|q] (n)" : "[yes|n] (n)");
+	    int k, trylimit = 6; /* 1 normal, 5 more with "Yes or No:" prefix */
+
+	    (void) strncpy(pbuf, prompt, QBUFSZ - 1);
+	    pbuf[QBUFSZ - 1] = '\0';
+	    /* in addition to being paranoid about this particular
+	       query, we might be even more paranoid about all paranoia
+	       responses (ie, ParanoidConfirm is set) in which case we
+	       require "no" to reject in addition to "yes" to confirm
+	       (except we won't loop if response is ESC; it means no) */
+	    do {
+		/* make sure the prompt fits in a QBUFSZ sized buffer */
+		k = (int)(strlen(promptprefix) + 1 + strlen(responsetype));
+		if ((int)strlen(pbuf) + k > QBUFSZ - 1) {
+		    /* chop off some at the end */
+		    Strcpy(pbuf + (QBUFSZ - 1) - k - 4, "...?"); /* -4: "...?" */
+		}
+
+		Sprintf(qbuf, "%s%s %s", promptprefix, pbuf, responsetype);
+		*ans = '\0';
+		getlin(qbuf, ans);
+		(void) mungspaces(ans);
+		if (!strcmpi(ans, "yes")) {
+		    c = 'y';
+		    break;
+		}
+		if (!strcmpi(ans, "quit") || *ans == '\033') {
+		    c = 'q';
+		    break;
+		}
+		/* we don't bother adding "or \"Quit\"" for the accept_q case */
+		promptprefix = "\"Yes\" or \"No\": ";
+		/* for empty input, return value c will already be 'n' */
+	    } while (ParanoidConfirm && strcmpi(ans, "no") && --trylimit);
+	} else if (accept_q) {
+	    /* 'y', 'n', or 'q' */
+	    c = yn_function(prompt, ynqchars, 'n');
+	} else {
+	    /* 'y' or 'n' */
+	    c = yn_function(prompt, ynchars, 'n');
+	}
+	if (c != 'y' && (c != 'q' || !accept_q))
+	    c = 'n';
+	return c;
+}
+
+/* yes/no variant of paranoid_ynq(); True for yes, False for n|no|ESC */
+boolean
+paranoid_query(be_paranoid, prompt)
+boolean be_paranoid;
+const char *prompt;
+{
+	return (boolean)(paranoid_ynq(be_paranoid, prompt, FALSE) == 'y');
 }
 #endif
 

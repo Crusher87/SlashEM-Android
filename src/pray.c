@@ -1786,9 +1786,9 @@ int
 dopray()
 {
     /* Confirm accidental slips of Alt-P */
-    if (flags.prayconfirm)
-	if (yn("Are you sure you want to pray?") == 'n')
-	    return 0;
+    if (ParanoidPray &&
+	    !paranoid_query(ParanoidConfirm, "Are you sure you want to pray?"))
+	return 0;
 
     u.uconduct.gnostic++;
     /* Praying implies that the hero is conscious and since we have

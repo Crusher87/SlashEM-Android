@@ -2793,6 +2793,31 @@
                Any omitted types are filled in at the end from the previous
                order.
 
+          paranoid_confirmation
+               A space separated list of specific situations where  alter-
+               nate  prompting  is  desired.   The default is ``paranoid_-
+               confirmation:pray swim trap''.
+
+               Confirm - for any prompts which are set to require ``yes''
+                         rather than `y', also require ``no'' to reject;
+               quit    - ``yes'' vs `y' to quit or to enter explore mode;
+               die     - ``yes'' vs `y' to die (explore or debug mode);
+               bones   - ``yes'' vs `y' to save bones in debug mode;
+               attack  - ``yes'' vs `y' to attack a peaceful monster;
+               wand-break - ``yes'' vs `y' to break a wand;
+               eat     - ``yes'' vs `y' to continue eating when satiated;
+               Were-change - ``yes'' vs `y' to change form (lycanthropy);
+               pray    - `y' to confirm praying (replaces ``prayconfirm'');
+               trap    - `y' to step onto a known trap unless harmless;
+               swim    - refuse to step into known water or lava unless
+                         the move is prefixed with `m';
+               Autoall - `y' to confirm choosing `A' by itself in a
+                         menustyle:full menu; without it, `A' only takes
+                         effect together with other choices;
+               Remove  - always pick from inventory for `R' and `T'.
+
+               To disable them all, use ``paranoid_confirmation:none''.
+
           perm_invent
                If true, always display your current inventory in a  window.
             This only makes sense for windowing system interfaces that  im-
@@ -2821,9 +2846,6 @@
             mental  compile time option AUTOPICKUP_EXCEPTIONS included, you
             may be able  to  use  autopickup_exception  configuration  file
             lines to further refine autopickup behavior.
-
-          prayconfirm
-               Prompt for confirmation before praying (default on).
 
           pushweapon
             Using  the  `w' (wield) command when already wielding something
