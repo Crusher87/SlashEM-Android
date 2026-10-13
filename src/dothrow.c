@@ -399,10 +399,49 @@ autoquiver()
 	return;
 }
 
+/* look through the hero's inventory for a launcher matching ammo,
+   avoiding known cursed ones and two-handed ones that a worn shield
+   keeps the hero from wielding (from NetHack 5.0) */
+STATIC_OVL struct obj *
+find_launcher(ammo)
+struct obj *ammo;
+{
+	struct obj *otmp, *oX = (struct obj *)0;
+
+	for (otmp = invent; otmp; otmp = otmp->nobj) {
+	    if ((otmp->cursed && otmp->bknown) || (uarms && bimanual(otmp)))
+		continue;
+	    if (ammo_and_launcher(ammo, otmp)) {
+		if (otmp->bknown)
+		    return otmp;	/* known blessed or uncursed */
+		if (!oX)
+		    oX = otmp;	/* unknown; used if nothing better turns up */
+	    }
+	}
+	return oX;
+}
+
+/* fireassist: after a move spent readying a weapon, fire on the next
+   move unless something interrupts the hero (nomul(0), e.g. a melee
+   attack, cancels it); NetHack 5.0 queues the commands instead */
+static char fireassist_cmd[] = "f";
+static int fireassist_shotlimit = 0;
+
+STATIC_OVL void
+fire_next_move(shotlimit)
+int shotlimit;
+{
+	fireassist_shotlimit = shotlimit;
+	multi = 1;
+	save_cm = fireassist_cmd;	/* moveloop will do rhack(save_cm) */
+}
+
 int
 dofire()
 {
 	int result, shotlimit;
+	struct obj *launcher;
+	boolean save_pushweapon;
 
 	if (notake(youmonst.data)) {
 	    You("are physically incapable of doing that.");
@@ -412,6 +451,23 @@ dofire()
 	if(check_capacity((char *)0)) return(0);
 	if (!uquiver) {
 		if (!flags.autoquiver) {
+			/* use a wielded polearm or bullwhip instead (5.0) */
+			if (uwep && is_pole(uwep)) {
+			    multi = 0;
+			    return use_pole(uwep, TRUE);
+			} else if (uwep && uwep->otyp == BULLWHIP) {
+			    multi = 0;
+			    return use_whip(uwep);
+			} else if (iflags.fireassist && uswapwep
+				   && is_pole(uswapwep)
+				   && !(uswapwep->cursed && uswapwep->bknown)
+				   && !(uwep && welded(uwep))) {
+			    /* swap to the polearm and use it next move */
+			    result = doswapweapon();
+			    if (uwep && is_pole(uwep))
+				fire_next_move(0);
+			    return result;
+			}
 			/* Don't automatically fill the quiver */
 			You("have no ammunition readied!");
 			return(dothrow());
@@ -437,8 +493,43 @@ dofire()
 	 * of 3 projectiles will result in 3 being shot, not 5.
 	 */
 	/* kludge to work around parse()'s pre-decrement of `multi' */
-	shotlimit = (multi || save_cm) ? multi + 1 : 0;
+	if (save_cm == fireassist_cmd)	/* continuing a fireassist */
+	    shotlimit = fireassist_shotlimit, save_cm = (char *)0;
+	else
+	    shotlimit = (multi || save_cm) ? multi + 1 : 0;
 	multi = 0;		/* reset; it's been used up */
+
+	/*
+	 * fireassist (from NetHack 5.0): with ammo quivered, use a wielded
+	 * polearm on a monster in reach, or else make sure the matching
+	 * launcher is wielded, swapping to it or wielding it from the pack
+	 * (keeping the old weapon as the alternate one) and then firing
+	 * on the next move.
+	 */
+	if (iflags.fireassist && is_ammo(uquiver)) {
+		if (uwep && is_pole(uwep) && could_pole_mon())
+			return use_pole(uwep, TRUE);
+		if (ammo_and_launcher(uquiver, uwep)
+		    || (uwep && welded(uwep))) {
+			;	/* ready to fire, or stuck with what's wielded */
+		} else if (uswapwep && ammo_and_launcher(uquiver, uswapwep)
+			   && !(uswapwep->cursed && uswapwep->bknown)) {
+			result = doswapweapon();
+			if (ammo_and_launcher(uquiver, uwep))
+				fire_next_move(shotlimit);
+			return result;
+		} else if ((launcher = find_launcher(uquiver)) != 0) {
+			save_pushweapon = flags.pushweapon;
+			flags.pushweapon = TRUE;
+			getobj_answer(launcher, 0, "wield");
+			result = dowield();
+			getobj_answer((struct obj *)0, 0, (const char *)0);
+			flags.pushweapon = save_pushweapon;
+			if (uwep == launcher)
+				fire_next_move(shotlimit);
+			return result;
+		}
+	}
 
 	if (u.twoweap) {
 		if (!can_twoweapon()) untwoweapon();

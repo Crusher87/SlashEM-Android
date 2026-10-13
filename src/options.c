@@ -107,6 +107,7 @@ static struct Bool_Opt
 	{"fast_map", (boolean *)0, TRUE, SET_IN_FILE},
 #endif
 	{"female", &flags.female, FALSE, DISP_IN_GAME},
+	{"fireassist", &iflags.fireassist, TRUE, SET_IN_GAME},
 	{"fixinv", &flags.invlet_constant, TRUE, SET_IN_GAME},
 #ifdef AMIFLUSH
 	{"flush", &flags.amiflush, FALSE, SET_IN_GAME},

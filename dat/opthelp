@@ -13,6 +13,8 @@ DECgraphics    use DEC/VT line-drawing characters for the dungeon [FALSE]
 disclose       offer information at the end of the game           [TRUE]
 eight_bit_tty  send 8-bit characters straight to terminal         [FALSE]
 extmenu        use a menu for selecting extended commands (#)     [FALSE]
+fireassist     make 'f' wield the launcher for the quivered ammo
+               (or use a wielded polearm) when needed             [TRUE]
 fixinv         try to retain the same letter for the same object  [TRUE]
 help           print all available info when using the / command  [TRUE]
 IBMgraphics    use IBM extended characters for the dungeon        [FALSE]
