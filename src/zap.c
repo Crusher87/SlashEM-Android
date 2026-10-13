@@ -4570,35 +4570,58 @@ register int osym, dmgtyp;
 	register long i, cnt, quan;
 	register int dindx;
 	const char *mult;
-	/*
-	 * [ALI] Because destroy_item() can call wand_explode() which can
-	 * call explode() which can call destroy_item() again, we need to
-	 * be able to deal with the possibility of not only the current
-	 * object we are looking at no longer being in the inventory, but
-	 * also the next object (and the one after that, etc.).
-	 * We do this by taking advantage of the fact that objects in the
-	 * inventory destroyed as a result of calling wand_explode() will
-	 * always be destroyed by this same function. This allows us to
-	 * maintain a list of "next" pointers and to adjust these pointers
-	 * as required when we destroy an object that they might be pointing
-	 * at.
-	 */
-	struct destroy_item_frame {
-	    struct obj *next_obj;
-	    struct destroy_item_frame *next_frame;
-	} frame;
-	static struct destroy_item_frame *destroy_item_stack;
+	unsigned *oids;
+	int n, lo, hi, oidx;
 
 	/* this is to deal with gas spores -- they don't really
 	   destroy objects, but this routine is called a lot in
 	   explode.c for them... hmph... */
 	if (dmgtyp == AD_PHYS) return;
 
-	frame.next_frame = destroy_item_stack;
-	destroy_item_stack = &frame;
+	/*
+	 * Destroying an item can change inventory aside from the item
+	 * itself: wand_explode() can call explode() which calls us again,
+	 * boiling unholy water can make a lycanthrope change form and
+	 * drop or destroy worn armor and wielded weapons, losing a worn
+	 * ring of levitation can drop the hero onto a fire trap, and so on.
+	 * So don't follow the inventory chain across those events; first
+	 * make a list of the candidate objects' o_ids, then look each one
+	 * up again just before handling it.  Objects which have been
+	 * destroyed, dropped, or used up in the meantime are skipped.
+	 *
+	 * Loss of an item which might dump the hero onto a trap (where a
+	 * recursive call could destroy other items) is deferred until the
+	 * rest of inventory has been processed [from NetHack 3.6.2].
+	 */
+	for (n = 0, obj = invent; obj; obj = obj->nobj)
+	    if (obj->oclass == osym) n++;
+	if (!n) return;
+	oids = (unsigned *) alloc((unsigned) (n * sizeof (unsigned)));
+	/* normal items fill oids[0..lo-1], deferred ones oids[hi..n-1];
+	   both loops see the same chain, so lo == hi afterwards */
+	lo = 0;
+	hi = n;
+	for (obj = invent; obj && lo < hi; obj = obj->nobj) {
+	    if (obj->oclass != osym) continue;
+	    if ((obj->owornmask &&
+		    (objects[obj->otyp].oc_oprop == LEVITATION ||
+		     objects[obj->otyp].oc_oprop == FLYING)) ||
+		    /* destroyed wands and potions of polymorph don't
+		       trigger polymorph so don't need to be deferred */
+		    (obj->otyp == POT_WATER && u.ulycn >= LOW_PM &&
+		     (Upolyd ? obj->blessed : obj->cursed)))
+		oids[--hi] = obj->o_id;
+	    else
+		oids[lo++] = obj->o_id;
+	}
 
-	for(obj = invent; obj; obj = frame.next_obj) {
-	    frame.next_obj = obj->nobj;
+	for (oidx = 0; oidx < n; oidx++) {
+	    /* deferred items were stored back to front */
+	    unsigned oid = oids[(oidx < lo) ? oidx : (n - 1) - (oidx - lo)];
+
+	    for (obj = invent; obj; obj = obj->nobj)
+		if (obj->o_id == oid) break;
+	    if (!obj) continue; /* destroyed or dropped meanwhile */
 	    if(obj->oclass != osym) continue; /* test only objs of type osym */
 	    if(obj->oartifact) continue; /* don't destroy artifacts */
 	    if(obj->in_use && obj->quan == 1) continue; /* not available */
@@ -4694,16 +4717,6 @@ register int osym, dmgtyp;
 			setnotworn(obj);
 		}
 		if (obj == current_wand) current_wand = 0;	/* destroyed */
-		if (cnt == obj->quan && frame.next_frame) {
-		    /* Before removing an object from the inventory, adjust
-		     * any "next" pointers that would otherwise become invalid.
-		     */
-		    struct destroy_item_frame *fp;
-		    for(fp = frame.next_frame; fp; fp = fp->next_frame) {
-			if (fp->next_obj == obj)
-			    fp->next_obj = frame.next_obj;
-		    }
-		}
 		if(osym == WAND_CLASS && dmgtyp == AD_ELEC) {
 		    /* MAR use a continue since damage and stuff is taken care of
 		     *  in wand_explode */
@@ -4727,7 +4740,7 @@ register int osym, dmgtyp;
 		}
 	    }
 	}
-	destroy_item_stack = frame.next_frame;
+	free((genericptr_t) oids);
 	return;
 }
 
