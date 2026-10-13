@@ -114,6 +114,18 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 #include "rect.h"
 #include "region.h"
 
+/* sortloot() return type; needed before extern.h */
+struct sortloot_item {
+	struct obj *obj;
+	char *str;	/* result of loot_xname(obj) in some cases, otherwise null */
+	int indx;	/* signed int, because sortloot()'s qsort comparison routine
+			   assumes (a->indx - b->indx) might yield a negative result */
+	xchar orderclass; /* order rather than object class; 0 => not yet init'd */
+	xchar subclass;	/* subclass for some classes */
+	xchar disco;	/* discovery status */
+};
+typedef struct sortloot_item Loot;
+
 #ifdef USE_TRAMPOLI /* This doesn't belong here, but we have little choice */
 #undef NDECL
 #define NDECL(f) f()
@@ -158,6 +170,12 @@ NEARDATA extern coord bhitpos;	/* place where throw or zap hits or stops */
 #define SIGNAL_NOMENU	  0x10	/* return -1 rather than 0 if none allowed */
 #define FEEL_COCKATRICE   0x20  /* engage cockatrice checks and react */
 #define SIGNAL_CANCEL	  0x40	/* return -4 rather than 0 if explicit cancel */
+
+/* control flags for sortloot() */
+#define SORTLOOT_PACK	  0x01
+#define SORTLOOT_INVLET	  0x02
+#define SORTLOOT_LOOT	  0x04
+#define SORTLOOT_PETRIFY  0x20	/* override filter func for c-trice corpses */
 
 /* Flags to control query_category() */
 /* BY_NEXTHERE used by query_category() too, so skip 0x01 */

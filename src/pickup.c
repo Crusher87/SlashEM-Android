@@ -706,7 +706,9 @@ boolean FDECL((*allow), (OBJ_P));/* allow function */
 	struct obj *curr, *last;
 	char *pack;
 	anything any;
-	boolean printed_type_name;
+	boolean printed_type_name, sorted = (qflags & INVORDER_SORT) != 0;
+	unsigned sortflags;
+	Loot *sortedolist, *srtoli;
 
 	*pick_list = (menu_item *) 0;
 	if (!olist) return 0;
@@ -728,6 +730,17 @@ boolean FDECL((*allow), (OBJ_P));/* allow function */
 	    return 1;
 	}
 
+	/* 'sortloot' option: alphabetize loot (things not in inventory)
+	   unless set to "none", and inventory too if set to "full" */
+	sortflags = (((flags.sortloot == 'f'
+			|| (flags.sortloot == 'l' && !(qflags & USE_INVLET)))
+		      ? SORTLOOT_LOOT
+		      : ((qflags & USE_INVLET) ? SORTLOOT_INVLET : 0))
+		     | (flags.sortpack ? SORTLOOT_PACK : 0)
+		     | ((qflags & FEEL_COCKATRICE) ? SORTLOOT_PETRIFY : 0));
+	sortedolist = sortloot(&olist, sortflags,
+			       (qflags & BY_NEXTHERE) ? TRUE : FALSE, allow);
+
 	win = create_nhwindow(NHW_MENU);
 	start_menu(win);
 	any.a_obj = (struct obj *) 0;
@@ -735,24 +748,25 @@ boolean FDECL((*allow), (OBJ_P));/* allow function */
 	/*
 	 * Run through the list and add the objects to the menu.  If
 	 * INVORDER_SORT is set, we'll run through the list once for
-	 * each type so we can group them.  The allow function will only
-	 * be called once per object in the list.
+	 * each type so we can group them.  The allow function was
+	 * called by sortloot() and will be called once per item here.
 	 */
 	pack = flags.inv_order;
 	do {
 	    printed_type_name = FALSE;
-	    for (curr = olist; curr; curr = FOLLOW(curr, qflags)) {
+	    for (srtoli = sortedolist; (curr = srtoli->obj) != 0; ++srtoli) {
+		if (sorted && curr->oclass != *pack) continue;
 		if ((qflags & FEEL_COCKATRICE) && curr->otyp == CORPSE &&
 		     will_feel_cockatrice(curr, FALSE)) {
 			destroy_nhwindow(win);	/* stop the menu and revert */
 			(void) look_here(0, FALSE);
+			unsortloot(&sortedolist);
 			return 0;
 		}
-		if ((!(qflags & INVORDER_SORT) || curr->oclass == *pack)
-							&& (*allow)(curr)) {
+		if ((*allow)(curr)) {
 
 		    /* if sorting, print type name (once only) */
-		    if (qflags & INVORDER_SORT && !printed_type_name) {
+		    if (sorted && !printed_type_name) {
 			any.a_obj = (struct obj *) 0;
 			add_menu(win, NO_GLYPH, &any, 0, 0, iflags.menu_headings,
 					let_to_name(*pack, FALSE), MENU_UNSELECTED);
@@ -767,7 +781,8 @@ boolean FDECL((*allow), (OBJ_P));/* allow function */
 		}
 	    }
 	    pack++;
-	} while (qflags & INVORDER_SORT && *pack);
+	} while (sorted && *pack);
+	unsortloot(&sortedolist);
 
 	end_menu(win, qstr);
 	n = select_menu(win, how, pick_list);

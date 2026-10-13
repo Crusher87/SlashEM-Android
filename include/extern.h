@@ -839,6 +839,9 @@ E int NDECL(midnight);
 
 /* ### invent.c ### */
 
+E Loot *FDECL(sortloot, (struct obj **,unsigned,BOOLEAN_P,
+			    boolean (*)(OBJ_P)));
+E void FDECL(unsortloot, (Loot **));
 E void FDECL(assigninvlet, (struct obj *));
 E struct obj *FDECL(merge_choice, (struct obj *,struct obj *));
 E int FDECL(merged, (struct obj **,struct obj **));
