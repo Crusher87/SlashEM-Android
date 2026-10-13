@@ -10,6 +10,8 @@ STATIC_DCL void NDECL(vomiting_dialogue);
 STATIC_DCL void NDECL(choke_dialogue);
 STATIC_DCL void NDECL(slime_dialogue);
 STATIC_DCL void NDECL(slime_dialogue);
+STATIC_DCL void NDECL(sickness_dialogue);
+STATIC_DCL void NDECL(levitation_dialogue);
 STATIC_DCL void NDECL(slip_or_trip);
 STATIC_DCL void FDECL(see_lamp_flicker, (struct obj *, const char *));
 STATIC_DCL void FDECL(lantern_message, (struct obj *));
@@ -113,6 +115,73 @@ choke_dialogue()
 	exercise(A_STR, FALSE);
 }
 
+static NEARDATA const char * const sickness_texts[] = {
+	"Your %s feels worse.",			/* 3 */
+	"Your %s is severe.",			/* 2 */
+	"You are at Death's door."		/* 1 */
+};
+
+/* fatal illness countdown (from NetHack 5.0) */
+STATIC_OVL void
+sickness_dialogue()
+{
+	long j = (Sick & TIMEOUT), i = j / 2L;
+
+	if (i > 0L && i <= SIZE(sickness_texts) && (j % 2L) != 0) {
+	    char buf[BUFSZ];
+
+	    /* food poisoning is "sickness", the rest "illness" */
+	    Sprintf(buf, sickness_texts[SIZE(sickness_texts) - i],
+		    (u.usick_type & SICK_NONVOMITABLE) ? "illness" :
+		    "sickness");
+	    if (Hallucination && i == 1L) {
+		char pronounbuf[40];
+
+		/* any pronoun (he, she or it) will do while hallucinating */
+		Strcpy(pronounbuf, genders[rn2(ROLE_GENDERS + 1)].he);
+		Sprintf(eos(buf), "  %s %s inviting you in.",
+			upstart(pronounbuf), vtense(pronounbuf, "are"));
+	    }
+	    pline("%s", buf);
+	    stop_occupation();
+	}
+	exercise(A_CON, FALSE);
+}
+
+/* levitation about to time out (from NetHack 3.6) */
+static NEARDATA const char * const levi_texts[] = {
+	"You float slightly lower.",
+	"You wobble unsteadily %s the %s."
+};
+
+STATIC_OVL void
+levitation_dialogue()
+{
+	/* -1 because the last message comes via float_down() */
+	long i = (((HLevitation & TIMEOUT) - 1L) / 2L);
+
+	if (ELevitation)
+	    return;
+
+	if (!ACCESSIBLE(levl[u.ux][u.uy].typ) &&
+		!is_pool(u.ux,u.uy) && !is_lava(u.ux,u.uy))
+	    return;
+
+	if (((HLevitation & TIMEOUT) % 2L) && i > 0L && i <= SIZE(levi_texts)) {
+	    const char *s = levi_texts[SIZE(levi_texts) - i];
+
+	    if (index(s, '%')) {
+		boolean danger = ((is_pool(u.ux,u.uy) || is_lava(u.ux,u.uy)) &&
+				  !Is_waterlevel(&u.uz));
+
+		pline(s, danger ? "over" : "in",
+		      danger ? surface(u.ux, u.uy) : "air");
+	    } else
+		pline("%s", s);
+	    stop_occupation();
+	}
+}
+
 static NEARDATA const char * const slime_texts[] = {
 	"You are turning a little %s.",           /* 5 */
 	"Your limbs are getting oozy.",              /* 4 */
@@ -199,6 +268,8 @@ nh_timeout()
 	if(Slimed) slime_dialogue();
 	if(Vomiting) vomiting_dialogue();
 	if(Strangled) choke_dialogue();
+	if(Sick) sickness_dialogue();
+	if(HLevitation & TIMEOUT) levitation_dialogue();
 	if(u.mtimedone && !--u.mtimedone) {
 		if (Unchanging)
 			u.mtimedone = rnd(100*youmonst.data->mlevel + 1);
