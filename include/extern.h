@@ -1630,6 +1630,10 @@ E boolean FDECL(is_autopickup_exception, (struct obj *, BOOLEAN_P));
 
 E void VDECL(pline, (const char *,...)) PRINTF_F(1,2);
 E void VDECL(Norep, (const char *,...)) PRINTF_F(1,2);
+E void VDECL(pline_prompt, (const char *,...)) PRINTF_F(1,2);
+E void FDECL(msghist_add, (const char *));
+E const char *FDECL(msghist_get, (int));
+E void NDECL(msghist_free);
 E void NDECL(free_youbuf);
 E void VDECL(You, (const char *,...)) PRINTF_F(1,2);
 E void VDECL(Your, (const char *,...)) PRINTF_F(1,2);
@@ -2484,7 +2488,12 @@ E void FDECL(unwield, (struct obj *,BOOLEAN_P));
 
 E void FDECL(choose_windows, (const char *));
 E char FDECL(genl_message_menu, (CHAR_P,int,const char *));
+E void FDECL(putmsghistory, (const char *));
 E void FDECL(genl_preference_update, (const char *));
+#ifdef ANDROID
+/* in winandroid.c */
+E void FDECL(and_putmsghistory, (const char *));
+#endif
 
 /* ### wizard.c ### */
 

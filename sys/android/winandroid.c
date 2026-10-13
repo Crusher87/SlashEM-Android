@@ -1139,6 +1139,21 @@ int and_doprev_message()
 }
 
 //____________________________________________________________________________________
+//putmsghistory(msg)
+//		-- Called by the core when a saved game is restored, once for
+//		   each message that was in the message history when the game
+//		   was saved (oldest first), then with a null pointer.
+//		-- The message log lives in the front end, so just add the old
+//		   messages to it. putstr() never waits for a key here, and the
+//		   restore clears the message window afterwards, so they show up
+//		   only in the log (^P).
+void and_putmsghistory(const char *msg)
+{
+	if(msg && *msg)
+		and_putstr(WIN_MESSAGE, ATR_NONE, msg);
+}
+
+//____________________________________________________________________________________
 // char yn_function(const char *ques, const char *choices, char default)
 //		-- Print a prompt made up of ques, choices and default.
 //		   Read a single character response that is contained in
@@ -1596,7 +1611,7 @@ void get_ext_cmd_auto(const char *query, register char *bufp)
 	register int c;
 	const int maxc = COLNO >= BUFSZ ? BUFSZ-1 : COLNO;
 
-	pline("%s ", query);
+	pline_prompt("%s ", query);
 	bufp[n] = 0;
 	for(;;)
 	{

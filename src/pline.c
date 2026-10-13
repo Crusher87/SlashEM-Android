@@ -12,8 +12,58 @@
 #ifdef OVLB
 
 static boolean no_repeat = FALSE;
+static boolean no_history = FALSE;	/* see pline_prompt() */
 
 static char *FDECL(You_buf, (int));
+
+/*
+ * The most recent messages, kept by the core rather than the window port
+ * so that they can be saved with the game (and given back to the window
+ * port's ^P history after a restore) and listed in the dump log.
+ * msghist[msghist_next] is the oldest one, or empty if there are fewer
+ * than MSGHISTORY_COUNT.
+ */
+static char *msghist[MSGHISTORY_COUNT];
+static int msghist_next = 0;		/* slot to use for the next message */
+
+/* remember a message */
+void
+msghist_add(line)
+const char *line;
+{
+	char *oldest = msghist[msghist_next];
+
+	if (!line || !*line) return;
+	if (oldest && strlen(oldest) >= strlen(line)) {
+	    Strcpy(oldest, line);
+	} else {
+	    if (oldest) free((genericptr_t) oldest);
+	    msghist[msghist_next] = strcpy((char *) alloc(strlen(line) + 1),
+					   line);
+	}
+	msghist_next = (msghist_next + 1) % MSGHISTORY_COUNT;
+}
+
+/* the idx'th remembered message, oldest first; null for an unused slot */
+const char *
+msghist_get(idx)
+int idx;
+{
+	if (idx < 0 || idx >= MSGHISTORY_COUNT) return (const char *) 0;
+	return msghist[(msghist_next + idx) % MSGHISTORY_COUNT];
+}
+
+/* forget all messages */
+void
+msghist_free()
+{
+	int i;
+
+	for (i = 0; i < MSGHISTORY_COUNT; i++)
+	    if (msghist[i])
+		free((genericptr_t) msghist[i]), msghist[i] = (char *) 0;
+	msghist_next = 0;
+}
 
 /*VARARGS1*/
 /* Note that these declarations rely on knowledge of the internals
@@ -65,6 +115,7 @@ pline VA_DECL(const char *, line)
 #endif /* MAC */
 	if (vision_full_recalc) vision_recalc(0);
 	if (u.ux) flush_screen(1);		/* %% */
+	if (!no_history) msghist_add(line);
 	putstr(WIN_MESSAGE, 0, line);
 }
 
@@ -76,6 +127,21 @@ Norep VA_DECL(const char *, line)
 	no_repeat = TRUE;
 	vpline(line, VA_ARGS);
 	no_repeat = FALSE;
+	VA_END();
+	return;
+}
+
+/*VARARGS1*/
+/* pline() for a prompt that a window port shows in the message window:
+   it is left out of the message history (it's not a message, and the
+   answer isn't part of it) */
+void
+pline_prompt VA_DECL(const char *, line)
+	VA_START(line);
+	VA_INIT(line, const char *);
+	no_history = TRUE;
+	vpline(line, VA_ARGS);
+	no_history = FALSE;
 	VA_END();
 	return;
 }

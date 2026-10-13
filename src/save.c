@@ -34,6 +34,7 @@ STATIC_DCL void FDECL(saveobjchn, (int,struct obj *,int));
 STATIC_DCL void FDECL(savemonchn, (int,struct monst *,int));
 STATIC_DCL void FDECL(savetrapchn, (int,struct trap *,int));
 STATIC_DCL void FDECL(savegamestate, (int,int));
+STATIC_DCL void FDECL(save_msghistory, (int,int));
 #ifdef MFLOPPY
 STATIC_DCL void FDECL(savelev0, (int,XCHAR_P,int));
 STATIC_DCL boolean NDECL(swapout_oldest);
@@ -391,7 +392,31 @@ register int fd, mode;
 	savefruitchn(fd, mode);
 	savenames(fd, mode);
 	save_waterlevel(fd, mode);
+	save_msghistory(fd, mode);
 	bflush(fd);
+}
+
+/* save the core's message history: each message's length and text,
+   oldest first, then -1 */
+STATIC_OVL void
+save_msghistory(fd, mode)
+int fd, mode;
+{
+	const char *msg;
+	int i, msglen, minusone = -1;
+
+	if (perform_bwrite(mode)) {
+	    for (i = 0; i < MSGHISTORY_COUNT; i++) {
+		if (!(msg = msghist_get(i)) || !*msg) continue;
+		msglen = strlen(msg);
+		if (msglen > BUFSZ - 1) msglen = BUFSZ - 1;
+		bwrite(fd, (genericptr_t) &msglen, sizeof msglen);
+		bwrite(fd, (genericptr_t) msg, msglen);
+	    }
+	    bwrite(fd, (genericptr_t) &minusone, sizeof minusone);
+	}
+	if (release_data(mode))
+	    msghist_free();
 }
 
 #ifdef INSURANCE
@@ -1098,6 +1123,7 @@ freedynamicdata()
 	unload_qtlist();
 	free_invbuf();	/* let_to_name (invent.c) */
 	free_youbuf();	/* You_buf,&c (pline.c) */
+	msghist_free();	/* message history (pline.c) */
 #ifdef MENU_COLOR
         free_menu_coloring();
 #endif

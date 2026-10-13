@@ -154,6 +154,7 @@ E void FDECL(addtopl, (const char *));
 E void NDECL(more);
 E void FDECL(update_topl, (const char *));
 E void FDECL(putsyms, (const char*));
+E void FDECL(tty_putmsghistory, (const char *));
 
 /* ### wintty.c ### */
 #ifdef CLIPPING

@@ -436,6 +436,11 @@ typedef unsigned char	uchar;
 # define MENU_COLOR
 #endif
 
+/* Number of recent messages the game remembers.  They are kept in the save
+ * file, so that ^P still shows them after a restore, and listed in the dump
+ * log. */
+#define MSGHISTORY_COUNT 50
+
 #if defined(UNIX)
 #define USE_REGEX_MATCH
 /* if USE_REGEX_MATCH is defined, use regular expressions (GNU regex.h)

@@ -187,6 +187,29 @@ const char *mesg;
     return 0;
 }
 
+/*
+ * Called when a saved game is restored, once for each message of the saved
+ * message history (oldest first), then with a null pointer.  Window ports
+ * that keep their own message history for ^P are given the messages.
+ */
+void
+putmsghistory(msg)
+const char *msg;
+{
+#ifdef TTY_GRAPHICS
+    if (!strncmpi(windowprocs.name, "tty", 3)) {
+	tty_putmsghistory(msg);
+	return;
+    }
+#endif
+#ifdef ANDROID
+    if (!strcmp(windowprocs.name, "and")) {
+	and_putmsghistory(msg);
+	return;
+    }
+#endif
+}
+
 /*ARGSUSED*/
 void
 genl_preference_update(pref)
