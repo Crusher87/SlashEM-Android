@@ -1546,6 +1546,12 @@ potionbreathe(obj)
 register struct obj *obj;
 {
 	register int i, ii, isdone, kn = 0;
+	unsigned already_in_use = obj->in_use;
+
+	/* potion of unholy water might be wielded; prevent
+	   you_were() -> drop_weapon() from dropping it so that it
+	   remains in inventory where our caller expects it to be */
+	obj->in_use = 1;
 
 	switch(obj->otyp) {
 	case POT_RESTORE_ABILITY:
@@ -1693,6 +1699,8 @@ register struct obj *obj;
 		break;
 */
 	}
+	if (!already_in_use)
+	    obj->in_use = 0;
 	/* note: no obfree() */
 	if (obj->dknown) {
 	    if (kn)

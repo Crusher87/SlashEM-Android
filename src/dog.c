@@ -933,6 +933,8 @@ aligntyp alignment;
 {
     register struct monst *mon;
     register struct monst *mtmp2;
+
+    if (mnum == NON_PM) return 0;
     mon = makemon(&mons[mnum], u.ux, u.uy, NO_MM_FLAGS);
     if (!mon) return 0;
     /* now tame that puppy... */

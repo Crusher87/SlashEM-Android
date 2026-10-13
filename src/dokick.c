@@ -9,7 +9,7 @@
 #define martial()	(martial_bonus() || is_bigfoot(youmonst.data) || \
 		(uarmf && uarmf->otyp == KICKING_BOOTS))
 
-static NEARDATA struct rm *maploc;
+static NEARDATA struct rm *maploc, nowhere;
 static NEARDATA const char *gate_str;
 
 extern boolean notonhead;	/* for long worms */
@@ -635,6 +635,7 @@ char *buf;
 	const char *what;
 
 	if (kickobj) what = distant_name(kickobj,doname);
+	else if (maploc == &nowhere) what = "nothing";
 	else if (IS_DOOR(maploc->typ)) what = "a door";
 	else if (IS_TREE(maploc->typ)) what = "a tree";
 	else if (IS_STWALL(maploc->typ)) what = "a wall";
@@ -807,6 +808,12 @@ dokick() {
 	wake_nearby();
 	u_wipe_engr(2);
 
+	if (!isok(x, y)) {
+	    /* kicking at the edge of the map */
+	    maploc = &nowhere;
+	    kickobj = (struct obj *)0;
+	    goto ouch;
+	}
 	maploc = &levl[x][y];
 
 	/* The next five tests should stay in    */
@@ -1089,12 +1096,14 @@ ouch:
 		    pline("Ouch!  That hurts!");
 		    exercise(A_DEX, FALSE);
 		    exercise(A_STR, FALSE);
-		    if (Blind) feel_location(x,y); /* we know we hit it */
-		    if (is_drawbridge_wall(x,y) >= 0) {
-			pline_The("drawbridge is unaffected.");
-			/* update maploc to refer to the drawbridge */
-			(void) find_drawbridge(&x,&y);
-			maploc = &levl[x][y];
+		    if (isok(x, y)) {
+			if (Blind) feel_location(x,y); /* we know we hit it */
+			if (is_drawbridge_wall(x,y) >= 0) {
+			    pline_The("drawbridge is unaffected.");
+			    /* update maploc to refer to the drawbridge */
+			    (void) find_drawbridge(&x,&y);
+			    maploc = &levl[x][y];
+			}
 		    }
 		    if(!rn2(3)) set_wounded_legs(RIGHT_SIDE, 5 + rnd(5));
 		    losehp(Maybe_Half_Phys(rnd(ACURR(A_CON) > 15 ? 3 : 5)),

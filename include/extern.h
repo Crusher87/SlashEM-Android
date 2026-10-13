@@ -415,7 +415,10 @@ E int NDECL(take_off);
 E void FDECL(off_msg, (struct obj *));
 E void NDECL(set_wear);
 E boolean FDECL(donning, (struct obj *));
+E boolean FDECL(doffing, (struct obj *));
+E void FDECL(cancel_doff, (struct obj *,long));
 E void NDECL(cancel_don);
+E int FDECL(stop_donning, (struct obj *));
 E int NDECL(Armor_off);
 E int NDECL(Armor_gone);
 E int NDECL(Helmet_off);
@@ -993,6 +996,7 @@ E int NDECL(picklock);
 E boolean FDECL(picking_lock, (int *,int *));
 E boolean FDECL(picking_at, (int,int));
 E void NDECL(reset_pick);
+E void FDECL(maybe_reset_pick, (struct obj *));
 E int FDECL(pick_lock, (struct obj **));
 #ifdef ANDROID
 E boolean NDECL(can_force);

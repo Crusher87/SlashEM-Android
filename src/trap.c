@@ -3794,6 +3794,10 @@ boolean force;
 	if(!getdir((char *)0)) return(0);
 	x = u.ux + u.dx;
 	y = u.uy + u.dy;
+	if (!isok(x, y)) {
+		pline_The("perils lurking there are beyond your grasp.");
+		return(0);
+	}
 
 	for(otmp = level.objects[x][y]; otmp; otmp = otmp->nexthere) {
 		if(Is_box(otmp) && !u.dx && !u.dy) {
@@ -4075,7 +4079,10 @@ boolean disarm;
 			   * If we attempt to call unpunish() in the
 			   * for-loop below we can end up with otmp2
 			   * being invalid once the chain is gone.
-			   * Deal with ball & chain right now instead.
+			   * Deal with ball & chain right now instead:
+			   * unpunish() in advance if either ball or chain
+			   * (or both) is going to be destroyed.  [The chain
+			   * is on the floor even when the ball is carried.]
 			   */
 			  if (Punished &&
 				((uchain->where == OBJ_FLOOR &&

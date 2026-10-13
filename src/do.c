@@ -1102,6 +1102,11 @@ boolean at_stairs, falling, portal;
 
 	/* discard context which applies to the level we're leaving */
 	iflags.travelcc.x = iflags.travelcc.y = -1;	/* travel destination */
+	/* discard context which applies to the level we're leaving;
+	   for lock-picking, container may be carried, in which case we
+	   keep context; if on the floor, it's about to be saved+freed and
+	   maybe_reset_pick() needs to do its carried() check before that */
+	maybe_reset_pick((struct obj *)0);
 
 	if (falling) /* assuming this is only trap door or hole */
 	    impact_drop((struct obj *)0, u.ux, u.uy, newlevel->dlevel);

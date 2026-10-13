@@ -500,9 +500,17 @@ morguemon()
 {
 	register int i = rn2(100), hd = rn2(level_difficulty());
 
-	if(hd > 10 && i < 10)
-		return((Inhell || In_endgame(&u.uz)) ? mkclass(S_DEMON,0) :
-						       &mons[ndemon(A_NONE)]);
+	if(hd > 10 && i < 10) {
+		if (Inhell || In_endgame(&u.uz)) {
+			return(mkclass(S_DEMON,0));
+		} else {
+			int ndemon_res = ndemon(A_NONE);
+
+			if (ndemon_res != NON_PM)
+				return(&mons[ndemon_res]);
+			/* else fall through to ghost/wraith/zombie */
+		}
+	}
 	if(hd > 8 && i > 85)
 		return(mkclass(S_VAMPIRE,0));
 

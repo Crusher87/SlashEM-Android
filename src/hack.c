@@ -801,8 +801,11 @@ STATIC_OVL void
 dosinkfall()
 {
 	register struct obj *obj;
+	boolean lev_boots = (uarmf && uarmf->otyp == LEVITATION_BOOTS),
+		ufall = !(is_floater(youmonst.data) ||
+			  (HLevitation & FROMOUTSIDE));
 
-	if (is_floater(youmonst.data) || (HLevitation & FROMOUTSIDE)) {
+	if (!ufall) {
 	    You("wobble unsteadily for a moment.");
 	} else {
 	    long save_ELev = ELevitation, save_HLev = HLevitation;
@@ -828,6 +831,24 @@ dosinkfall()
 	    HLevitation = save_HLev;
 	}
 
+	/*
+	 * Interrupt multi-turn putting on/taking off of armor (in which
+	 * case we reached the sink due to being teleported while busy;
+	 * Boots_on()/Boots_off() [called via (*afternmv)() when 'multi'
+	 * reaches 0] would crash if we were donning/doffing levitation
+	 * boots [because the Boots_off() below causes 'uarmf' to be null
+	 * by the time 'afternmv' gets called]).
+	 *
+	 * Interrupt donning/doffing if we fall onto the sink, or if the
+	 * code below is going to remove levitation boots even when we
+	 * haven't fallen (innate floating becoming unblocked).
+	 */
+	if (ufall || lev_boots) {
+	    (void) stop_donning(lev_boots ? uarmf : (struct obj *)0);
+	    /* recalculate in case uarmf just got set to null */
+	    lev_boots = (uarmf && uarmf->otyp == LEVITATION_BOOTS);
+	}
+
 	ELevitation &= ~W_ARTI;
 	HLevitation &= ~(I_SPECIAL|TIMEOUT);
 	HLevitation++;
@@ -841,7 +862,7 @@ dosinkfall()
 	    Ring_off(obj);
 	    off_msg(obj);
 	}
-	if(uarmf && uarmf->otyp == LEVITATION_BOOTS) {
+	if (lev_boots) {
 	    obj = uarmf;
 	    (void)Boots_off();
 	    off_msg(obj);
@@ -2095,7 +2116,27 @@ void
 spoteffects(pick)
 boolean pick;
 {
+	static int inspoteffects = 0;
+	static coord spotloc;
+	static int spotterrain;
+	static struct trap *spottrap = (struct trap *)0;
+	static unsigned spottraptyp = NO_TRAP;
 	register struct monst *mtmp;
+	struct trap *trap = t_at(u.ux, u.uy);
+
+	/* prevent recursion from affecting the hero all over again
+	   [hero poly'd to iron golem enters water here, drown() inflicts
+	   damage that triggers rehumanize() which calls spoteffects()...] */
+	if (inspoteffects && u.ux == spotloc.x && u.uy == spotloc.y &&
+		/* except when reason is transformed terrain (ice -> water) */
+		spotterrain == levl[u.ux][u.uy].typ &&
+		/* or transformed trap (land mine -> pit) */
+		(!spottrap || !trap || trap->ttyp == spottraptyp))
+	    return;
+
+	++inspoteffects;
+	spotterrain = levl[u.ux][u.uy].typ;
+	spotloc.x = u.ux, spotloc.y = u.uy;
 
 	if(u.uinwater) {
 		int was_underwater;
@@ -2145,9 +2186,9 @@ stillinwater:;
 		} else
 #endif
 		if (is_lava(u.ux, u.uy)) {
-		    if (lava_effects()) return;
+		    if (lava_effects()) goto spotdone;
 		} else if (!Wwalking && drown())
-		    return;
+		    goto spotdone;
 	    }
 	}
 	check_special_room(FALSE);
@@ -2156,14 +2197,37 @@ stillinwater:;
 		dosinkfall();
 #endif
 	if (!in_steed_dismounting) { /* if dismounting, we'll check again later */
-		struct trap *trap = t_at(u.ux, u.uy);
 		boolean pit;
+
+		/* trap might have gone away (or been replaced) during the
+		   effects above (dosinkfall(), for instance) */
+		trap = t_at(u.ux, u.uy);
 		pit = (trap && (trap->ttyp == PIT || trap->ttyp == SPIKED_PIT));
-		if (trap && pit)
+		/*
+		 * dotrap on a fire trap calls melt_ice() which triggers
+		 * spoteffects() (again) which can trigger the same fire
+		 * trap (again).  Use static spottrap to prevent that.
+		 * We track spottraptyp because some traps morph
+		 * (landmine to pit) and any new trap type
+		 * should get triggered.
+		 */
+		if (trap && (spottrap && spottraptyp == trap->ttyp))
+			trap = (struct trap *)0;
+		if (trap && pit) {
+			spottrap = trap;
+			spottraptyp = trap->ttyp;
 			dotrap(trap, 0);	/* fall into pit */
+			spottrap = (struct trap *)0;
+			spottraptyp = NO_TRAP;
+		}
 		if (pick) (void) pickup(1);
-		if (trap && !pit)
+		if (trap && !pit) {
+			spottrap = trap;
+			spottraptyp = trap->ttyp;
 			dotrap(trap, 0);	/* fall into arrow trap, etc. */
+			spottrap = (struct trap *)0;
+			spottraptyp = NO_TRAP;
+		}
 	}
 	if((mtmp = m_at(u.ux, u.uy)) && !u.uswallow) {
 		mtmp->mundetected = mtmp->msleeping = 0;
@@ -2203,6 +2267,12 @@ stillinwater:;
 		}
 		mnexto(mtmp); /* have to move the monster */
 	}
+spotdone:
+	if (!--inspoteffects) {
+	    spotterrain = STONE;	/* 0 */
+	    spotloc.x = spotloc.y = 0;
+	}
+	return;
 }
 
 STATIC_OVL boolean

@@ -660,6 +660,10 @@ playersteal()
 
 	u_wipe_engr(2);
 
+	if (!isok(x, y)) {
+		pline("I don't see anybody to rob there!");
+		return(0);
+	}
 	maploc = &levl[x][y];
 
 	if(MON_AT(x, y)) {

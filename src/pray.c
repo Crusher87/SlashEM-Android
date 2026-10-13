@@ -1397,7 +1397,7 @@ dosacrifice()
 	    } else {
 		struct monst *dmon;
 		const char *demonless_msg;
-		register struct obj *octmp;
+		register struct obj *octmp, *nextobj;
 
 		/* Human sacrifice on a chaotic or unaligned altar */
 		/* is equivalent to demon summoning */
@@ -1432,8 +1432,11 @@ dosacrifice()
 			  case 1:
 			       pline("Angered at your summons, he curses you!");
 			       /* but not angry enough to whup yer ass */
-			       for(octmp = invent; octmp ; octmp = octmp->nobj)
+			       /* curse() might drop the off-hand weapon */
+			       for(octmp = invent; octmp ; octmp = nextobj) {
+				 nextobj = octmp->nobj;
 				 if (!rn2(6)) curse(octmp);
+			       }
 			       break;
 			  case 2: 
 			  case 3:
