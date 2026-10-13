@@ -278,13 +278,17 @@ drinkfountain()
 			break;
 
 		case 24: /* Curse an item */ {
-			register struct obj *obj;
+			register struct obj *obj, *nextobj;
 
 			pline("This water's no good!");
 			morehungry(rn1(20, 11));
 			exercise(A_CON, FALSE);
-			for(obj = invent; obj ; obj = obj->nobj)
+			/* curse() can drop a cursed off-hand weapon when
+			   two-weaponing; don't follow it onto the floor */
+			for(obj = invent; obj ; obj = nextobj) {
+				nextobj = obj->nobj;
 				if (!rn2(5))	curse(obj);
+			}
 			break;
 			}
 
