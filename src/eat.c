@@ -189,11 +189,15 @@ static NEARDATA struct {
 	int	usedtime, reqtime;
 } tin;
 
-static NEARDATA struct {
+static NEARDATA struct victual_info {
 	struct	obj *piece;	/* the thing being eaten, or last thing that
 				 * was partially eaten, unless that thing was
 				 * a tin, which uses the tin structure above,
 				 * in which case this should be 0 */
+	unsigned o_id;		/* o_id of that thing while it is not in
+				 * memory (saved game or other level);
+				 * piece is 0 then, and is set again when
+				 * the object is restored */
 	/* doeat() initializes these when piece is valid */
 	int	usedtime,	/* turns spent eating */
 		reqtime;	/* turns required to eat */
@@ -398,6 +402,54 @@ register struct obj *obj;
 {
 	if (obj == victual.piece) victual.piece = (struct obj *)0;
 	if (obj->timed) obj_stop_timers(obj);
+}
+
+/* The level holding the meal in progress is being saved and its objects
+ * freed (leaving the level or saving the game); remember the meal by o_id
+ * so that it can still be resumed once the object is restored.
+ */
+void
+food_saved(obj)
+struct obj *obj;
+{
+	if (obj == victual.piece) {
+	    victual.o_id = obj->o_id;
+	    victual.piece = (struct obj *)0;
+	}
+}
+
+/* an object has been restored from a save or level file; if it is the
+   remembered meal, point at it again (not for bones objects) */
+void
+food_restored(obj)
+struct obj *obj;
+{
+	if (victual.o_id && obj->o_id == victual.o_id) {
+	    victual.piece = obj;
+	    victual.o_id = 0;
+	}
+}
+
+/* save the state of the meal in progress, so it can be resumed after
+   restore instead of starting over */
+void
+save_food_context(fd)
+int fd;
+{
+	struct victual_info v;
+
+	v = victual;
+	if (v.piece) v.o_id = v.piece->o_id;
+	v.piece = (struct obj *)0;
+	bwrite(fd, (genericptr_t) &v, sizeof v);
+}
+
+void
+rest_food_context(fd)
+int fd;
+{
+	mread(fd, (genericptr_t) &victual, sizeof victual);
+	victual.piece = (struct obj *)0;	/* relinked by food_restored() */
 }
 
 /* renaming an object usually results in it having a different address;
@@ -1291,6 +1343,7 @@ opentin()		/* called during each move whilst opening a tin */
 	    }
 	    /* in case stop_occupation() was called on previous meal */
 	    victual.piece = (struct obj *)0;
+	    victual.o_id = 0;
 	    victual.fullwarn = victual.eating = victual.doreset = FALSE;
 
 #ifdef EATEN_MEMORY
@@ -2406,6 +2459,7 @@ doeat()		/* generic "eat" command funtion (see cmd.c) */
 	    int material;
 	    victual.reqtime = 1;
 	    victual.piece = otmp;
+	    victual.o_id = 0;
 		/* Don't split it, we don't need to if it's 1 move */
 	    victual.usedtime = 0;
 	    victual.canchoke = (u.uhs == SATIATED);
@@ -2488,6 +2542,7 @@ doeat()		/* generic "eat" command funtion (see cmd.c) */
 	u.uconduct.food++;
 
 	victual.piece = otmp = touchfood(otmp);
+	victual.o_id = 0;	/* forget any meal left on another level */
 	victual.usedtime = 0;
 
 	/* Now we need to calculate delay and nutritional info.

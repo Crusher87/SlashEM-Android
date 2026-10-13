@@ -229,6 +229,11 @@ boolean ghostly, frozen;
 			otmp3->ocontainer = otmp;
 		}
 		if (otmp->bypass) otmp->bypass = 0;
+		if (!ghostly) {
+		    /* relink an interrupted meal or book (see saveobjchn) */
+		    food_restored(otmp);
+		    book_restored(otmp);
+		}
 
 		otmp2 = otmp;
 	}
@@ -403,6 +408,12 @@ unsigned int *stuckid, *steedid;	/* STEED */
 	}
 
 	/* this stuff comes after potential aborted restore attempts */
+	/* interrupted activities; must come before objects are restored
+	   so that the objects they refer to can be relinked */
+	mread(fd, (genericptr_t) &digging, sizeof(struct dig_info));
+	rest_food_context(fd);
+	rest_book_context(fd);
+	rest_takeoff_context(fd);
 	restore_timers(fd, RANGE_GLOBAL, FALSE, 0L);
 	restore_light_sources(fd);
 	invent = restobjchn(fd, FALSE, FALSE);

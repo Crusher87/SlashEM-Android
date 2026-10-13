@@ -9,6 +9,8 @@
 static NEARDATA int delay;            /* moves left for this spell */
 static NEARDATA int end_delay;        /* when to stop studying */
 static NEARDATA struct obj *book;	/* last/current book being xscribed */
+static NEARDATA unsigned book_id;	/* o_id of that book while it is not in
+					   memory (saved game or other level) */
 
 /* spellmenu arguments; 0 thru n-1 used as spl_book[] index when swapping */
 #define SPELLMENU_CAST (-2)
@@ -571,6 +573,7 @@ register struct obj *spellbook;
 	}
 
 	book = spellbook;
+	book_id = 0;		/* forget any book left on another level */
 	set_occupation(learn, "studying", 0);
 	return(1);
 }
@@ -582,6 +585,54 @@ book_disappears(obj)
 struct obj *obj;
 {
 	if (obj == book) book = (struct obj *)0;
+}
+
+/* the level holding the book being studied is being saved and its objects
+   freed (leaving the level or saving the game); remember the book by o_id
+   so that studying it can still be continued once it is restored */
+void
+book_saved(obj)
+struct obj *obj;
+{
+	if (obj == book) {
+	    book_id = obj->o_id;
+	    book = (struct obj *)0;
+	}
+}
+
+/* an object has been restored from a save or level file; if it is the
+   remembered book, point at it again (not for bones objects) */
+void
+book_restored(obj)
+struct obj *obj;
+{
+	if (book_id && obj->o_id == book_id) {
+	    book = obj;
+	    book_id = 0;
+	}
+}
+
+/* save the state of interrupted studying, so that it can be continued
+   after restore instead of starting over (and risking failure again) */
+void
+save_book_context(fd)
+int fd;
+{
+	unsigned id = book ? book->o_id : book_id;
+
+	bwrite(fd, (genericptr_t) &id, sizeof id);
+	bwrite(fd, (genericptr_t) &delay, sizeof delay);
+	bwrite(fd, (genericptr_t) &end_delay, sizeof end_delay);
+}
+
+void
+rest_book_context(fd)
+int fd;
+{
+	mread(fd, (genericptr_t) &book_id, sizeof book_id);
+	mread(fd, (genericptr_t) &delay, sizeof delay);
+	mread(fd, (genericptr_t) &end_delay, sizeof end_delay);
+	book = (struct obj *)0;		/* relinked by book_restored() */
 }
 
 /* renaming an object usually results in it having a different address;
