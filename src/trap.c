@@ -3972,19 +3972,26 @@ boolean disarm;
 			      loss += stolen_value(obj, ox, oy,
 				      (boolean)shkp->mpeaceful, TRUE, TRUE);
 			  delete_contents(obj);
-			  /* we're about to delete all things at this location,
+			  /* the explosion takes place at the chest's
+			   * location, not necessarily at the hero's (it
+			   * might have been kicked from one step away).
+			   * We're about to delete all things at that location,
 			   * which could include the ball & chain.
 			   * If we attempt to call unpunish() in the
 			   * for-loop below we can end up with otmp2
 			   * being invalid once the chain is gone.
 			   * Deal with ball & chain right now instead.
 			   */
-			  if (Punished && !carried(uball) &&
-				((uchain->ox == u.ux && uchain->oy == u.uy) ||
-				 (uball->ox == u.ux && uball->oy == u.uy)))
+			  if (Punished &&
+				((uchain->where == OBJ_FLOOR &&
+				  uchain->ox == ox && uchain->oy == oy) ||
+				 (uball->where == OBJ_FLOOR &&
+				  uball->ox == ox && uball->oy == oy)))
 				unpunish();
 
-			  for(otmp = level.objects[u.ux][u.uy];
+			  /* usually the chest is destroyed along with the
+			     stuff at its spot, but not if it is carried */
+			  for(otmp = level.objects[ox][oy];
 							otmp; otmp = otmp2) {
 			      otmp2 = otmp->nexthere;
 			      if(costly)
@@ -3993,6 +4000,7 @@ boolean disarm;
 					  TRUE, TRUE);
 			      delobj(otmp);
 			  }
+			  newsym(ox, oy);
 			  wake_nearby();
 			  losehp(d(6,6), buf, KILLED_BY_AN);
 			  exercise(A_STR, FALSE);
