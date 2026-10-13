@@ -2862,6 +2862,8 @@ boolean incr;
 			if (incr && occupation &&
 			    (occupation != eatfood && occupation != opentin))
 			    stop_occupation();
+			/* stop running or travelling */
+			flags.travel = iflags.travel1 = flags.mv = flags.run = 0;
 			break;
 		case WEAK:
 			if (Hallucination)
@@ -2881,6 +2883,7 @@ boolean incr;
 			if (incr && occupation &&
 			    (occupation != eatfood && occupation != opentin))
 			    stop_occupation();
+			flags.travel = iflags.travel1 = flags.mv = flags.run = 0;
 			break;
 		}
 		u.uhs = newhs;
