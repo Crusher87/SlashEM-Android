@@ -3070,8 +3070,10 @@ use_grapple (obj)
 		pline_The("hook slices through the %s.", surface(cc.x, cc.y));
 	    else {
 		You("are yanked toward the %s!", surface(cc.x, cc.y));
+		/* hurtle() ends with teleds(), which calls spoteffects();
+		   doing that again here would trigger a trap or drowning
+		   at the hero's new spot twice */
 		hurtle(sgn(cc.x-u.ux), sgn(cc.y-u.uy), 1, FALSE);
-		spoteffects(TRUE);
 	    }
 	    return (1);
 	default:	/* Yourself (oops!) */

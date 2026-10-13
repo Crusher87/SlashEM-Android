@@ -770,6 +770,13 @@ hurtle(dx, dy, range, verbose)
     cc.x = u.ux + (dx * range);
     cc.y = u.uy + (dy * range);
     (void) walk_path(&uc, &cc, hurtle_step, (genericptr_t)&range);
+    /* if the hero is landing in water, drown() (called via teleds() and
+       spoteffects()) won't let her crawl out while she is still helpless
+       from the hurtle; she can move once she hits the water */
+    if (multi < 0 && is_pool(cc.x, cc.y) &&
+	    ((Is_waterlevel(&u.uz) && levl[cc.x][cc.y].typ == WATER) ||
+	     !(Levitation || Flying || Wwalking)))
+	multi = 0;
     teleds(cc.x, cc.y, FALSE);
 }
 
