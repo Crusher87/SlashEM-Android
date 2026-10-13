@@ -2687,6 +2687,10 @@ register struct monst *mon;
 	if (Blind) pline("It caresses you...");
 	else You_feel("very attracted to %s.", mon_nam(mon));
 
+	/* if in the process of putting armor on or taking armor off,
+	   interrupt that activity now */
+	(void) stop_donning((struct obj *)0);
+
 	for(ring = invent; ring; ring = nring) {
 	    nring = ring->nobj;
 	    if (ring->otyp != RIN_ADORNMENT) continue;

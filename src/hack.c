@@ -784,8 +784,11 @@ STATIC_OVL void
 dosinkfall()
 {
 	register struct obj *obj;
+	boolean lev_boots = (uarmf && uarmf->otyp == LEVITATION_BOOTS),
+		ufall = !(is_floater(youmonst.data) ||
+			  (HLevitation & FROMOUTSIDE));
 
-	if (is_floater(youmonst.data) || (HLevitation & FROMOUTSIDE)) {
+	if (!ufall) {
 	    You("wobble unsteadily for a moment.");
 	} else {
 	    long save_ELev = ELevitation, save_HLev = HLevitation;
@@ -810,6 +813,24 @@ dosinkfall()
 	    HLevitation = save_HLev;
 	}
 
+	/*
+	 * Interrupt multi-turn putting on/taking off of armor (in which
+	 * case we reached the sink due to being teleported while busy;
+	 * Boots_on()/Boots_off() [called via (*afternmv)() when 'multi'
+	 * reaches 0] would crash if we were donning/doffing levitation
+	 * boots [because the Boots_off() below causes 'uarmf' to be null
+	 * by the time 'afternmv' gets called]).
+	 *
+	 * Interrupt donning/doffing if we fall onto the sink, or if the
+	 * code below is going to remove levitation boots even when we
+	 * haven't fallen (innate floating becoming unblocked).
+	 */
+	if (ufall || lev_boots) {
+	    (void) stop_donning(lev_boots ? uarmf : (struct obj *)0);
+	    /* recalculate in case uarmf just got set to null */
+	    lev_boots = (uarmf && uarmf->otyp == LEVITATION_BOOTS);
+	}
+
 	ELevitation &= ~W_ARTI;
 	HLevitation &= ~(I_SPECIAL|TIMEOUT);
 	HLevitation++;
@@ -823,7 +844,7 @@ dosinkfall()
 	    Ring_off(obj);
 	    off_msg(obj);
 	}
-	if(uarmf && uarmf->otyp == LEVITATION_BOOTS) {
+	if (lev_boots) {
 	    obj = uarmf;
 	    (void)Boots_off();
 	    off_msg(obj);
