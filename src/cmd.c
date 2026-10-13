@@ -988,12 +988,12 @@ wiz_genesis()
 	return 0;
 }
 
-/* ^O command - display dungeon layout */
+/* #wizwhere command - display dungeon layout */
 STATIC_PTR int
 wiz_where()
 {
 	if (wizard) (void) print_dungeon(FALSE, (schar *)0, (xchar *)0);
-	else	    pline("Unavailable command '^O'.");
+	else	    pline("Unavailable command 'wizwhere'.");
 	return 0;
 }
 
@@ -1786,7 +1786,7 @@ static const struct menu_tab wizard_menu[] = {
 	{'i', TRUE, wiz_identify, "Identify items in pack"},
 	{'j', TRUE, wiz_gain_level, "Go up an experience level"},
 	{'n', TRUE, wiz_toggle_invulnerability, "Toggle invulnerability"},
-	{'o', TRUE, wiz_where, "Tell locations of special levels"},
+	{'o', TRUE, wiz_where, "Tell locations of special levels [#wizwhere]"},
 	{'v', TRUE, wiz_level_tele, "Do trans-level teleport"},
 	{'w', TRUE, wiz_wish,  "Make wish"},
 	{'L', TRUE, wiz_light_sources, "show mobile light sources"},
@@ -1826,6 +1826,9 @@ static const struct menu_tab main_menu[] = {
 static const struct menu_tab discover_menu[] = {
 	{'X', TRUE, dovspell, "View known spells"},                  /* Mike Stephenson */
 	{'d', TRUE, dodiscovered, "Items already discovered [\\]"},             /* Robert Viduya */
+	{'o', TRUE, dooverview, "Dungeon overview [^O]"},
+	{'a', TRUE, donamelevel, "Annotate current level"},
+	{'c', TRUE, do_gamelog, "Chronicle of major events"},
 	{'C', TRUE, do_mname, "Name a monster"},
 	{0,0,0,0},
 };
@@ -2098,8 +2101,8 @@ static const struct func_tab cmdlist[] = {
 /* BEGIN TSANTH'S CODE */
 	{C('n'), TRUE, wiz_toggle_invulnerability},
 /* END TSANTH'S CODE */
-	{C('o'), TRUE, wiz_where},
 #endif
+	{C('o'), TRUE, dooverview},
 	{C('p'), TRUE, doprev_message},
 	{C('q'), TRUE, done2},
 	{C('r'), TRUE, doredraw},
@@ -2233,8 +2236,10 @@ static const struct func_tab cmdlist[] = {
 struct ext_func_tab extcmdlist[] = {
 	{"2weapon", "toggle two-weapon combat", dotwoweapon, FALSE},
 	{"adjust", "adjust inventory letters", doorganize, TRUE},
+	{"annotate", "name current level", donamelevel, TRUE},
 	{"borrow", "steal from monsters", playersteal, FALSE},  /* jla */        
 	{"chat", "talk to someone", dotalk, TRUE},	/* converse? */
+	{"chronicle", "show a log of the major events of the game", do_gamelog, TRUE},
 	{"conduct", "list which challenges you have adhered to", doconduct, TRUE},
 	{"dip", "dip an object into something", dodip, FALSE},
 	{"enhance", "advance or check weapons skills", enhance_weapon_skill,
@@ -2251,6 +2256,7 @@ struct ext_func_tab extcmdlist[] = {
 	{"monster", "use a monster's special ability", domonability, TRUE},
 	{"name", "name an item or type of object", ddocall, TRUE},
 	{"offer", "offer a sacrifice to the gods", dosacrifice, FALSE},
+	{"overview", "show an overview of the dungeon", dooverview, TRUE},
 	{"pray", "pray to the gods for help", dopray, TRUE},
 	{"quit", "exit without saving current game", done2, TRUE},
 #ifdef STEED
@@ -2298,6 +2304,7 @@ struct ext_func_tab extcmdlist[] = {
 	{(char *)0, (char *)0, donull, TRUE},
 #endif
 	{(char *)0, (char *)0, donull, TRUE},
+	{(char *)0, (char *)0, donull, TRUE},
 #endif
 	{(char *)0, (char *)0, donull, TRUE}	/* sentinel */
 };
@@ -2325,6 +2332,7 @@ static const struct ext_func_tab debug_extcmdlist[] = {
 #ifdef DEBUG
 	{"wizdebug", "wizard debug command", wiz_debug_cmd, TRUE},
 #endif
+	{"wizwhere", "show locations of special levels", wiz_where, TRUE},
 	{"wmode", "show wall modes", wiz_show_wmodes, TRUE},
 	{(char *)0, (char *)0, donull, TRUE}
 };

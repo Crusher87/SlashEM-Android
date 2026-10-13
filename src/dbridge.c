@@ -80,6 +80,22 @@ int x,y;
 #ifdef OVL1
 
 /*
+ * Return the type of terrain under a drawbridge
+ */
+schar
+db_under_typ(mask)
+int mask;
+{
+	switch (mask & DB_UNDER) {
+	case DB_ICE:	return ICE;
+	case DB_LAVA:	return LAVAPOOL;
+	case DB_MOAT:	return MOAT;
+	case DB_FLOOR:	return ROOM;
+	default:	return STONE;
+	}
+}
+
+/*
  * We want to know whether a wall (or a door) is the portcullis (passageway)
  * of an eventual drawbridge.
  *

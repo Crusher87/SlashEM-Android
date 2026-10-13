@@ -309,21 +309,35 @@ struct obj *obj;
 	} else if (obj->otyp == AMULET_OF_YENDOR) {
 		if (u.uhave.amulet) impossible("already have amulet?");
 		u.uhave.amulet = 1;
+		/* #chronicle; a spoiler since fakes aren't logged */
+		if (gamelog_first(GLF_AMULET))
+		    livelog_printf(LL_ACHIEVE | LL_SPOILER,
+				   "acquired the Amulet of Yendor");
 	} else if (obj->otyp == CANDELABRUM_OF_INVOCATION) {
 		if (u.uhave.menorah) impossible("already have candelabrum?");
 		u.uhave.menorah = 1;
+		if (gamelog_first(GLF_CANDELABRUM))
+		    livelog_printf(LL_ACHIEVE,
+				   "acquired the Candelabrum of Invocation");
 	} else if (obj->otyp == BELL_OF_OPENING) {
 		if (u.uhave.bell) impossible("already have silver bell?");
 		u.uhave.bell = 1;
+		if (gamelog_first(GLF_BELL))
+		    livelog_printf(LL_ACHIEVE, "acquired the Bell of Opening");
 	} else if (obj->otyp == SPE_BOOK_OF_THE_DEAD) {
 		if (u.uhave.book) impossible("already have the book?");
 		u.uhave.book = 1;
+		if (gamelog_first(GLF_BOOK))
+		    livelog_printf(LL_ACHIEVE, "acquired the Book of the Dead");
 	} else if (obj->oartifact) {
 		if (is_quest_artifact(obj)) {
 		    if (u.uhave.questart)
 			impossible("already have quest artifact?");
 		    u.uhave.questart = 1;
 		    artitouch();
+		    if (gamelog_first(GLF_QUESTART))
+			livelog_printf(LL_ACHIEVE | LL_ARTIFACT, "acquired %s",
+				       the(artiname(obj->oartifact)));
 		}
 		set_artifact_intrinsic(obj, 1, W_ART);
 	

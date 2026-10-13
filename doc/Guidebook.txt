@@ -2399,6 +2399,7 @@
                     v - summarize monsters that have been vanquished.
                     g - list monster species that have been genocided.
                     c - display your conduct.
+                    o - display dungeon overview.
 
                Each disclosure possibility can optionally be preceded by  a
             prefix which let you refine how it behaves. Here are the  valid
@@ -2817,6 +2818,13 @@
 
           prayconfirm
                Prompt for confirmation before praying (default on).
+
+          price_quotes
+               When an object you haven't identified is named,  also  show
+               the range of shop prices you have been quoted for buying and
+               selling one of that kind of object, for example ``{buy 26-33
+               sell 10}''.  These notes are always shown in the discoveries
+               list (default off).
 
           pushweapon
             Using  the  `w' (wield) command when already wielding something

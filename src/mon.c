@@ -10,6 +10,7 @@
 #include "hack.h"
 #include "mfndpos.h"
 #include "edog.h"
+#include "eshk.h"	/* logdeadmon() */
 #include "artifact.h"
 #include "display.h"
 #include "global.h" 
@@ -56,6 +57,7 @@ STATIC_VAR short cham_to_pm[];
 STATIC_DCL struct obj *FDECL(make_corpse,(struct monst *));
 STATIC_DCL void FDECL(m_detach, (struct monst *, struct permonst *));
 STATIC_DCL void FDECL(lifesaved_monster, (struct monst *));
+STATIC_DCL void FDECL(logdeadmon, (struct monst *,int));
 static void FDECL(unpoly_monster, (struct monst *));
 
 /* convert the monster index of an undead to its living counterpart */
@@ -1619,6 +1621,53 @@ struct monst *mtmp;
 	}
 }
 
+/* #chronicle: log the death of a unique monster or of a shopkeeper
+   (adapted from NetHack 5.0) */
+STATIC_OVL void
+logdeadmon(mtmp, mndx)
+struct monst *mtmp;
+int mndx;
+{
+	extern const struct shclass shtypes[];	/* shknam.c */
+	int howmany = mvitals[mndx].died;
+	char shkdetail[BUFSZ], xtra[40];
+	const char *mkilled;
+	long llevent_type = LL_UMONST;
+	boolean herodidit = !flags.mon_moving;
+
+	if (!(mtmp->data->geno & G_UNIQ) && !(mtmp->isshk && !mtmp->mrevived))
+	    return;
+
+	shkdetail[0] = '\0';
+	if (mtmp->isshk) {
+	    /* the shared kill counter doesn't work for shopkeepers */
+	    howmany = 1;
+	    Sprintf(shkdetail, ", the %s %s%s",
+		    shtypes[ESHK(mtmp)->shoptype - SHOPBASE].name,
+		    mtmp->female ? "proprietrix" : "proprietor",
+		    herodidit ? "" : ",");
+	}
+	/* killing a unique more than once isn't logged every time */
+	if (howmany <= 3 || howmany == 5 || howmany == 10 || howmany == 25
+		|| (howmany % 50) == 0) {
+	    if (howmany == 1 || mtmp->iswiz || is_rider(mtmp->data))
+		llevent_type |= LL_ACHIEVE;
+	    xtra[0] = '\0';
+	    if (howmany > 1)
+		Sprintf(xtra, " (%d%s time)", howmany, ordin(howmany));
+	    mkilled = nonliving(mtmp->data) ? "destroyed" : "killed";
+	    if (herodidit)
+		livelog_printf(llevent_type, "%s %s%s%s", mkilled,
+			       x_monnam(mtmp, ARTICLE_THE, (char *)0,
+					EXACT_NAME, FALSE),
+			       shkdetail, xtra);
+	    else	/* trap, pet, conflict */
+		livelog_printf(llevent_type, "%s%s has been %s%s",
+			       x_monnam(mtmp, ARTICLE_THE, (char *)0,
+					EXACT_NAME, FALSE),
+			       shkdetail, mkilled, xtra);
+	}
+}
 
 void
 mondead(mtmp)
@@ -1685,6 +1734,7 @@ register struct monst *mtmp;
 	/* KMH -- Yes, keep spell monsters in the count */
 	tmp = monsndx(mtmp->data);
 	if (mvitals[tmp].died < 255) mvitals[tmp].died++;
+	logdeadmon(mtmp, tmp);	/* #chronicle */
 
 	/* if it's a (possibly polymorphed) quest leader, mark him as dead */
 	if (mtmp->m_id == quest_status.leader_m_id)
@@ -2024,6 +2074,7 @@ xkilled(mtmp, dest)
 	register struct trap *t;
 	boolean redisp = FALSE;
 	boolean wasinside = u.uswallow && (u.ustuck == mtmp);
+	boolean killedpet = FALSE;
 
 
 	/* KMH, conduct */
@@ -2056,7 +2107,10 @@ xkilled(mtmp, dest)
 			    */
 
 	/* your pet knows who just killed it...watch out */
-	if (mtmp->mtame && !mtmp->isminion) EDOG(mtmp)->killed_by_u = 1;
+	if (mtmp->mtame && !mtmp->isminion) {
+	    EDOG(mtmp)->killed_by_u = 1;
+	    killedpet = TRUE;
+	}
 
 	/* dispose of monster and make cadaver */
 	if(stoned) monstone(mtmp);
@@ -2073,6 +2127,11 @@ xkilled(mtmp, dest)
 		    pline("Maybe not...");
 		return;
 	}
+	if (killedpet)		/* #chronicle */
+	    livelog_printf(LL_KILLEDPET, "murdered %s%s%s faithful %s",
+			   mtmp->mnamelth ? NAME(mtmp) : "",
+			   mtmp->mnamelth ? ", " : "", uhis(),
+			   mtmp->data->mname);
 
 	mdat = mtmp->data; /* note: mondead can change mtmp->data */
 	mndx = monsndx(mdat);

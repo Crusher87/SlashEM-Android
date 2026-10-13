@@ -9,6 +9,10 @@
 #define PREFIX	80	/* (56) */
 #define SCHAR_LIM 127
 #define NUMOBUF 12
+/* room in doname()'s buffer for a price note: xname() leaves PREFIX bytes
+   in front, doname() may skip "poisoned " and "the ", and the suffixes
+   added after the price note need a little room too */
+#define PRICE_NOTE_ROOM (BUFSZ - PREFIX - 13 - 24)
 
 STATIC_DCL char *FDECL(strprepend,(char *,const char *));
 #ifdef OVLB
@@ -891,13 +895,23 @@ ring:
 			quotedprice += contained_cost(obj, shkp, 0L, FALSE, TRUE);
 		Sprintf(eos(bp), " (unpaid, %ld %s)",
 			quotedprice, currency(quotedprice));
+		if (!Has_contents(obj))
+			record_price_quote(obj, quotedprice / obj->quan, TRUE);
 	} else if(with_price) {
 		/* price needs to be recalculated in case identification
 		 * changes the price e.g. with worthless glass */
 		long price = get_cost_of_shop_item(obj);
 		if (price > 0) {
 			Sprintf(eos(bp), " (%ld %s)", price, currency(price));
-		}
+			if (!Has_contents(obj))
+			    record_price_quote(obj, price / obj->quan, TRUE);
+		} else if (iflags.pricequotes && obj->dknown
+			   && !objects[obj->otyp].oc_name_known)
+			append_price_quote(bp, PRICE_NOTE_ROOM, obj->otyp);
+	} else if (iflags.pricequotes && obj->dknown
+		   && !objects[obj->otyp].oc_name_known) {
+		/* shop prices noted for this kind of unidentified object */
+		append_price_quote(bp, PRICE_NOTE_ROOM, obj->otyp);
 	}
 	}
 #ifdef WIZARD

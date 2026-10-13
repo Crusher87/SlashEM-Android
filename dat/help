@@ -129,6 +129,9 @@ Commands:
                 environment variable, or via a config file (defaults.nh,
                 Slash'EM Defaults, nethack.cnf, .nethackrc, etc.), not with 
                 the 'O' command.
+        ^O      Show an overview of the dungeon levels you have visited,
+                with the shops, altars, fountains and other features you
+                remember there.  #annotate names the current level.
         p       Pay your shopping bill/Shopkeeper services.
         P       Put on an accessory (ring, amulet, etc).
         ^P      Repeat last message (subsequent ^P's repeat earlier messages).

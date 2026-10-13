@@ -157,6 +157,10 @@ boolean seal;
     if (seal) {	/* remove the portal to the quest - sealing it off */
 	int reexpelled = u.uevent.qexpelled;
 	u.uevent.qexpelled = 1;
+	remdun_mapseen(quest_dnum);
+	if (!reexpelled)
+	    livelog_printf(LL_ACHIEVE, "%s has expelled you from the quest",
+			   ldrname());
 	/* Delete the near portal now; the far (main dungeon side)
 	   portal will be deleted as part of arrival on that level.
 	   If monster movement is in progress, any who haven't moved
@@ -194,6 +198,9 @@ struct obj *obj;	/* quest artifact; possibly null if carrying Amulet */
 	Qstat(got_thanks) = TRUE;
 
 	if (obj) {
+	    if (!u.uevent.qcompleted)
+		livelog_printf(LL_ACHIEVE, "completed the quest for %s",
+			       ldrname());
 	    u.uevent.qcompleted = 1;	/* you did it! */
 	    /* behave as if leader imparts sufficient info about the
 	       quest artifact */
@@ -265,6 +272,9 @@ chat_with_leader()
 	    qt_pager(QT_ASSIGNQUEST);
 	    exercise(A_WIS, TRUE);
 	    Qstat(got_quest) = TRUE;
+	    livelog_printf(LL_ACHIEVE,
+		      "%s has granted access to proceed deeper into the quest",
+			   ldrname());
 	  }
 	}
 }

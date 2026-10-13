@@ -2483,7 +2483,9 @@ doeat()		/* generic "eat" command funtion (see cmd.c) */
 	    		violated_vegetarian();
 	    } else if (material == WAX)
 			u.uconduct.unvegan++;
-	    u.uconduct.food++;
+	    if (!u.uconduct.food++ && gamelog_first(GLF_FOOD))
+		livelog_printf(LL_CONDUCT, "ate for the first time - %s",
+			       an(singular(otmp, xname)));
 	    
 	    if (otmp->cursed)
 		(void) rottenfood(otmp);
@@ -2539,7 +2541,9 @@ doeat()		/* generic "eat" command funtion (see cmd.c) */
 	}
 
 	/* KMH, conduct */
-	u.uconduct.food++;
+	if (!u.uconduct.food++ && gamelog_first(GLF_FOOD))
+	    livelog_printf(LL_CONDUCT, "ate for the first time - %s",
+			   an(singular(otmp, xname)));
 
 	victual.piece = otmp = touchfood(otmp);
 	victual.o_id = 0;	/* forget any meal left on another level */

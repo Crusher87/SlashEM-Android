@@ -372,6 +372,9 @@ register struct obj *obj;
 			if (obj->spe > -6 && !rn2(3)) obj->spe--;
 			obj->oerodeproof = FALSE;
 			exercise(A_WIS, FALSE);
+			livelog_printf(LL_ARTIFACT,
+			    "was denied %s!  The Lady of the Lake has deemed %s unworthy",
+				       artiname(ART_EXCALIBUR), uhim());
 		} else {
 			/* The lady of the lake acts! - Eric Backus */
 			/* Be *REAL* nice */
@@ -383,6 +386,9 @@ register struct obj *obj;
 			obj->oeroded = obj->oeroded2 = 0;
 			obj->oerodeproof = TRUE;
 			exercise(A_WIS, TRUE);
+			livelog_printf(LL_ARTIFACT,
+				       "was given %s by the Lady of the Lake",
+				       artiname(ART_EXCALIBUR));
 		}
 		update_inventory();
 		levl[u.ux][u.uy].typ = ROOM;

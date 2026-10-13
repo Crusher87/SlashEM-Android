@@ -8,7 +8,7 @@
 ^G      Create a monster (available in wizard mode only)
 ^I      Identify all items (available in wizard mode only)
 ^J      go up an experience level (available in wizard mode only)
-^O      Show location of special levels (available in wizard mode only)
+^O      Show an overview of the dungeon levels you have visited
 ^P      Toggle through previously displayed game messages
 ^R      Redraw screen
 ^T      Teleport around level

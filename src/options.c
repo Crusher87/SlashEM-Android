@@ -197,6 +197,7 @@ static struct Bool_Opt
 	{"popup_dialog",  &iflags.wc_popup_dialog, FALSE, SET_IN_GAME},	/*WC*/
 	{"prayconfirm", &flags.prayconfirm, TRUE, SET_IN_GAME},
 	{"preload_tiles", &iflags.wc_preload_tiles, TRUE, DISP_IN_GAME},	/*WC*/
+	{"price_quotes", &iflags.pricequotes, FALSE, SET_IN_GAME},
 	{"pushweapon", &flags.pushweapon, FALSE, SET_IN_GAME},
 	{"radar", (boolean *)0, FALSE, SET_IN_FILE},	/* OBSOLETE */
 #if defined(MICRO) && !defined(AMIGA)
@@ -2214,7 +2215,7 @@ goodfruit:
 		 * There is an array in flags:
 		 *	end_disclose[NUM_DISCLOSURE_OPT];
 		 * with option settings for the each of the following:
-		 * iagvc [see disclosure_options in decl.c]:
+		 * iagvco [see disclosure_options in decl.c]:
 		 * Legal setting values in that array are:
 		 *	DISCLOSE_PROMPT_DEFAULT_YES  ask with default answer yes
 		 *	DISCLOSE_PROMPT_DEFAULT_NO   ask with default answer no
@@ -3302,7 +3303,8 @@ boolean setinitial,setfromfile;
          * must correspond to disclosure_options in decl.h
          */
 	static const char *disclosure_names[] = {
-		"inventory", "attributes", "vanquished", "genocides", "conduct"
+		"inventory", "attributes", "vanquished", "genocides", "conduct",
+		"dungeon overview"
 	};
 	int disc_cat[NUM_DISCLOSURE_OPTIONS];
 	const char *disclosure_name;

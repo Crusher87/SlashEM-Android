@@ -587,6 +587,9 @@ struct monst *shkp;
 	eshkp->robbed += total;
 	You("stole %ld %s worth of merchandise.",
 	    total, currency(total));
+	livelog_printf(LL_ACHIEVE, "stole %ld %s worth of merchandise from %s %s",
+		       total, currency(total), s_suffix(shkname(shkp)),
+		       shtypes[eshkp->shoptype - SHOPBASE].name);
 	if (!Role_if(PM_ROGUE)) {     /* stealing is unlawful */
 	    adjalign(-sgn(u.ualign.type));
 	    You("feel like an evil rogue.");
@@ -2559,6 +2562,75 @@ register struct obj *unp_obj;	/* known to be unpaid */
 	return bp ? unp_obj->quan * bp->price : 0L;
 }
 
+/* price notes: remember that a shopkeeper has quoted a price for one of
+   this type of object (adapted from NetHack 5.0's price_quotes) */
+void
+record_price_quote(obj, price, buyprice)
+struct obj *obj;
+long price;		/* price for a single item */
+boolean buyprice;	/* TRUE: shk sells it to hero; FALSE: hero sells it */
+{
+	struct objclass *oc = &objects[obj->otyp];
+
+	/* artifact prices say nothing about the base object type, and an
+	   object whose appearance hasn't been seen can't be noted */
+	if (price <= 0L || obj->oartifact || !obj->dknown
+		|| obj->oclass == COIN_CLASS)
+	    return;
+#ifdef BLACKMARKET
+	/* One-eyed Sam's prices are many times the usual ones */
+	if (buyprice && Is_blackmarket(&u.uz))
+	    return;
+#endif
+	if (buyprice) {
+	    if (!oc->oc_buy_minseen || price < oc->oc_buy_minseen)
+		oc->oc_buy_minseen = price;
+	    if (price > oc->oc_buy_maxseen)
+		oc->oc_buy_maxseen = price;
+	} else {
+	    if (!oc->oc_sell_minseen || price < oc->oc_sell_minseen)
+		oc->oc_sell_minseen = price;
+	    if (price > oc->oc_sell_maxseen)
+		oc->oc_sell_maxseen = price;
+	}
+}
+
+/* append " {buy N-M sell N}" for the prices noted for an object type, if
+   any, to buf; does nothing if the result wouldn't fit in bufsiz bytes */
+void
+append_price_quote(buf, bufsiz, otyp)
+char *buf;
+int bufsiz;
+int otyp;
+{
+	struct objclass *oc = &objects[otyp];
+	char qbuf[BUFSZ];
+
+	if (!oc->oc_buy_maxseen && !oc->oc_sell_maxseen)
+	    return;
+
+	Strcpy(qbuf, " {");
+	if (oc->oc_buy_maxseen) {
+	    if (oc->oc_buy_minseen < oc->oc_buy_maxseen)
+		Sprintf(eos(qbuf), "buy %ld-%ld",
+			oc->oc_buy_minseen, oc->oc_buy_maxseen);
+	    else
+		Sprintf(eos(qbuf), "buy %ld", oc->oc_buy_maxseen);
+	}
+	if (oc->oc_sell_maxseen) {
+	    if (oc->oc_buy_maxseen)
+		Strcat(qbuf, " ");
+	    if (oc->oc_sell_minseen < oc->oc_sell_maxseen)
+		Sprintf(eos(qbuf), "sell %ld-%ld",
+			oc->oc_sell_minseen, oc->oc_sell_maxseen);
+	    else
+		Sprintf(eos(qbuf), "sell %ld", oc->oc_sell_maxseen);
+	}
+	Strcat(qbuf, "}");
+	if ((int) (strlen(buf) + strlen(qbuf)) < bufsiz)
+	    Strcat(buf, qbuf);
+}
+
 STATIC_OVL void
 add_one_tobill(obj, dummy)
 register struct obj *obj;
@@ -2600,6 +2672,7 @@ register boolean dummy;
 	bp->price = get_cost(obj, shkp);
 	ESHK(shkp)->billct++;
 	obj->unpaid = 1;
+	record_price_quote(obj, bp->price, TRUE);
 }
 
 STATIC_OVL void
@@ -3167,6 +3240,11 @@ move_on:
 		char c, qbuf[BUFSZ];
 		long tmpcr = ((offer * 9L) / 10L) + (offer <= 1L);
 
+		/* the hero learns what the shk would pay for one of these,
+		   unless an earlier 'q' answer suppresses the offer */
+		if (ltmp > 0L && !cltmp && (sell_how == SELL_NORMAL
+					    || auto_credit || sell_response != 'n'))
+		    record_price_quote(obj, ltmp / obj->quan, FALSE);
 		if (sell_how == SELL_NORMAL || auto_credit) {
 		    c = sell_response = 'y';
 		} else if (sell_response != 'n') {
@@ -3210,6 +3288,8 @@ move_on:
 		boolean short_funds = (offer > shkmoney);
 		if (short_funds) offer = shkmoney;
 #endif
+		if (ltmp > 0L && !cltmp && !short_funds && sell_response != 'n')
+		    record_price_quote(obj, ltmp / obj->quan, FALSE);
 		if (!sell_response) {
 		    only_partially_your_contents =
 			(contained_cost(obj, shkp, 0L, FALSE, FALSE) !=
@@ -4208,6 +4288,8 @@ register struct obj *first_obj;
 		get_cost(otmp, (struct monst *)0);
 	if (Has_contents(otmp))
 	    cost += contained_cost(otmp, shkp, 0L, FALSE, FALSE);
+	else
+	    record_price_quote(otmp, cost, TRUE);
 	if (!cost) {
 	    Strcpy(price, "no charge");
 	} else {

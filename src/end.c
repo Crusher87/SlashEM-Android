@@ -439,6 +439,15 @@ boolean taken;
 		show_conduct(how >= PANICKED ? 1 : 2);
 	    if (c == 'q') done_stopprint++;
 	}
+
+	ask = should_query_disclose_option('o', &defquery);
+	if (!done_stopprint) {
+	    c = ask ? yn_function("Do you want to see the dungeon overview?",
+				  ynqchars, defquery) : defquery;
+	    if (c == 'y')
+		show_overview((how >= PANICKED) ? 1 : 2, how);
+	    if (c == 'q') done_stopprint++;
+	}
 }
 
 #ifdef DUMPLOG
@@ -755,6 +764,9 @@ int how;
 		(void) adjattrib(A_CON, -1, TRUE);
 		if(u.uhpmax <= 0) u.uhpmax = 1;
 		savelife(how);
+		livelog_printf(LL_LIFESAVE,
+			       "averted death (turned to stone) with %s",
+			       "an amulet versus stone");
 		killer = 0;
 		killer_format = 0;
 		return;
@@ -777,6 +789,11 @@ int how;
 		if (how == GENOCIDED)
 			pline("Unfortunately you are still genocided...");
 		else {
+			livelog_printf(LL_LIFESAVE, "averted death (%s%s)",
+				       killer_format == NO_KILLER_PREFIX ? "" :
+				       killed_by_prefix[how],
+				       killer_format == KILLED_BY_AN ?
+				       an(killer) : killer);
 			killer = 0;
 			killer_format = 0;
 			return;
@@ -893,6 +910,12 @@ die:
 	clearlocks();
 
 	if (have_windows) display_nhwindow(WIN_MESSAGE, FALSE);
+
+	/* #chronicle: how the game ended, for the end-of-game listing */
+	livelog_printf(LL_DUMP, "%s%s",
+		       killer_format == NO_KILLER_PREFIX ? "" :
+		       killed_by_prefix[how],
+		       killer_format == KILLED_BY_AN ? an(killer) : killer);
 
 	if (strcmp(flags.end_disclose, "none") && how != PANICKED)
 		disclose(how, taken);

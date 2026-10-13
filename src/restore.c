@@ -464,6 +464,7 @@ unsigned int *stuckid, *steedid;	/* STEED */
 			sizeof(struct tech) * (MAXTECH + 1));
 	restore_artifacts(fd);
 	restore_oracles(fd);
+	restore_gamelog(fd);
 	if (u.ustuck)
 		mread(fd, (genericptr_t) stuckid, sizeof (*stuckid));
 #ifdef STEED
@@ -859,6 +860,7 @@ boolean ghostly;
 #else
 	mread(fd, (genericptr_t) levl, sizeof(levl));
 #endif	/* RLECOMP */
+	mread(fd, (genericptr_t) lastseentyp, sizeof(lastseentyp));
 
 	mread(fd, (genericptr_t)&omoves, sizeof(omoves));
 	mread(fd, (genericptr_t)&upstair, sizeof(stairway));

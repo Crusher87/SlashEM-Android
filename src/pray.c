@@ -682,12 +682,16 @@ gcrownu()
     case A_LAWFUL:
 	u.uevent.uhand_of_elbereth = 1;
 	verbalize("I crown thee...  The Hand of Elbereth!");
+	livelog_printf(LL_DIVINEGIFT,
+		       "was crowned \"The Hand of Elbereth\" by %s", u_gname());
 	break;
     case A_NEUTRAL:
 	u.uevent.uhand_of_elbereth = 2;
 	in_hand = (uwep && uwep->oartifact == ART_VORPAL_BLADE);
 	already_exists = exist_artifact(LONG_SWORD, artiname(ART_VORPAL_BLADE));
 	verbalize("Thou shalt be my Envoy of Balance!");
+	livelog_printf(LL_DIVINEGIFT, "became %s Envoy of Balance",
+		       s_suffix(u_gname()));
 	break;
     case A_CHAOTIC:
 	u.uevent.uhand_of_elbereth = 3;
@@ -695,6 +699,9 @@ gcrownu()
 	already_exists = exist_artifact(RUNESWORD, artiname(ART_STORMBRINGER));
 	verbalize("Thou art chosen to %s for My Glory!",
 		  already_exists && !in_hand ? "take lives" : "steal souls");
+	livelog_printf(LL_DIVINEGIFT, "was chosen to %s for the Glory of %s",
+		       already_exists && !in_hand ? "take lives" : "steal souls",
+		       u_gname());
 	break;
     }
 
@@ -713,6 +720,8 @@ gcrownu()
 	at_your_feet("A spellbook");
 	dropy(obj);
 	u.ugifts++;
+	livelog_printf(LL_DIVINEGIFT | LL_SPOILER, "was bestowed with %s",
+		       an(OBJ_NAME(objects[class_gift])));
 	/* when getting a new book for known spell, enhance
 	   currently wielded weapon rather than the book */
 	for (sp_no = 0; sp_no < MAXSPELL; sp_no++)
@@ -735,7 +744,12 @@ gcrownu()
 	} else if (obj && obj->otyp == LONG_SWORD && !obj->oartifact) {
 	    if (!Blind) Your("sword shines brightly for a moment.");
 	    obj = oname(obj, artiname(ART_EXCALIBUR));
-	    if (obj && obj->oartifact == ART_EXCALIBUR) u.ugifts++;
+	    if (obj && obj->oartifact == ART_EXCALIBUR) {
+		u.ugifts++;
+		livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT,
+			       "had %s wielded long sword transformed into %s",
+			       uhis(), artiname(ART_EXCALIBUR));
+	    }
 	}
 	/* acquire Excalibur's skill regardless of weapon or gift */
 	unrestrict_weapon_skill(P_LONG_SWORD);
@@ -755,6 +769,8 @@ gcrownu()
 	    at_your_feet("A sword");
 	    dropy(obj);
 	    u.ugifts++;
+	    livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT, "was bestowed with %s",
+			   artiname(ART_VORPAL_BLADE));
 	}
 	/* acquire Vorpal Blade's skill regardless of weapon or gift */
 	unrestrict_weapon_skill(P_LONG_SWORD);
@@ -778,6 +794,8 @@ gcrownu()
 	    obj->spe = 1;
 	    dropy(obj);
 	    u.ugifts++;
+	    livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT, "was bestowed with %s",
+			   artiname(ART_STORMBRINGER));
 	}
 	/* acquire Stormbringer's skill regardless of weapon or gift */
 	unrestrict_weapon_skill(P_BROAD_SWORD);
@@ -1554,6 +1572,8 @@ verbalize("In return for thy service, I grant thee the gift of Immortality!");
 			u.ualign.type = u.ualignbase[A_CURRENT] = altaralign;
 		    u.ublessed = 0;
 		    flags.botl = 1;
+		    livelog_printf(LL_ALIGNMENT, "permanently converted to %s",
+				   align_str(altaralign));
 
 		    You("have a sudden sense of a new direction.");
 		    /* Beware, Conversion is costly */
@@ -1690,6 +1710,10 @@ verbalize("In return for thy service, I grant thee the gift of Immortality!");
 		    at_your_feet("An object");
 		    godvoice(u.ualign.type, "Use my gift wisely!");
 		    u.ugifts++;
+		    livelog_printf(LL_DIVINEGIFT | LL_ARTIFACT,
+				   "was bestowed with %s by %s",
+				   artiname(otmp->oartifact),
+				   align_gname(u.ualign.type));
 		    u.ublesscnt = rnz(300 + (50 * nartifacts));
 		    exercise(A_WIS, TRUE);
 		    /* make sure we can use this weapon */
@@ -1855,6 +1879,8 @@ prayer_done()		/* M. Stephenson (1.0.3b) */
 	/* ALI, Racially undead (ie., vampires) get the same penalties */
 	else if (rn2(20) > ACURR(A_CON))
 	    u.uhp = (u.uhp/2) + 1;
+	livelog_printf(LL_MINORAC, "prayed to %s while undead, and was rebuked",
+		       align_gname(alignment));
 	losehp(rnd(20), "residual undead turning effect", KILLED_BY_AN);
 	exercise(A_CON, FALSE);
 	return(1);
@@ -1862,12 +1888,22 @@ prayer_done()		/* M. Stephenson (1.0.3b) */
     if (Inhell) {
 	pline("Since you are in Gehennom, %s won't help you.",
 	      align_gname(alignment));
+	livelog_printf(LL_MINORAC, "prayed to %s in Gehennom, to no avail",
+		       align_gname(alignment));
 	/* haltingly aligned is least likely to anger */
 	if (u.ualign.record <= 0 || rnl(u.ualign.record))
 	    angrygods(u.ualign.type);
 	return(0);
     }
 
+    /* #chronicle (pleased() may give a gift or a crown, logged later) */
+    livelog_printf(LL_MINORAC, "prayed to %s, who was %s",
+		   align_gname(alignment),
+		   (p_type == 0) ? "displeased" :
+		   (p_type == 1) ? "angered" :
+		   /* water on a cross-aligned altar upsets the god */
+		   (p_type == 2 && sobj_at(POT_WATER, u.ux, u.uy)) ? "upset"
+		   : "pleased");
     if (p_type == 0) {
 	if(on_altar() && u.ualign.type != alignment)
 	    (void) water_prayer(FALSE);

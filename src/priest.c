@@ -386,6 +386,9 @@ register int roomno;
 				(!shrined) ? "" : " strange");
 		    else You("experience a strange sense of peace.");
 		}
+		/* recognize the Valley of the Dead and Moloch's Sanctum
+		   once hero has encountered the temple priest on those levels */
+		mapseen_temple(priest);
 	    } else {
 		switch(rn2(3)) {
 		  case 0: You("have an eerie feeling..."); break;
