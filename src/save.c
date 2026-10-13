@@ -39,11 +39,8 @@ STATIC_DCL void FDECL(savelev0, (int,XCHAR_P,int));
 STATIC_DCL boolean NDECL(swapout_oldest);
 STATIC_DCL void FDECL(copyfile, (char *,char *));
 #endif /* MFLOPPY */
-#ifdef GCC_WARN
-static long nulls[10];
-#else
-#define nulls nul
-#endif
+/* zeroed end-of-list records; big enough for a 64-bit struct trap or fruit */
+static long nulls[sizeof(struct trap) + sizeof(struct fruit)];
 
 #if defined(UNIX) || defined(VMS) || defined(__EMX__) || defined(WIN32)
 #define HUP	if (!program_state.done_hup)
