@@ -231,7 +231,7 @@ boolean barehanded;
 		}
 		if (canspotmon(mtmp)) {
 			Sprintf(qbuf, "Really attack %s?", mon_nam(mtmp));
-			if (yn(qbuf) != 'y') {
+			if (!paranoid_query(ParanoidHit, qbuf)) {
 				/* Stormbringer is not tricked so easily */
 				if (!barehanded && u.twoweap && uswapwep &&
 				  uswapwep->oartifact == ART_STORMBRINGER) {
@@ -397,10 +397,12 @@ register struct monst *mtmp;
 		    Strcpy(buf, y_monnam(mtmp));
 		    buf[0] = highc(buf[0]);
 		    You("stop.  %s is in the way!", buf);
+		    nomul(0);	/* stop running or travelling */
 		    return(TRUE);
 		} else if ((mtmp->mfrozen || (! mtmp->mcanmove)
 				|| (mtmp->data->mmove == 0)) && rn2(6)) {
 		    pline("%s doesn't seem to move!", Monnam(mtmp));
+		    nomul(0);
 		    return(TRUE);
 		} else return(FALSE);
 	    }

@@ -946,7 +946,7 @@ dogaze()
 		  	char qbuf[QBUFSZ];
 		  	
 			Sprintf(qbuf, "Really gaze at %s?", mon_nam(mtmp));
-			if (yn(qbuf) != 'y') return (0);
+			if (!paranoid_query(ParanoidHit, qbuf)) return (0);
 			if (mtmp->mpeaceful) setmangry(mtmp);
 	}
 
@@ -1255,7 +1255,7 @@ dogaze()
 			Sprintf(qbuf, "Really %s %s?",
 			    (adtyp == AD_CONF) ? "confuse" : "attack",
 			    mon_nam(mtmp));
-			if (yn(qbuf) != 'y') continue;
+			if (!paranoid_query(ParanoidHit, qbuf)) continue;
 			setmangry(mtmp);
 		    }
 		    if (!mtmp->mcanmove || mtmp->mstun || mtmp->msleeping ||
@@ -1771,7 +1771,7 @@ polyatwill()      /* Polymorph under conscious control (#youpoly) */
 	    }
 	} else if (Race_if(PM_HUMAN_WEREWOLF) &&
 		(!Upolyd || u.umonnum == u.ulycn)) {
-	    if (yn("Change form?") == 'n')
+	    if (!paranoid_query(ParanoidWerechange, "Change form?"))
 		return 0;
 	    else if (u.ulycn == NON_PM) {
 	    	/* Very serious */

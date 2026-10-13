@@ -27,12 +27,12 @@ null           allow nulls to be sent to your terminal            [TRUE]
 number_pad     use the number keys to move instead of yuhjklbn    [FALSE]
 perm_invent    keep inventory in a permanent window               [FALSE]
 pickup_thrown  autopickup things you threw                        [TRUE]
-prayconfirm    use confirmation prompt when #pray command issued  [TRUE]
 pushweapon     when wielding a new weapon, put your previously
                wielded weapon into the secondary weapon slot      [FALSE]
 rawio          allow the use of raw I/O                           [FALSE]
 rest_on_space  count the space bar as a rest character            [FALSE]
 safe_pet       prevent you from (knowingly) attacking your pet(s) [TRUE]
+safe_wait      refuse to wait or search next to a hostile monster [TRUE]
 showrace       show yourself by your race rather than by role     [FALSE]
 silent         don't use your terminal's bell sound               [TRUE]
 sortpack       group similar kinds of objects in inventory        [TRUE]
@@ -45,8 +45,8 @@ standout       use standout mode for --More-- on messages         [FALSE]
 time           display elapsed game time, in moves                [FALSE]
 tombstone      print tombstone when you die                       [TRUE]
 toptenwin      print topten in a window rather than stdout        [FALSE]
-travel         enable the command to travel to a map location via [TRUE]
-               a shortest-path algorithm, usually invoked by '_'.
+travel         let a mouse click on the map travel to that spot   [TRUE]
+               via a shortest-path algorithm ('_' always works).
 verbose        print more commentary during the game              [TRUE]
 
 
@@ -120,6 +120,12 @@ packorder     a list of default symbols for kinds of objects that gives the
               order in which your pack will be displayed  [")[%?+!=/(*`0_]
               (If you specify only some kinds of items, the others from the
               default order will be appended to the end.)
+paranoid_confirmation  space separated list of situations where alternate
+              prompting is desired: Confirm (require "no" to reject),
+              quit, die, bones, attack, wand-break, eat, Were-change
+              ("yes" instead of 'y'), pray, trap, Autoall (ask 'y'
+              first), swim (need 'm' prefix to enter water or lava),
+              Remove (always ask which item), none, all  [pray swim trap]
 pickup_burden when you pick up an item that exceeds this encumberance
               level (Unburdened, Burdened, streSsed, straiNed, overTaxed,
               or overLoaded), you will be asked if you want to continue. [S]

@@ -123,6 +123,7 @@ STATIC_PTR int NDECL(doborgtoggle);
 #endif
 STATIC_PTR int NDECL(domonability);
 STATIC_PTR int NDECL(dotravel);
+STATIC_PTR int NDECL(doretravel);
 STATIC_PTR int NDECL(playersteal);
 #if 0
 STATIC_PTR int NDECL(specialpower); /* WAC -- use techniques */
@@ -535,7 +536,8 @@ enter_explore_mode()
 {
 	if(!discover && !wizard) {
 		pline("Beware!  From explore mode there will be no return to normal game.");
-		if (yn("Do you want to enter explore mode?") == 'y') {
+		if (paranoid_query(ParanoidQuit,
+				   "Do you want to enter explore mode?")) {
 			clear_nhwindow(WIN_MESSAGE);
 			You("are now in non-scoring explore mode.");
 			discover = TRUE;
@@ -2230,6 +2232,7 @@ static const struct func_tab cmdlist[] = {
 	{SPBOOK_SYM, TRUE, dovspell},			/* Mike Stephenson */
 	{'#', TRUE, doextcmd},
 	{'_', TRUE, dotravel},
+	{C('_'), TRUE, doretravel},
 	{0,0,0,0}
 };
 
@@ -2259,6 +2262,8 @@ struct ext_func_tab extcmdlist[] = {
 	{"overview", "show an overview of the dungeon", dooverview, TRUE},
 	{"pray", "pray to the gods for help", dopray, TRUE},
 	{"quit", "exit without saving current game", done2, TRUE},
+	{"retravel", "travel to the previously selected travel destination",
+		doretravel, TRUE},
 #ifdef STEED
 	{"ride", "ride (or stop riding) a monster", doride, FALSE},
 #endif
@@ -2771,15 +2776,15 @@ register char *cmd;
 		    multi = 0;
 		    return;
 	 case CMD_TRAVEL:
-		    if (iflags.travelcmd) {
-			    flags.travel = 1;
-			    iflags.travel1 = 1;
-			    flags.run = 8;
-			    flags.nopick = 1;
-			    do_rush = TRUE;
-			    break;
-		    }
-		    /*FALLTHRU*/
+		    /* only map clicks are suppressed by !travel (they never
+		       produce CMD_TRAVEL then); '_' asks for a destination,
+		       which gives a chance to cancel an accidental keypress */
+		    flags.travel = 1;
+		    iflags.travel1 = 1;
+		    flags.run = 8;
+		    flags.nopick = 1;
+		    do_rush = TRUE;
+		    break;
 	 default:   if (movecmd(*cmd)) {	/* ordinary movement */
 			flags.run = 0;	/* only matters here if it was 8 */
 			do_walk = TRUE;
@@ -2795,8 +2800,10 @@ register char *cmd;
 	}
 
 	/* some special prefix handling */
-	/* overload 'm' prefix for ',' to mean "request a menu" */
-	if (prefix_seen && cmd[1] == ',') {
+	/* overload 'm' prefix for ',' to mean "request a menu",
+	   and for '.' and 's' to mean "wait or search anyway" (safe_wait) */
+	if (prefix_seen && (cmd[1] == ',' || cmd[1] == '.' || cmd[1] == 's' ||
+			    (cmd[1] == ' ' && flags.rest_on_space))) {
 		iflags.menu_requested = TRUE;
 		++cmd;
 	}
@@ -3115,8 +3122,9 @@ click_to_cmd(x, y, mod)
         if (abs(x) <= 1 && abs(y) <= 1 ) {
 	x = sgn(x), y = sgn(y);
     } else {
-	u.tx = u.ux+x;
-	u.ty = u.uy+y;
+	/* remember the destination for #retravel and '_' */
+	iflags.travelcc.x = u.tx = u.ux+x;
+	iflags.travelcc.y = u.ty = u.uy+y;
 	cmd[0] = CMD_TRAVEL;
 	return cmd;
     }
@@ -3420,6 +3428,10 @@ readchar()
 	return((char) sym);
 }
 
+/* getpos() treats '_' as "pick" while the cursor is still on the
+   remembered destination when called with this goal */
+const char travel_destination[] = "the desired destination";
+
 STATIC_PTR int
 dotravel()
 {
@@ -3427,23 +3439,52 @@ dotravel()
 	static char cmd[2];
 	coord cc;
 
-	if (!iflags.travelcmd) return 0;
+	/*
+	 * The travel option only stops mouse clicks (or taps) on the map
+	 * from travelling; '_' asks for a destination first, which gives
+	 * a chance to cancel if it was typed by accident.
+	 */
 	cmd[1]=0;
 	cc.x = iflags.travelcc.x;
 	cc.y = iflags.travelcc.y;
-	if (cc.x == -1 && cc.y == -1) {
+	if (!isok(cc.x, cc.y)) {
 	    /* No cached destination, start attempt from current position */
 	    cc.x = u.ux;
 	    cc.y = u.uy;
 	}
 	pline("Where do you want to travel to?");
-	if (getpos(&cc, TRUE, "the desired destination") < 0) {
+	if (getpos(&cc, TRUE, travel_destination) < 0) {
 		/* user pressed ESC */
 		return 0;
 	}
 	iflags.travelcc.x = u.tx = cc.x;
 	iflags.travelcc.y = u.ty = cc.y;
 	cmd[0] = CMD_TRAVEL;
+	readchar_queue = cmd;
+	return 0;
+}
+
+/* #retravel: travel to the previously selected destination again */
+STATIC_PTR int
+doretravel()
+{
+	static char cmd[2];
+
+	if (!isok(iflags.travelcc.x, iflags.travelcc.y)) {
+	    /* reset when travel reaches its destination */
+	    pline("No travel destination set.");
+	    return 0;
+	} else if (iflags.travelcc.x == u.ux && iflags.travelcc.y == u.uy) {
+	    /* maybe interrupted while travelling, then walked the rest
+	       of the way, so the destination hasn't been reset yet */
+	    You("are already here.");
+	    iflags.travelcc.x = iflags.travelcc.y = -1;
+	    return 0;
+	}
+	u.tx = iflags.travelcc.x;
+	u.ty = iflags.travelcc.y;
+	cmd[0] = CMD_TRAVEL;
+	cmd[1] = 0;
 	readchar_queue = cmd;
 	return 0;
 }
@@ -3531,6 +3572,79 @@ char def;
 	qbuf[truncspot] = '\0';
 	Strcat(qbuf,"...");
 	return (*windowprocs.win_yn_function)(qbuf, resp, def);
+}
+
+/* for paranoid_confirm:quit,die,attack,&c prompting (from NetHack 3.6
+   and 5.0); returns 'y', 'n' or (only when accept_q) 'q' */
+char
+paranoid_ynq(be_paranoid, prompt, accept_q)
+boolean be_paranoid;
+const char *prompt;
+boolean accept_q;
+{
+	char c = 'n';	/* default result */
+
+	/* when paranoid, player must respond with "yes" rather than just 'y'
+	   to give the go-ahead for this query; default is "no" unless the
+	   ParanoidConfirm flag is set in which case there's no default */
+	if (be_paranoid) {
+	    char pbuf[QBUFSZ], qbuf[BUFSZ], ans[BUFSZ];
+	    const char *promptprefix = "",	/* empty for first iteration */
+		       *responsetype = ParanoidConfirm ?
+				(accept_q ? "[yes|no|quit]" : "[yes|no]") :
+				(accept_q ? "[yes|n|q] (n)" : "[yes|n] (n)");
+	    int k, trylimit = 6; /* 1 normal, 5 more with "Yes or No:" prefix */
+
+	    (void) strncpy(pbuf, prompt, QBUFSZ - 1);
+	    pbuf[QBUFSZ - 1] = '\0';
+	    /* in addition to being paranoid about this particular
+	       query, we might be even more paranoid about all paranoia
+	       responses (ie, ParanoidConfirm is set) in which case we
+	       require "no" to reject in addition to "yes" to confirm
+	       (except we won't loop if response is ESC; it means no) */
+	    do {
+		/* make sure the prompt fits in a QBUFSZ sized buffer */
+		k = (int)(strlen(promptprefix) + 1 + strlen(responsetype));
+		if ((int)strlen(pbuf) + k > QBUFSZ - 1) {
+		    /* chop off some at the end */
+		    Strcpy(pbuf + (QBUFSZ - 1) - k - 4, "...?"); /* -4: "...?" */
+		}
+
+		Sprintf(qbuf, "%s%s %s", promptprefix, pbuf, responsetype);
+		*ans = '\0';
+		getlin(qbuf, ans);
+		(void) mungspaces(ans);
+		if (!strcmpi(ans, "yes")) {
+		    c = 'y';
+		    break;
+		}
+		if (!strcmpi(ans, "quit") || *ans == '\033') {
+		    c = 'q';
+		    break;
+		}
+		/* we don't bother adding "or \"Quit\"" for the accept_q case */
+		promptprefix = "\"Yes\" or \"No\": ";
+		/* for empty input, return value c will already be 'n' */
+	    } while (ParanoidConfirm && strcmpi(ans, "no") && --trylimit);
+	} else if (accept_q) {
+	    /* 'y', 'n', or 'q' */
+	    c = yn_function(prompt, ynqchars, 'n');
+	} else {
+	    /* 'y' or 'n' */
+	    c = yn_function(prompt, ynchars, 'n');
+	}
+	if (c != 'y' && (c != 'q' || !accept_q))
+	    c = 'n';
+	return c;
+}
+
+/* yes/no variant of paranoid_ynq(); True for yes, False for n|no|ESC */
+boolean
+paranoid_query(be_paranoid, prompt)
+boolean be_paranoid;
+const char *prompt;
+{
+	return (boolean)(paranoid_ynq(be_paranoid, prompt, FALSE) == 'y');
 }
 #endif
 

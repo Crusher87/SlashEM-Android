@@ -14,12 +14,29 @@ STATIC_DCL void NDECL(dosinkfall);
 #endif
 STATIC_DCL boolean FDECL(findtravelpath, (BOOLEAN_P));
 STATIC_DCL boolean FDECL(monstinroom, (struct permonst *,int));
+STATIC_DCL schar FDECL(u_simple_floortyp, (int,int));
+STATIC_DCL boolean FDECL(swim_move_danger, (int,int));
+STATIC_DCL boolean FDECL(u_trap_harmless, (int));
+STATIC_DCL boolean FDECL(avoid_known_trap, (int,int));
 
 STATIC_DCL void FDECL(move_update, (BOOLEAN_P));
 
 static boolean door_opened;	/* set to true if door was opened during test_move */
 
+/* a monster that running and travel needn't stop for when passing by */
+#define is_safemon(mon) ((mon)->mtame || ((mon)->mpeaceful && \
+			canspotmon(mon) && !Confusion && !Hallucination && \
+			!Stunned))
+
 #define IS_SHOP(x)	(rooms[x].rtype >= SHOPBASE)
+
+/* XXX: if more sources of water walking than just boots are added,
+   these should account for them */
+#define Known_wwalking (uarmf && uarmf->otyp == WATER_WALKING_BOOTS && \
+			objects[WATER_WALKING_BOOTS].oc_name_known && \
+			!u.usteed)
+#define Known_lwalking (Known_wwalking && Fire_resistance && \
+			uarmf->oerodeproof && uarmf->rknown)
 
 #ifdef OVL2
 
@@ -888,7 +905,7 @@ int third_last_hit = 0;
 int repeat_hit = 0;
 
 /* return TRUE if (dx,dy) is an OK place to move
- * mode is one of DO_MOVE, TEST_MOVE or TEST_TRAV
+ * mode is one of DO_MOVE, TEST_MOVE, TEST_TRAV, or TEST_TRAP
  */
 boolean 
 test_move(ux, uy, dx, dy, mode)
@@ -984,7 +1001,8 @@ int mode;
 			    }
 			} else pline("That door is closed.");
 		    }
-		} else if (mode == TEST_TRAV) goto testdiag;
+		} else if (mode == TEST_TRAV || mode == TEST_TRAP)
+		    goto testdiag;
 		return FALSE;
 	    }
 	} else {
@@ -1031,8 +1049,10 @@ int mode;
 	    (!Levitation && !Flying &&
 	     !is_clinger(youmonst.data) &&
 	     (is_pool(x, y) || is_lava(x, y)) && levl[x][y].seenv))
-	    return FALSE;
+	    return (mode == TEST_TRAP);
     }
+
+    if (mode == TEST_TRAP) return FALSE;	/* do not move through traps */
 
     ust = &levl[ux][uy];
 
@@ -1079,6 +1099,14 @@ int mode;
 }
 
 /*
+ * Squares the hero has stepped from during the current travel command.
+ * If travel ever wants to step back onto one of them it is going around
+ * in circles (usually while guessing at an unreachable destination), so
+ * it stops instead of oscillating until something interrupts it.
+ */
+static char travelmap[COLNO][ROWNO];
+
+/*
  * Find a path from the destination (u.tx,u.ty) back to (u.ux,u.uy).
  * A shortest path is returned.  If guess is TRUE, consider various
  * inaccessible locations as valid intermediate path points.
@@ -1088,8 +1116,14 @@ static boolean
 findtravelpath(guess)
 boolean guess;
 {
+    /* a new travel command starts with an empty map of visited squares */
+    if (iflags.travel1 && !guess)
+	(void) memset((genericptr_t)travelmap, 0, sizeof(travelmap));
+
     /* if travel to adjacent, reachable location, use normal movement rules */
-    if (!guess && iflags.travel1 && distmin(u.ux, u.uy, u.tx, u.ty) == 1) {
+    if (!guess && iflags.travel1 && distmin(u.ux, u.uy, u.tx, u.ty) == 1
+	    /* grid bugs can't take a diagonal step */
+	    && !(u.ux != u.tx && u.uy != u.ty && u.umonnum == PM_GRID_BUG)) {
 	flags.run = 0;
 	if (test_move(u.ux, u.uy, u.tx-u.ux, u.ty-u.uy, TEST_MOVE)) {
 	    u.dx = u.tx-u.ux;
@@ -1135,21 +1169,35 @@ boolean guess;
 		static int ordered[] = { 0, 2, 4, 6, 1, 3, 5, 7 };
 		/* no diagonal movement for grid bugs */
 		int dirmax = u.umonnum == PM_GRID_BUG ? 4 : 8;
+		boolean alreadyrepeated = FALSE;
 
 		for (dir = 0; dir < dirmax; ++dir) {
 		    int nx = x+xdir[ordered[dir]];
 		    int ny = y+ydir[ordered[dir]];
 
-		    if (!isok(nx, ny)) continue;
+		    /*
+		     * When guessing, only spaces that could be picked as the
+		     * guessed target (ones the hero could see) are added to
+		     * the matrix of hero-reachable spaces.  Otherwise travel
+		     * can pick a spot that it stops wanting once it has moved
+		     * a step towards it, and walk back and forth forever in
+		     * some configurations of sight-blocking obstacles.
+		     */
+		    if (!isok(nx, ny) || (guess && !couldsee(nx, ny)))
+			continue;
 		    if ((!Passes_walls && !can_ooze(&youmonst) &&
-			closed_door(x, y)) || sobj_at(BOULDER, x, y)) {
+			closed_door(x, y)) || sobj_at(BOULDER, x, y) ||
+			test_move(x, y, nx-x, ny-y, TEST_TRAP)) {
 			/* closed doors and boulders usually
 			 * cause a delay, so prefer another path */
 			if (travel[x][y] > radius-3) {
-			    travelstepx[1-set][nn] = x;
-			    travelstepy[1-set][nn] = y;
-			    /* don't change travel matrix! */
-			    nn++;
+			    if (!alreadyrepeated) {
+				travelstepx[1-set][nn] = x;
+				travelstepy[1-set][nn] = y;
+				/* don't change travel matrix! */
+				nn++;
+				alreadyrepeated = TRUE;
+			    }
 			    continue;
 			}
 		    }
@@ -1157,14 +1205,21 @@ boolean guess;
 			(levl[nx][ny].seenv || (!Blind && couldsee(nx, ny)))) {
 			if (nx == ux && ny == uy) {
 			    if (!guess) {
+				boolean visited = travelmap[x][y];
+
 				u.dx = x-ux;
 				u.dy = y-uy;
-				if (x == u.tx && y == u.ty) {
+				if ((x == u.tx && y == u.ty) || visited) {
 				    nomul(0);
 				    /* reset run so domove run checks work */
 				    flags.run = 8;
-				    iflags.travelcc.x = iflags.travelcc.y = -1;
+				    if (visited)
+					You("stop, unsure which way to go.");
+				    else
+					iflags.travelcc.x =
+					    iflags.travelcc.y = -1;
 				}
+				travelmap[u.ux][u.uy] = 1;
 				return TRUE;
 			    }
 			} else if (!travel[nx][ny]) {
@@ -1186,24 +1241,27 @@ boolean guess;
 	if (guess) {
 	    int px = tx, py = ty;	/* pick location */
 	    int dist, nxtdist, d2, nd2;
+	    int ctrav, ptrav = COLNO*ROWNO;
 
 	    dist = distmin(ux, uy, tx, ty);
 	    d2 = dist2(ux, uy, tx, ty);
 	    for (tx = 1; tx < COLNO; ++tx)
 		for (ty = 0; ty < ROWNO; ++ty)
-		    if (travel[tx][ty]) {
+		    if (couldsee(tx, ty) && (ctrav = travel[tx][ty]) > 0) {
 			nxtdist = distmin(ux, uy, tx, ty);
-			if (nxtdist == dist && couldsee(tx, ty)) {
+			if (nxtdist == dist && ctrav < ptrav) {
 			    nd2 = dist2(ux, uy, tx, ty);
 			    if (nd2 < d2) {
 				/* prefer non-zigzag path */
 				px = tx; py = ty;
 				d2 = nd2;
+				ptrav = ctrav;
 			    }
-			} else if (nxtdist < dist && couldsee(tx, ty)) {
+			} else if (nxtdist < dist) {
 			    px = tx; py = ty;
 			    dist = nxtdist;
 			    d2 = dist2(ux, uy, tx, ty);
+			    ptrav = ctrav;
 			}
 		    }
 
@@ -1211,8 +1269,10 @@ boolean guess;
 		/* no guesses, just go in the general direction */
 		u.dx = sgn(u.tx - u.ux);
 		u.dy = sgn(u.ty - u.uy);
-		if (test_move(u.ux, u.uy, u.dx, u.dy, TEST_MOVE))
+		if (test_move(u.ux, u.uy, u.dx, u.dy, TEST_MOVE)) {
+		    travelmap[u.ux][u.uy] = 1;
 		    return TRUE;
+		}
 		goto found;
 	    }
 	    tx = px;
@@ -1232,6 +1292,141 @@ found:
     u.dy = 0;
     nomul(0);
     return FALSE;
+}
+
+/* water or lava as far as the hero's own feet are concerned */
+STATIC_OVL schar
+u_simple_floortyp(x, y)
+int x, y;
+{
+	if (!Levitation && !Flying) {
+	    if (is_pool(x, y)) return POOL;
+	    if (is_lava(x, y)) return LAVAPOOL;
+	}
+	return ROOM;
+}
+
+/* paranoid_confirm:swim (from NetHack 5.0) - is it dangerous for the
+   hero to move to x,y due to water or lava?  The 'm' prefix overrides;
+   travel (tapping the map) doesn't, so a mis-tap can't drown you */
+STATIC_OVL boolean
+swim_move_danger(x, y)
+int x, y;
+{
+	static boolean swim_tip_given = FALSE;
+
+	if (Underwater && is_pool(x, y))
+	    return FALSE;
+
+	if (u_simple_floortyp(x, y) != u_simple_floortyp(u.ux, u.uy) &&
+		!Stunned && !Confusion && levl[x][y].seenv &&
+		(is_pool(x, y) || is_lava(x, y))) {
+	    if ((is_pool(x, y) && !Known_wwalking) ||
+		    /* don't move onto lava without known lava-walking,
+		       but do continue to move over lava if already doing so */
+		    (is_lava(x, y) && !Known_lwalking && !is_lava(u.ux, u.uy))) {
+		if (flags.nopick && !flags.travel) {
+		    return FALSE;	/* moving with m-prefix */
+		} else if (ParanoidSwim) {
+		    You("avoid stepping into the %s.", surface(x, y));
+		    if (iflags.cmdassist && !swim_tip_given) {
+			swim_tip_given = TRUE;
+			pline("(Use the 'm' prefix to step in if you really want to.)");
+		    }
+		    return TRUE;
+		}
+	    }
+	}
+	return FALSE;
+}
+
+/* can a known trap of this type obviously not hurt the hero?
+   (a simplified, hero-only version of NetHack 5.0's immune_to_trap()) */
+STATIC_OVL boolean
+u_trap_harmless(ttyp)
+int ttyp;
+{
+	struct permonst *ptr = youmonst.data;
+	struct obj *otmp;
+
+	switch (ttyp) {
+	    case BEAR_TRAP:
+		if (amorphous(ptr) || is_whirly(ptr) || unsolid(ptr))
+		    return TRUE;
+#ifdef STEED
+		if (!u.usteed && ptr->msize <= MZ_SMALL)
+#else
+		if (ptr->msize <= MZ_SMALL)
+#endif
+		    return TRUE;
+		/* FALLTHRU */
+	    case SQKY_BOARD:
+	    case PIT:
+	    case SPIKED_PIT:
+	    case HOLE:
+	    case TRAPDOOR:
+		/* Sokoban's air currents pull you down regardless */
+		if (In_sokoban(&u.uz) && ttyp != SQKY_BOARD &&
+			ttyp != BEAR_TRAP)
+		    return FALSE;
+		return (boolean)(Levitation || Flying);
+	    case WEB:
+		return (boolean)(amorphous(ptr) || is_whirly(ptr) ||
+				 unsolid(ptr) || webmaker(ptr));
+	    case TELEP_TRAP:
+	    case LEVEL_TELEP:
+		/* these don't work in the endgame or with the Amulet */
+		return (boolean)(In_endgame(&u.uz) || u.uhave.amulet);
+	    case RUST_TRAP:
+		/* harmful if wearing or wielding anything rustable */
+		if (u.umonnum == PM_IRON_GOLEM) return FALSE;
+		for (otmp = invent; otmp; otmp = otmp->nobj)
+		    if (is_rustprone(otmp) && otmp->owornmask &&
+			    otmp != uquiver && (otmp != uswapwep || u.twoweap))
+			return FALSE;
+		return TRUE;
+	    default:	/* arrow, dart, falling rock, land mine (even when
+			   flying), rolling boulder, sleeping gas, fire, magic,
+			   anti-magic, polymorph, statue trap, magic portal */
+		return FALSE;
+	}
+}
+
+/* paranoid_confirm:trap (from NetHack 5.0) - ask before stepping onto a
+   known trap unless the 'm' prefix was used; TRUE means don't move */
+STATIC_OVL boolean
+avoid_known_trap(x, y)
+int x, y;
+{
+	struct trap *trap;
+	char qbuf[QBUFSZ];
+	int ttyp;
+
+	if (ParanoidTrap && !Stunned && !Confusion &&
+		/* skip if player used 'm' prefix (but not when travelling) */
+		(!flags.nopick || flags.run) &&
+		(trap = t_at(x, y)) != 0 && trap->tseen &&
+		/* check whether attempted move will be viable; test_move()
+		   refuses every known trap during travel, but travel has
+		   already picked this step */
+		(flags.run == 8 ||
+		 test_move(u.ux, u.uy, x - u.ux, y - u.uy, TEST_MOVE)) &&
+		/* Hallucination: the hero can't tell what the trap is */
+		(Hallucination || !u_trap_harmless(trap->ttyp))) {
+	    ttyp = Hallucination ? rnd(TRAPNUM - 1) : trap->ttyp;
+	    Sprintf(qbuf, "Really step %s that %s?",
+		    (ttyp == BEAR_TRAP || ttyp == PIT || ttyp == SPIKED_PIT ||
+		     ttyp == HOLE || ttyp == TELEP_TRAP || ttyp == LEVEL_TELEP ||
+		     ttyp == MAGIC_PORTAL || ttyp == WEB) ? "into" : "onto",
+		    defsyms[trap_to_defsym(ttyp)].explanation);
+	    /* when paranoid_confirm:Confirm is also set, ask for yes/no */
+	    if (!paranoid_query(ParanoidConfirm, qbuf)) {
+		nomul(0);
+		flags.move = 0;
+		return TRUE;
+	    }
+	}
+	return FALSE;
 }
 
 void
@@ -1413,8 +1608,9 @@ domove()
 		}
 
 		mtmp = m_at(x,y);
-		if (mtmp) {
+		if (mtmp && !is_safepet(mtmp)) {
 			/* Don't attack if you're running, and can see it */
+			/* It's fine to displace pets, though */
 			/* We should never get here if forcefight */
 			if (flags.run &&
 			    ((!Blind && mon_visible(mtmp) &&
@@ -1435,7 +1631,11 @@ domove()
 	tmpr = &levl[x][y];
 	/* attack monster */
 	if(mtmp) {
-	    nomul(0);
+	    /* don't stop travel when displacing pets; if the
+	       displace fails for some reason, attack() in uhitm.c
+	       will stop travel rather than domove */
+	    if (!is_safepet(mtmp) || flags.forcefight)
+		nomul(0);
 	    /* only attack if we know it's there */
 	    /* or if we used the 'F' command to fight blindly */
 	    /* or if it hides_under, in which case we call attack() to print
@@ -1450,7 +1650,7 @@ domove()
 	     * invisible monster--then, we fall through to attack() and
 	     * attack_check(), which still wastes a turn, but prints a
 	     * different message and makes the player remember the monster.		     */
-	    if(flags.nopick &&
+	    if(flags.nopick && !flags.travel &&
 		  (canspotmon(mtmp) || memory_is_invisible(x, y))){
 		if(mtmp->m_ap_type && !Protection_from_shape_changers
 						    && !sensemon(mtmp))
@@ -1529,6 +1729,9 @@ domove()
 		nomul(0);
 		return;
 	}
+	/* paranoid_confirm:trap */
+	if (avoid_known_trap(x, y))
+		return;
 	if(u.utrap) {
 		if(u.utraptype == TT_PIT) {
 		    climb_pit();
@@ -1632,6 +1835,13 @@ domove()
 	    return;
 	}
 
+	/* paranoid_confirm:swim - is it dangerous to step into water or lava? */
+	if (swim_move_danger(x, y)) {
+		flags.move = 0;
+		nomul(0);
+		return;
+	}
+
 	} else if (!test_move(u.ux, u.uy, x-u.ux, y-u.uy, TEST_MOVE)) {
 	    /*
 	     * If a monster attempted to displace us but failed
@@ -1730,13 +1940,21 @@ domove()
 		    sobj_at(BOULDER, trap->tx, trap->ty)) {
 		/* can't swap places with pet pinned in a pit by a boulder */
 		u.ux = u.ux0,  u.uy = u.uy0;	/* didn't move after all */
+#ifdef STEED
+		if (u.usteed) u.usteed->mx = u.ux, u.usteed->my = u.uy;
+#endif
+		nomul(0);	/* stop running or travelling */
 	    } else if (u.ux0 != x && u.uy0 != y &&
 		       bad_rock(mtmp, x, u.uy0) &&
 		       bad_rock(mtmp, u.ux0, y) &&
 		       (bigmonst(mtmp->data) || (curr_mon_load(mtmp) > 600))) {
 		/* can't swap places when pet won't fit thru the opening */
 		u.ux = u.ux0,  u.uy = u.uy0;	/* didn't move after all */
+#ifdef STEED
+		if (u.usteed) u.usteed->mx = u.ux, u.usteed->my = u.uy;
+#endif
 		You("stop.  %s won't fit through.", upstart(y_monnam(mtmp)));
+		nomul(0);
 	    } else {
 		char pnambuf[BUFSZ];
 
@@ -2401,8 +2619,10 @@ lookaround()
 		    mtmp->m_ap_type != M_AP_FURNITURE &&
 		    mtmp->m_ap_type != M_AP_OBJECT &&
 		    (!mtmp->minvis || See_invisible) && !mtmp->mundetected) {
-	    if((flags.run != 1 && !mtmp->mtame)
-					|| (x == u.ux+u.dx && y == u.uy+u.dy))
+	    /* stop for a monster that might be hostile, or for any
+	       monster in our way unless travel can step around it */
+	    if((flags.run != 1 && !is_safemon(mtmp))
+		    || (x == u.ux+u.dx && y == u.uy+u.dy && !flags.travel))
 		goto stop;
 	}
 
@@ -2417,7 +2637,10 @@ lookaround()
 		  (mtmp->mappearance == S_hcdoor ||
 		   mtmp->mappearance == S_vcdoor))) {
 	    if(x != u.ux && y != u.uy) continue;
-	    if(flags.run != 1) goto stop;
+	    /* travel passes doors it isn't going through, e.g. when
+	       walking along a room wall */
+	    if(flags.run != 1 && !flags.travel) goto stop;
+	    /* orthogonal to a closed door, consider it a corridor */
 	    goto bcorr;
 	} else if (levl[x][y].typ == CORR) {
 bcorr:

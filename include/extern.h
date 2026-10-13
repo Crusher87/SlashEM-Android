@@ -206,6 +206,8 @@ E char NDECL(readchar);
 E void NDECL(sanity_check);
 #endif
 E char FDECL(yn_function, (const char *, const char *, CHAR_P));
+E char FDECL(paranoid_ynq, (BOOLEAN_P,const char *,BOOLEAN_P));
+E boolean FDECL(paranoid_query, (BOOLEAN_P,const char *));
 
 /* ### dbridge.c ### */
 
@@ -348,6 +350,8 @@ E void NDECL(deferred_goto);
 E boolean FDECL(revive_corpse, (struct obj *, BOOLEAN_P));
 E void FDECL(revive_mon, (genericptr_t, long));
 E void FDECL(moldy_corpse, (genericptr_t, long));
+E boolean FDECL(cmd_safety_prevention, (const char *,const char *,
+					 const char *,int *));
 E int NDECL(donull);
 E int NDECL(dowipe);
 E void FDECL(set_wounded_legs, (long,int));

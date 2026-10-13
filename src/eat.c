@@ -2774,7 +2774,8 @@ register int num;
 			victual.fullwarn = TRUE;
 			if (victual.canchoke && victual.reqtime > 1) {
 			    /* a one-gulp food will not survive a stop */
-			    if (yn_function("Stop eating?",ynchars,'y')=='y') {
+			    if (!paranoid_query(ParanoidEating,
+						"Continue eating?")) {
 				reset_eat();
 				nomovemsg = (char *)0;
 			    }

@@ -36,6 +36,10 @@ OPTIONS=scores:10 top/2 around/own
 OPTIONS=!autopickup
 
 OPTIONS=lit_corridor,showexp,time,toptenwin,IBMgraphics,runmode:walk
+# Ask before praying or stepping onto a known trap, refuse to walk into
+# water or lava without the 'm' prefix, and protect against mis-tapping
+# 'A' (auto-select every item) in drop and take-out menus
+OPTIONS=paranoid_confirmation:pray swim trap Autoall
 OPTIONS=pile_limit:2,hilite_pet,boulder:0
 # Show shop prices you were quoted next to unidentified items
 OPTIONS=price_quotes

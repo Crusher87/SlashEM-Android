@@ -548,6 +548,9 @@ the same conditions as the `G' command, but without picking up
 objects, similar to the `M' command.  For ports with mouse 
 support, the command is also invoked when a mouse-click takes place on a 
 location other than the current position.
+If travel was interrupted, the cursor starts on its destination;
+type `.' or `_' to continue there.
+See also `#retravel'.
 .lp .
 Rest, do nothing for one turn.
 .lp a
@@ -774,6 +777,9 @@ Offer a sacrifice to the gods.
 Pray to the gods for help.
 .lp #quit
 Quit the program without saving your game.
+.lp #retravel
+Travel to the previously selected travel destination again.
+Default key is `^_'.
 .lp #ride
 Ride (or stop riding) a monster.
 .lp #rub
@@ -2140,6 +2146,34 @@ Specify the order to list object types in (default ``")[%?+!=/(*`0_'').
 The value of this option should be a string containing the
 symbols for the various object types.  Any omitted types are filled in
 at the end from the previous order.
+.lp paranoid_confirmation
+A space separated list of specific situations where alternate
+prompting is desired.  The default is ``paranoid_confirmation:pray swim trap''.
+.sd
+.si
+Confirm - for any prompts which are set to require ``yes'' rather than `y',
+          also require ``no'' to reject instead of accepting any non-yes
+          response as no;
+quit    - ``yes'' vs `y' to confirm quitting or to enter explore mode;
+die     - ``yes'' vs `y' to confirm dying (in explore or debug mode);
+bones   - ``yes'' vs `y' to save bones data when dying in debug mode;
+attack  - ``yes'' vs `y' to confirm attacking a peaceful monster;
+wand-break - ``yes'' vs `y' to confirm breaking a wand;
+eat     - ``yes'' vs `y' to continue eating after the first warning;
+Were-change - ``yes'' vs `y' to confirm changing form due to lycanthropy;
+pray    - `y' to confirm an attempt to pray (replaces ``prayconfirm'');
+trap    - `y' to confirm stepping onto a known trap, unless it is harmless;
+swim    - refuse to step into known water or lava unless the move is
+          prefixed with `m';
+Autoall - `y' to confirm choosing `A' (auto-select every relevant item)
+          by itself in a menustyle:full menu; without it, `A' only takes
+          effect together with other choices;
+Remove  - always pick from inventory for `R' and `T' even when wearing
+          just one applicable item.
+.ei
+.ed
+By default, the pray, swim and trap choices are enabled, the others disabled.
+To disable them all, use ``paranoid_confirmation:none''.
 .lp perm_invent
 If true, always display your current inventory in a window.  This only
 makes sense for windowing system interfaces that implement this feature.
@@ -2168,8 +2202,6 @@ compile time option AUTOPICKUP_EXCEPTIONS included, you may be able to use
 configuration file lines to further refine
 .op autopickup
 behavior.
-.lp prayconfirm
-Prompt for confirmation before praying (default on).
 .lp price_quotes
 When an object you haven't identified is named, also show the range of
 shop prices you have been quoted for buying and selling one of that kind
@@ -2208,6 +2240,10 @@ used `teleport' only.  Whether or not the effect is noticeable will
 depend upon the window port used or on the type of terminal.
 .lp safe_pet
 Prevent you from (knowingly) attacking your pets (default on).
+.lp safe_wait
+Refuse to wait (`.') or search (`s') while a hostile monster is next to you
+or while you are turning to stone or slime, being strangled or fatally ill;
+prefix the command with `m' or give it a count to do it anyway (default on).
 .lp scores
 Control what parts of the score list you are shown at the end (ex.
 ``scores:5 top scores/4 around my score/own scores'').  Only the first
@@ -2283,9 +2319,10 @@ magic portal, web, statue trap, magic trap, anti-magic field, polymorph trap.
 
 Cannot be set with the `O' command.
 .lp travel
-Allow the travel command (default on).  Turning this option off will
-prevent the game from attempting unintended moves if you make inadvertent
-mouse clicks on the map window.
+Allow the travel command via mouse click (default on).  Turning this
+option off will prevent the game from attempting unintended moves if you
+make inadvertent mouse clicks on the map window.  Does not affect
+travelling via the `_' command.
 .lp verbose
 Provide more commentary during the game (default on).
 .lp windowtype

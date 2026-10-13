@@ -680,7 +680,7 @@ int retry;
 #endif
     menu_item *pick_list;
     boolean all_categories = TRUE;
-    boolean drop_everything = FALSE;
+    boolean drop_everything = FALSE, autopick = FALSE;
 
 #ifndef GOLDOBJ
     if (u.ugold) {
@@ -703,14 +703,22 @@ int retry;
 			UNPAID_TYPES | ALL_TYPES | CHOOSE_ALL |
 			BUC_BLESSED | BUC_CURSED | BUC_UNCURSED | BUC_UNKNOWN,
 			&pick_list, PICK_ANY);
+	/* when paranoid_confirm:Autoall is set, 'A' by itself is confirmed
+	   and drops everything; when it isn't, 'A' by itself is rejected by
+	   query_category() and result here will be n==0 */
 	if (!n) goto drop_done;
+	/* 'A' together with other choices drops what they match without
+	   a second menu */
+	drop_everything = TRUE;
 	for (i = 0; i < n; i++) {
 	    if (pick_list[i].item.a_int == ALL_TYPES_SELECTED)
 		all_categories = TRUE;
 	    else if (pick_list[i].item.a_int == 'A')
-		drop_everything = TRUE;
-	    else
+		autopick = TRUE;
+	    else {
 		add_valid_menu_class(pick_list[i].item.a_int);
+		drop_everything = FALSE;
+	    }
 	}
 	free((genericptr_t) pick_list);
     } else if (flags.menu_style == MENU_COMBINATION) {
@@ -725,10 +733,11 @@ int retry;
 	}
     }
 
-    if (drop_everything) {
+    if (autopick) {
 	for(otmp = invent; otmp; otmp = otmp2) {
 	    otmp2 = otmp->nobj;
-	    n_dropped += drop(otmp);
+	    if (drop_everything || all_categories || allow_category(otmp))
+		n_dropped += drop(otmp);
 	}
     } else {
 	/* should coordinate with perm invent, maybe not show worn items */
@@ -1089,6 +1098,9 @@ boolean at_stairs, falling, portal;
 
 	fd = currentlevel_rewrite();
 	if (fd < 0) return;
+
+	/* discard context which applies to the level we're leaving */
+	iflags.travelcc.x = iflags.travelcc.y = -1;	/* travel destination */
 
 	if (falling) /* assuming this is only trap door or hole */
 	    impact_drop((struct obj *)0, u.ux, u.uy, newlevel->dlevel);
@@ -1828,9 +1840,43 @@ long timeout;
     }
 }
 
+/* safe_wait: refuse to rest or search when that looks like a mistake;
+   the 'm' prefix or a count overrides */
+boolean
+cmd_safety_prevention(ucverb, cmddesc, act, flagcounter)
+const char *ucverb;	/* "Waiting" */
+const char *cmddesc;	/* "a no-op (to rest)" */
+const char *act;	/* "Are you waiting to get hit?" */
+int *flagcounter;	/* show the hint about 'm' only the first time */
+{
+	if (flags.safe_wait && !iflags.menu_requested && !multi) {
+	    char buf[QBUFSZ];
+
+	    buf[0] = '\0';
+	    if (iflags.cmdassist || !(*flagcounter)++)
+		Sprintf(buf, "  Use 'm' prefix to force %s.", cmddesc);
+
+	    if (monster_nearby()) {
+		Norep("%s%s", act, buf);
+		return TRUE;
+	    } else if (Stoned || Slimed || Strangled || Sick) {
+		Norep("%s doesn't feel like a good idea right now.", ucverb);
+		return TRUE;
+	    }
+	}
+	*flagcounter = 0;
+	return FALSE;
+}
+
 int
 donull()
 {
+	static int did_nothing_flag = 0;
+
+	if (cmd_safety_prevention("Waiting", "a no-op (to rest)",
+				  "Are you waiting to get hit?",
+				  &did_nothing_flag))
+	    return 0;
 	return(1);	/* Do nothing, but let other things happen */
 }
 

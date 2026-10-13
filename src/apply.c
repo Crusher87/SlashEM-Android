@@ -3105,7 +3105,7 @@ do_break_wand(obj)
     Sprintf(confirm, "Are you really sure you want to break %s?",
 	safe_qbuf("", sizeof("Are you really sure you want to break ?"),
 				the_wand, ysimple_name(obj), "the wand"));
-    if (yn(confirm) == 'n' ) return 0;
+    if (!paranoid_query(ParanoidBreakwand, confirm)) return 0;
 
     if (nohands(youmonst.data)) {
 	You_cant("break %s without hands!", the_wand);
