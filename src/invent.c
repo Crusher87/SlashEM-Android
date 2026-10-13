@@ -2568,7 +2568,7 @@ boolean picked_some;
 	}
 
 	if (!otmp || is_lava(u.ux,u.uy) || (is_pool(u.ux,u.uy) && !Underwater)) {
-		if (dfeature) pline(fbuf);
+		if (dfeature) pline("%s", fbuf);
 		sense_engr_at(u.ux, u.uy, FALSE); /* Eric Backus */
 		if (!skip_objects && (Blind || !dfeature))
 		    You("%s no objects here.", verb);
@@ -2577,7 +2577,7 @@ boolean picked_some;
 	/* we know there is something here */
 
 	if (skip_objects) {
-	    if (dfeature) pline(fbuf);
+	    if (dfeature) pline("%s", fbuf);
 	    sense_engr_at(u.ux, u.uy, FALSE); /* Eric Backus */
 	    There("are %s%s objects here.",
 #ifdef ANDROID
@@ -2590,7 +2590,7 @@ boolean picked_some;
 		 , picked_some ? " more" : "");
 	} else if (!otmp->nexthere) {
 	    /* only one object */
-	    if (dfeature) pline(fbuf);
+	    if (dfeature) pline("%s", fbuf);
 	    sense_engr_at(u.ux, u.uy, FALSE); /* Eric Backus */
 #ifdef INVISIBLE_OBJECTS
 	    if (otmp->oinvis && !See_invisible) verb = "feel";

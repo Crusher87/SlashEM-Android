@@ -1546,17 +1546,20 @@ int thrown;
 		char *whom = mon_nam(mon);
 		char silverobjbuf[BUFSZ];
 
+		silverobjbuf[0] = '\0';
 		if (canspotmon(mon)) {
 		    if (barehand_silver_rings == 1)
 			fmt = "Your silver ring sears %s!";
 		    else if (barehand_silver_rings == 2)
 			fmt = "Your silver rings sear %s!";
 		    else if (silverobj && saved_oname[0]) {
-		    	Sprintf(silverobjbuf, "Your %s%s %s %%s!",
+			/* saved_oname[] might contain a player-given name,
+			   so it must not become part of a format string */
+		    	Sprintf(silverobjbuf, "Your %s%s %s",
 		    		strstri(saved_oname, "silver") ?
 					"" : "silver ",
 				saved_oname, vtense(saved_oname, "sear"));
-		    	fmt = silverobjbuf;
+		    	fmt = "%s %s!";
 		    } else
 			fmt = "The silver sears %s!";
 		} else {
@@ -1566,7 +1569,10 @@ int thrown;
 		/* note: s_suffix returns a modifiable buffer */
 		if (!noncorporeal(mdat))
 		    whom = strcat(s_suffix(whom), " flesh");
-		pline(fmt, whom);
+		if (silverobjbuf[0])
+		    pline(fmt, silverobjbuf, whom);
+		else
+		    pline(fmt, whom);
 	}
 
 	if (needpoismsg)
