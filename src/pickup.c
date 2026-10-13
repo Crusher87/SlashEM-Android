@@ -721,6 +721,11 @@ boolean FDECL((*allow), (OBJ_P));/* allow function */
 	if (n == 0)	/* nothing to pick here */
 	    return (qflags & SIGNAL_NOMENU) ? -1 : 0;
 
+	/* don't autoselect an item worn by an engulfer; the menu shows it */
+	if (n == 1 && last->where == OBJ_MINVENT && last->owornmask != 0L &&
+		u.uswallow && last->ocarry == u.ustuck)
+	    qflags &= ~AUTOSELECT_SINGLE;
+
 	if (n == 1 && (qflags & AUTOSELECT_SINGLE)) {
 	    *pick_list = (menu_item *) alloc(sizeof(menu_item));
 	    (*pick_list)->item.a_obj = last;
@@ -1273,6 +1278,11 @@ boolean telekinesis;	/* not picking it up directly by hand */
 		obj->dknown = 1;
 
 	if (obj == uchain) {    /* do not pick up attached chain */
+	    return 0;
+	} else if (obj->where == OBJ_MINVENT && obj->owornmask != 0L &&
+		    u.uswallow && obj->ocarry == u.ustuck) {
+	    /* engulfer is wearing or wielding it */
+	    You_cant("pick %s up.", ysimple_name(obj));
 	    return 0;
 	} else if (obj->oartifact && !touch_artifact(obj,&youmonst)) {
 	    return 0;
