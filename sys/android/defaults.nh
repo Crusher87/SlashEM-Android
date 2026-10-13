@@ -37,6 +37,8 @@ OPTIONS=!autopickup
 
 OPTIONS=lit_corridor,showexp,time,toptenwin,IBMgraphics,runmode:walk
 OPTIONS=pile_limit:2,hilite_pet,boulder:0
+# Show shop prices you were quoted next to unidentified items
+OPTIONS=price_quotes
 #OPTIONS=!automenu
 
 # Colorize individual rows on a menu based on what regular expressions match its text

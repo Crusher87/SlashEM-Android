@@ -116,6 +116,11 @@ struct objclass {
 #define oc_level	oc_oc2		/* books: spell level */
 
 	unsigned short	oc_nutrition;	/* food value */
+
+	/* price notes: lowest and highest shop prices the hero has been
+	   quoted for one of these; 0 if none (shk.c, price_quotes) */
+	long	oc_buy_minseen, oc_buy_maxseen;
+	long	oc_sell_minseen, oc_sell_maxseen;
 };
 
 struct objdescr {

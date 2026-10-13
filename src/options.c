@@ -197,6 +197,7 @@ static struct Bool_Opt
 	{"popup_dialog",  &iflags.wc_popup_dialog, FALSE, SET_IN_GAME},	/*WC*/
 	{"prayconfirm", &flags.prayconfirm, TRUE, SET_IN_GAME},
 	{"preload_tiles", &iflags.wc_preload_tiles, TRUE, DISP_IN_GAME},	/*WC*/
+	{"price_quotes", &iflags.pricequotes, FALSE, SET_IN_GAME},
 	{"pushweapon", &flags.pushweapon, FALSE, SET_IN_GAME},
 	{"radar", (boolean *)0, FALSE, SET_IN_FILE},	/* OBSOLETE */
 #if defined(MICRO) && !defined(AMIGA)

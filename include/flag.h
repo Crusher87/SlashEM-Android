@@ -208,6 +208,7 @@ struct instance_flags {
 	uchar	bouldersym;	/* symbol for boulder display */
 	boolean	travel1;	/* first travel step */
 	coord	travelcc;	/* coordinates for travel_cache */
+	boolean  pricequotes;	/* show remembered shop prices of unIDed objects */
 #ifdef WIZARD
 	boolean  sanity_check;	/* run sanity checks */
 	boolean  mon_polycontrol;	/* debug: control monster polymorphs */

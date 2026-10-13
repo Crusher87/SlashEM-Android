@@ -147,8 +147,12 @@ register char oclass;
 	for (i = 0; i < MAXOCLASSES; i++)
 		bases[i] = 0;
 	/* initialize object descriptions */
-	for (i = 0; i < NUM_OBJECTS; i++)
+	for (i = 0; i < NUM_OBJECTS; i++) {
 		objects[i].oc_name_idx = objects[i].oc_descr_idx = i;
+		/* no shop prices noted yet */
+		objects[i].oc_buy_minseen = objects[i].oc_buy_maxseen = 0L;
+		objects[i].oc_sell_minseen = objects[i].oc_sell_maxseen = 0L;
+	}
 	/* init base; if probs given check that they add up to 1000,
 	   otherwise compute probs */
 	first = 0;
@@ -461,6 +465,7 @@ dodiscovered()				/* free after Robert Viduya */
 		}
 		Sprintf(buf, "%s %s",(objects[dis].oc_pre_discovered ? "*" : " "),
 				obj_typename(dis));
+		append_price_quote(buf, BUFSZ, dis);
 		add_menu(tmpwin, objnum_to_glyph(dis), &any, 0, 0,
 		  ATR_NONE, buf, MENU_UNSELECTED);
 	    }
