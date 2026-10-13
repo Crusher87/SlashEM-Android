@@ -36,9 +36,13 @@ STATIC_DCL int FDECL(menu_loot, (int, struct obj *, BOOLEAN_P));
 STATIC_DCL int FDECL(in_or_out_menu, (const char *,struct obj *, BOOLEAN_P, BOOLEAN_P));
 STATIC_DCL int FDECL(container_at, (int, int, BOOLEAN_P));
 STATIC_DCL boolean FDECL(able_to_loot, (int, int, BOOLEAN_P));
+STATIC_DCL int FDECL(do_loot_cont, (struct obj **, int, int));
 STATIC_DCL void FDECL(removed_from_icebox, (struct obj *));
 STATIC_DCL int FDECL(tipcontainer, (struct obj *));
 STATIC_DCL boolean FDECL(mon_beside, (int, int));
+
+/* set by do_loot_cont() when #loot must stop early */
+static boolean abort_looting = FALSE;
 
 /* define for query_objlist() and autopickup() */
 #define FOLLOW(curr, flags) \
@@ -1539,6 +1543,56 @@ int x, y;
 	return FALSE;
 }
 
+/* open one floor container for #loot; sets abort_looting when the
+   looting should stop (chest trap, magic bag explosion, forcing a lock) */
+STATIC_OVL int
+do_loot_cont(cobjp, cindex, ccount)
+struct obj **cobjp;
+int cindex, ccount;	/* index of this container (1..N), number of them (N) */
+{
+	struct obj *cobj = *cobjp;
+	int timepassed;
+
+	if (!cobj) return 0;
+	if (cobj->olocked) {
+#ifdef ANDROID
+		if (flags.autokick && can_force()) {
+			u.dx = u.dy = u.dz = 0;
+			if (doforce_specific(TRUE, cobj)) {
+				/* forcing the lock is now an occupation */
+				abort_looting = TRUE;
+				return 1;
+			}
+			return 0;
+		}
+#endif
+		if (ccount < 2)
+			pline("Hmmm, it seems to be locked.");
+		else
+			pline("Hmmm, %s seems to be locked.", the(xname(cobj)));
+		return 0;
+	}
+	if (cobj->otyp == BAG_OF_TRICKS) {
+		int tmp;
+		You("carefully open %s...", the(xname(cobj)));
+		pline("It develops a huge set of teeth and bites you!");
+		tmp = rnd(10);
+		if (Half_physical_damage) tmp = (tmp+1) / 2;
+		losehp(tmp, "carnivorous bag", KILLED_BY_AN);
+		makeknown(BAG_OF_TRICKS);
+		return 1;
+	}
+
+	You("carefully open %s...", the(xname(cobj)));
+	timepassed = use_container(cobjp, 0);
+	/* might have triggered chest trap or magic bag explosion */
+	if (multi < 0 || !*cobjp) {
+		abort_looting = TRUE;
+		return 1;
+	}
+	return timepassed;
+}
+
 int
 doloot()	/* loot a container on the floor or loot saddle from mon. */
 {
@@ -1549,9 +1603,11 @@ doloot()	/* loot a container on the floor or loot saddle from mon. */
     boolean underfoot = TRUE;
     const char *dont_find_anything = "don't find anything";
     struct monst *mtmp;
-    char qbuf[BUFSZ];
     int prev_inquiry = 0;
     boolean prev_loot = FALSE;
+    int num_conts = 0;
+
+    abort_looting = FALSE;
 
     if (check_capacity((char *)0)) {
 	/* "Can't do that while carrying so much stuff." */
@@ -1565,50 +1621,54 @@ doloot()	/* loot a container on the floor or loot saddle from mon. */
 
 lootcont:
 
-    if (container_at(cc.x, cc.y, FALSE)) {
+    if ((num_conts = container_at(cc.x, cc.y, TRUE)) > 0) {
 	boolean any = FALSE;
 
 	if (!able_to_loot(cc.x, cc.y, TRUE)) return 0;
-	for (cobj = level.objects[cc.x][cc.y]; cobj; cobj = nobj) {
-	    nobj = cobj->nexthere;
+	if (num_conts > 1) {
+	    /* use a menu to loot many containers */
+	    int n, i;
+	    winid win;
+	    anything any_cont;
+	    menu_item *pick_list = (menu_item *)0;
 
-	    if (Is_container(cobj)) {
-		Sprintf(qbuf, "There is %s here, loot it?",
-			safe_qbuf("", sizeof("There is  here, loot it?"),
-			     doname(cobj), an(simple_typename(cobj->otyp)),
-			     "a container"));
-		c = ynq(qbuf);
-		if (c == 'q') return (timepassed);
-		if (c == 'n') continue;
-		any = TRUE;
-
-		if (cobj->olocked) {
-#ifdef ANDROID
-			if (flags.autokick && can_force()) {
-				u.dx = u.dy = u.dz = 0;
-				if(doforce_specific(TRUE, cobj))
-					return 1;
-			} else
-#endif
-		    pline("Hmmm, it seems to be locked.");
-		    continue;
+	    any_cont.a_void = 0;
+	    win = create_nhwindow(NHW_MENU);
+	    start_menu(win);
+	    for (cobj = level.objects[cc.x][cc.y]; cobj; cobj = cobj->nexthere)
+		if (Is_container(cobj)) {
+		    any_cont.a_obj = cobj;
+		    add_menu(win, NO_GLYPH, &any_cont, 0, 0, ATR_NONE,
+			     doname(cobj), MENU_UNSELECTED);
 		}
-		if (cobj->otyp == BAG_OF_TRICKS) {
-		    int tmp;
-		    You("carefully open the bag...");
-		    pline("It develops a huge set of teeth and bites you!");
-		    tmp = rnd(10);
-		    if (Half_physical_damage) tmp = (tmp+1) / 2;
-		    losehp(tmp, "carnivorous bag", KILLED_BY_AN);
-		    makeknown(BAG_OF_TRICKS);
-		    timepassed = 1;
-		    continue;
-		}
+	    end_menu(win, "Loot which containers?");
+	    n = select_menu(win, PICK_ANY, &pick_list);
+	    destroy_nhwindow(win);
 
-		You("carefully open %s...", the(xname(cobj)));
-		timepassed |= use_container(&cobj, 0);
-		/* might have triggered chest trap or magic bag explosion */
-		if (multi < 0 || !cobj) return 1;
+	    if (n > 0) {
+		for (i = 1; i <= n; i++) {
+		    cobj = pick_list[i - 1].item.a_obj;
+		    timepassed |= do_loot_cont(&cobj, i, n);
+		    if (abort_looting) {
+			/* chest trap, magic bag explosion, forcing a lock */
+			free((genericptr_t)pick_list);
+			return timepassed;
+		    }
+		}
+		free((genericptr_t)pick_list);
+	    }
+	    if (n != 0) any = TRUE;
+	} else {
+	    /* just one container here: open it without asking */
+	    for (cobj = level.objects[cc.x][cc.y]; cobj; cobj = nobj) {
+		nobj = cobj->nexthere;
+
+		if (Is_container(cobj)) {
+		    any = TRUE;
+		    timepassed |= do_loot_cont(&cobj, 1, 1);
+		    if (abort_looting) return timepassed;
+		    break;
+		}
 	    }
 	}
 	if (any) c = 'y';
