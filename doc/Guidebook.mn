@@ -1840,6 +1840,7 @@ a - disclose your attributes.
 v - summarize monsters that have been vanquished.
 g - list monster species that have been genocided.
 c - display your conduct.
+o - display dungeon overview.
 .ei
 .ed
 Each disclosure possibility can optionally be preceded by a prefix which

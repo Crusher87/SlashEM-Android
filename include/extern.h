@@ -212,6 +212,7 @@ E char FDECL(yn_function, (const char *, const char *, CHAR_P));
 E boolean FDECL(is_pool, (int,int));
 E boolean FDECL(is_lava, (int,int));
 E boolean FDECL(is_ice, (int,int));
+E schar FDECL(db_under_typ, (int));
 E int FDECL(is_drawbridge_wall, (int,int));
 E boolean FDECL(is_db_wall, (int,int));
 E boolean FDECL(find_drawbridge, (int *,int*));
@@ -526,6 +527,7 @@ E xchar FDECL(real_dunlevs_in_dungeon, (d_level *));
 E xchar FDECL(ledger_to_dnum, (XCHAR_P));
 E xchar FDECL(ledger_to_dlev, (XCHAR_P));
 E xchar FDECL(deepest_lev_reached, (BOOLEAN_P));
+E boolean FDECL(builds_up, (d_level *));
 E boolean FDECL(on_level, (d_level *,d_level *));
 E void FDECL(next_level, (BOOLEAN_P));
 E void FDECL(prev_level, (BOOLEAN_P));
@@ -559,6 +561,17 @@ E schar FDECL(lev_by_name, (const char *));
 #ifdef WIZARD
 E schar FDECL(print_dungeon, (BOOLEAN_P,schar *,xchar *));
 #endif
+E void FDECL(recbranch_mapseen, (d_level *,d_level *));
+E char *FDECL(get_annotation, (d_level *));
+E int NDECL(donamelevel);
+E void FDECL(forget_mapseen, (int));
+E void FDECL(remdun_mapseen, (int));
+E void FDECL(init_mapseen, (d_level *));
+E void NDECL(recalc_mapseen);
+E void FDECL(mapseen_temple, (struct monst *));
+E void FDECL(room_discovered, (int));
+E int NDECL(dooverview);
+E void FDECL(show_overview, (int,int));
 
 /* ### eat.c ### */
 
@@ -1206,6 +1219,7 @@ E struct permonst *NDECL(realzoomon);
 E void FDECL(save_rooms, (int));
 E void FDECL(rest_rooms, (int));
 E struct mkroom *FDECL(search_special, (SCHAR_P));
+E int FDECL(cmap_to_type, (int));
 
 /* ### mon.c ### */
 

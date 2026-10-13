@@ -163,7 +163,7 @@ struct flag {
 	int      boot_count; /* boots from fishing pole */
 	char	 inv_order[MAXOCLASSES];
 	char	 pickup_types[MAXOCLASSES];
-#define NUM_DISCLOSURE_OPTIONS         5
+#define NUM_DISCLOSURE_OPTIONS         6	/* i,a,v,g,c,o (decl.c) */
 #define DISCLOSE_PROMPT_DEFAULT_YES    'y'
 #define DISCLOSE_PROMPT_DEFAULT_NO     'n'
 #define DISCLOSE_YES_WITHOUT_PROMPT    '+'

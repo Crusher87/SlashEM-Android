@@ -48,7 +48,7 @@ E NEARDATA int in_doagain;
 
 E struct dgn_topology {		/* special dungeon levels for speed */
     d_level	d_oracle_level;
-    d_level	d_bigroom_level;	/* unused */
+    d_level	d_bigroom_level;	/* for #overview */
 #ifdef REINCARNATION
     d_level	d_rogue_level;
 #endif
@@ -163,6 +163,8 @@ E NEARDATA char tune[6];
 
 #define MAXLINFO (MAXDUNGEON * MAXLEVEL)
 E struct linfo level_info[MAXLINFO];
+
+E schar lastseentyp[COLNO][ROWNO];	/* last seen/touched dungeon typ */
 
 E NEARDATA struct sinfo {
 	int gameover;		/* self explanatory? */

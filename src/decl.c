@@ -76,7 +76,7 @@ const char ynaqchars[] = "ynaq";
 const char ynNaqchars[] = "yn#aq";
 NEARDATA long yn_number = 0L;
 
-const char disclosure_options[] = "iavgc";
+const char disclosure_options[] = "iavgco";
 
 #if defined(MICRO) || defined(WIN32)
 char hackdir[PATHLEN];		/* where rumors, help, record are */
@@ -95,6 +95,8 @@ const char *allbones = "bones*.*";
 #endif
 
 struct linfo level_info[MAXLINFO];
+
+schar lastseentyp[COLNO][ROWNO] = { DUMMY }; /* last seen/touched dungeon typ */
 
 NEARDATA struct sinfo program_state;
 

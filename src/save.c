@@ -595,6 +595,7 @@ int mode;
 #else
 	bwrite(fd,(genericptr_t) levl,sizeof(levl));
 #endif /* RLECOMP */
+	bwrite(fd, (genericptr_t) lastseentyp, sizeof lastseentyp);
 
 	bwrite(fd,(genericptr_t) &monstermoves,sizeof(monstermoves));
 	bwrite(fd,(genericptr_t) &upstair,sizeof(stairway));

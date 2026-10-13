@@ -358,6 +358,7 @@ struct obj *corpse;
 	    levl[x][y].seenv = 0;
 	    levl[x][y].waslit = 0;
 	    clear_memory_glyph(x, y, S_stone);
+	    lastseentyp[x][y] = 0;
 	}
 
 	fd = create_bonesfile(&u.uz, &bonesid, whynot);

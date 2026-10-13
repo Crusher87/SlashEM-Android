@@ -2214,7 +2214,7 @@ goodfruit:
 		 * There is an array in flags:
 		 *	end_disclose[NUM_DISCLOSURE_OPT];
 		 * with option settings for the each of the following:
-		 * iagvc [see disclosure_options in decl.c]:
+		 * iagvco [see disclosure_options in decl.c]:
 		 * Legal setting values in that array are:
 		 *	DISCLOSE_PROMPT_DEFAULT_YES  ask with default answer yes
 		 *	DISCLOSE_PROMPT_DEFAULT_NO   ask with default answer no
@@ -3302,7 +3302,8 @@ boolean setinitial,setfromfile;
          * must correspond to disclosure_options in decl.h
          */
 	static const char *disclosure_names[] = {
-		"inventory", "attributes", "vanquished", "genocides", "conduct"
+		"inventory", "attributes", "vanquished", "genocides", "conduct",
+		"dungeon overview"
 	};
 	int disc_cat[NUM_DISCLOSURE_OPTIONS];
 	const char *disclosure_name;

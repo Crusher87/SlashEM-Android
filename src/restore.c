@@ -811,6 +811,7 @@ boolean ghostly;
 #else
 	mread(fd, (genericptr_t) levl, sizeof(levl));
 #endif	/* RLECOMP */
+	mread(fd, (genericptr_t) lastseentyp, sizeof(lastseentyp));
 
 	mread(fd, (genericptr_t)&omoves, sizeof(omoves));
 	mread(fd, (genericptr_t)&upstair, sizeof(stairway));

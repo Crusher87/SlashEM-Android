@@ -2399,6 +2399,7 @@
                     v - summarize monsters that have been vanquished.
                     g - list monster species that have been genocided.
                     c - display your conduct.
+                    o - display dungeon overview.
 
                Each disclosure possibility can optionally be preceded by  a
             prefix which let you refine how it behaves. Here are the  valid

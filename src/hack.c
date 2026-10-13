@@ -2184,6 +2184,7 @@ register boolean newlev;
 
 	for (ptr = &u.uentered[0]; *ptr; ptr++) {
 	    register int roomno = *ptr - ROOMOFFSET, rt = rooms[roomno].rtype;
+	    boolean msg_given = TRUE;
 
 	    /* Did we just enter some other special room? */
 	    /* vault.c insists that a vault remain a VAULT,
@@ -2254,13 +2255,18 @@ register boolean newlev;
 		    if(monstinroom(&mons[PM_ORACLE], roomno))
 			verbalize("%s, %s, welcome to Delphi!",
 					Hello((struct monst *) 0), plname);
+		    else
+			msg_given = FALSE;
 		    break;
 		case TEMPLE:
 		    intemple(roomno + ROOMOFFSET);
 		    /* fall through */
 		default:
+		    msg_given = (rt == TEMPLE);
 		    rt = 0;
 	    }
+	    if (msg_given)
+		room_discovered(roomno);
 
 	    if (rt != 0) {
 		rooms[roomno].rtype = OROOM;

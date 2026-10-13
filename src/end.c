@@ -430,6 +430,15 @@ boolean taken;
 		show_conduct(how >= PANICKED ? 1 : 2);
 	    if (c == 'q') done_stopprint++;
 	}
+
+	ask = should_query_disclose_option('o', &defquery);
+	if (!done_stopprint) {
+	    c = ask ? yn_function("Do you want to see the dungeon overview?",
+				  ynqchars, defquery) : defquery;
+	    if (c == 'y')
+		show_overview((how >= PANICKED) ? 1 : 2, how);
+	    if (c == 'q') done_stopprint++;
+	}
 }
 
 /* try to get the player back in a viable state after being killed */

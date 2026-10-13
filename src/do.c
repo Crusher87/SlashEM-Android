@@ -1005,6 +1005,7 @@ boolean at_stairs, falling, portal;
 	boolean new = FALSE;	/* made a new level? */
 	struct monst *mtmp;
 	char whynot[BUFSZ];
+	char *annotation;
 
 	if (dunlev(newlevel) > dunlevs_in_dungeon(newlevel))
 		newlevel->dlevel = dunlevs_in_dungeon(newlevel);
@@ -1087,6 +1088,7 @@ boolean at_stairs, falling, portal;
 	keepdogs(FALSE);
 	if (u.uswallow)				/* idem */
 		u.uswldtim = u.uswallow = 0;
+	recalc_mapseen(); /* recalculate map overview before we leave the level */
 	/*
 	 *  We no longer see anything on the level.  Make sure that this
 	 *  follows u.uswallow set to null since uswallow overrides all
@@ -1110,9 +1112,14 @@ boolean at_stairs, falling, portal;
 		cant_go_back ? FREE_SAVE : (WRITE_SAVE | FREE_SAVE));
 	bclose(fd);
 	if (cant_go_back) {
+	    extern int n_dgns;	/* from dungeon.c */
+
 	    /* discard unreachable levels; keep #0 */
 	    for (l_idx = maxledgerno(); l_idx > 0; --l_idx)
 		delete_levelfile(l_idx);
+	    /* mark #overview data for all dungeon branches as uninteresting */
+	    for (l_idx = 0; l_idx < n_dgns; ++l_idx)
+		remdun_mapseen(l_idx);
 	}
 
 #ifdef REINCARNATION
@@ -1122,12 +1129,23 @@ boolean at_stairs, falling, portal;
 #ifdef USE_TILES
 	substitute_tiles(newlevel);
 #endif
+	/* record this level transition as a potential seen branch unless using
+	 * some non-standard means of transportation (level teleport).
+	 */
+	if ((at_stairs || falling || portal) && (u.uz.dnum != newlevel->dnum))
+		recbranch_mapseen(&u.uz, newlevel);
 	assign_level(&u.uz0, &u.uz);
 	assign_level(&u.uz, newlevel);
 	assign_level(&u.utolev, newlevel);
 	u.utotype = 0;
-	if (dunlev_reached(&u.uz) < dunlev(&u.uz))
+	if (!builds_up(&u.uz)) {	/* usual case */
+	    if (dunlev_reached(&u.uz) < dunlev(&u.uz))
 		dunlev_reached(&u.uz) = dunlev(&u.uz);
+	} else {			/* Vlad's Tower is explored upwards */
+	    if (dunlev_reached(&u.uz) == 0
+		    || dunlev(&u.uz) < dunlev_reached(&u.uz))
+		dunlev_reached(&u.uz) = dunlev(&u.uz);
+	}
 	reset_rndmonst(NON_PM);   /* u.uz change affects monster generation */
 
 	/* set default level change destination areas */
@@ -1407,6 +1425,9 @@ boolean at_stairs, falling, portal;
 #ifdef INSURANCE
 	save_currentstate();
 #endif
+
+	if ((annotation = get_annotation(&u.uz)) != 0)
+	    You("remember this level as %s.", annotation);
 
 	/* assume this will always return TRUE when changing level */
 	(void) in_out_region(u.ux, u.uy);
