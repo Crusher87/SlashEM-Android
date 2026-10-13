@@ -520,14 +520,20 @@ struct obj *instr;
 	return(0);
     }
     if (instr->otyp != LEATHER_DRUM && instr->otyp != DRUM_OF_EARTHQUAKE) {
-	c = yn("Improvise?");
+	c = ynq("Improvise?");
+	if (c == 'q') goto nevermind;
     }
     if (c == 'n') {
-	if (u.uevent.uheard_tune == 2 && yn("Play the passtune?") == 'y') {
+	if (u.uevent.uheard_tune == 2)
+	    c = ynq("Play the passtune?");
+	if (c == 'q') {
+	    goto nevermind;
+	} else if (c == 'y') {
 	    Strcpy(buf, tune);
 	} else {
 	    getlin("What tune are you playing? [5 notes, A-G]", buf);
 	    (void)mungspaces(buf);
+	    if (*buf == '\033') goto nevermind;
 	    /* convert to uppercase and change any "H" to the expected "B" */
 	    for (s = buf; *s; s++) {
 #ifndef AMIGA
@@ -641,6 +647,10 @@ struct obj *instr;
 	return 1;
     } else
 	    return do_improvisation(instr);
+
+nevermind:
+    pline("Never mind.");
+    return 0;
 }
 
 #ifdef UNIX386MUSIC

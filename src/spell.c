@@ -976,6 +976,10 @@ boolean atme;
 			else if (!getdir((char *)0)) {
 			    /* getdir cancelled, re-use previous direction */
 			    pline_The("magical energy is released!");
+			    /* ...but never aim at yourself when there was
+			       no previous direction; the Android port also
+			       cancels an open direction prompt to save */
+			    if (!u.dx && !u.dy && !u.dz) break;
 			}
 			if(!u.dx && !u.dy && !u.dz) {
 			    if ((damage = zapyourself(pseudo, TRUE)) != 0) {
