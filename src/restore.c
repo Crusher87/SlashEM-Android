@@ -362,6 +362,7 @@ unsigned int *stuckid, *steedid;	/* STEED */
 {
 	/* discover is actually flags.explore */
 	boolean remember_discover = discover;
+	struct flag newgameflags;
 	struct obj *otmp, *bc_obj;
 	int uid;
 
@@ -376,6 +377,10 @@ unsigned int *stuckid, *steedid;	/* STEED */
 		return FALSE;
 	}
 
+	/* we want to be able to revert to command line/environment/config
+	   file option values instead of keeping old save file option values
+	   if partial restore fails and we resort to starting a new game */
+	newgameflags = flags;
 	mread(fd, (genericptr_t) &flags, sizeof(struct flag));
 	flags.bypasses = 0;	/* never use the saved value of bypasses */
 	if (remember_discover) discover = remember_discover;
@@ -399,6 +404,8 @@ unsigned int *stuckid, *steedid;	/* STEED */
 	    wiz1_level.dlevel = 0;
 	    u.uz.dnum = 0;
 	    u.uz.dlevel = 1;
+	    /* revert to pre-restore option settings */
+	    flags = newgameflags;
 	    return(FALSE);
 	}
 
