@@ -1,0 +1,7 @@
+bin
+app/libs/*
+app/assets/slashemdir
+gen
+.gradle
+build
+local.properties

@@ -40,7 +40,7 @@ DIRPERM  = 0755
 # These must agree with the definitions in unixconf.h
 
 # Defs. for non file areas support.
-GAMEDIR  = $(PWD)/sys/android/assets/$(GAME)dir
+GAMEDIR  = $(PWD)/sys/android/app/assets/$(GAME)dir
 VARDIR  = $(GAMEDIR)
 FILE_AREA_VAR = $(VARDIR)
 FILE_AREA_SAVE = $(VARDIR)/save
@@ -370,7 +370,7 @@ install: $(GAME) recover $(CNF_SHARE_DAT) dungeon spec_levs Guidebook.txt
 #	chmod $(DIRPERM) $(FILE_AREA_SHARE) $(FILE_AREA_UNSHARE)
 # set up the game files
 	( $(MAKE) dofiles )
-	( cd $(VARDIR) ; cp ../../defaults.nh ./ )
+	( cd $(VARDIR) ; cp ../../../defaults.nh ./ )
 # set up some additional files
 #	touch $(FILE_AREA_VAR)/perm $(FILE_AREA_VAR)/record $(FILE_AREA_VAR)/logfile
 #	-( cd $(FILE_AREA_VAR) ; $(CHOWN) $(GAMEUID) perm record logfile ; \

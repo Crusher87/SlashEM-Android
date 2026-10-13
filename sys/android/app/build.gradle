@@ -1,0 +1,42 @@
+plugins {
+  id 'com.android.application'
+}
+
+android {
+
+  compileSdkVersion 30
+  buildToolsVersion "30.0.3"
+
+  defaultConfig {
+    // Keep minSdkVersion in sync with API in Makefile.src
+    minSdkVersion 21
+    targetSdkVersion 30
+    versionName '0.0.7E7F3-1'
+    versionCode 101
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_7
+    targetCompatibility JavaVersion.VERSION_1_7
+  }
+
+  lintOptions {
+    disable 'MissingClass'
+    abortOnError false
+  }
+
+  sourceSets {
+    main {
+      manifest.srcFile 'AndroidManifest.xml'
+      res.srcDirs = ['res']
+      assets.srcDirs = ['assets']
+      jniLibs.srcDirs = ['libs']
+    }
+  }
+}
+
+dependencies {
+  // ForkFront 1.2 changed menu item ids to long; winandroid.c still passes
+  // int, so stay on 1.1 until the C side is updated.
+  implementation 'com.tbd.forkfront:lib:1.1'
+}
