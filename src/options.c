@@ -58,6 +58,7 @@ static struct Bool_Opt
 #else
 	{"asksavedisk", (boolean *)0, FALSE, SET_IN_GAME},
 #endif
+	{"autodescribe", &iflags.autodescribe, TRUE, SET_IN_GAME},
 	{"autodig", &flags.autodig, FALSE, SET_IN_GAME},
 #ifdef ANDROID
 	{"autokick", &flags.autokick, TRUE, SET_IN_GAME},
@@ -107,6 +108,7 @@ static struct Bool_Opt
 	{"fast_map", (boolean *)0, TRUE, SET_IN_FILE},
 #endif
 	{"female", &flags.female, FALSE, DISP_IN_GAME},
+	{"fireassist", &iflags.fireassist, TRUE, SET_IN_GAME},
 	{"fixinv", &flags.invlet_constant, TRUE, SET_IN_GAME},
 #ifdef AMIFLUSH
 	{"flush", &flags.amiflush, FALSE, SET_IN_GAME},
@@ -135,6 +137,7 @@ static struct Bool_Opt
 #else
 	{"invweight", (boolean *)0, FALSE, SET_IN_FILE},
 #endif
+	{"item_actions", &iflags.item_actions, TRUE, SET_IN_GAME},
 /*WAC the keep savefile option...*/
 #ifdef KEEP_SAVE
 	{"keep_savefile", &flags.keep_savefile, FALSE, SET_IN_FILE},

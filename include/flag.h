@@ -322,7 +322,10 @@ struct instance_flags {
 	boolean wc2_softkeyboard;	/* use software keyboard */
 	boolean wc2_wraptext;		/* wrap text */
 
+	boolean  autodescribe;	/* show description of map spot under getpos cursor */
 	boolean  cmdassist;	/* provide detailed assistance for some commands */
+	boolean  fireassist;	/* 'f' readies a launcher or uses a polearm */
+	boolean  item_actions;	/* choosing an item in 'i' offers actions */
 	boolean	 obsolete;	/* obsolete options can point at this, it isn't used */
 	/* Items which belong in flags, but are here to allow save compatibility */
 	boolean  lootabc;	/* use "a/b/c" rather than "o/i/b" when looting */

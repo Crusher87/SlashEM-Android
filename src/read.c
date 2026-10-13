@@ -42,6 +42,7 @@ static void FDECL(p_glow2,(struct obj *,const char *));
 static void FDECL(randomize,(int *, int));
 static void FDECL(forget_single_object, (int));
 static void FDECL(maybe_tame, (struct monst *,struct obj *));
+STATIC_PTR boolean FDECL(get_valid_stinking_cloud_pos, (int,int));
 
 STATIC_PTR void FDECL(set_lit, (int,int,genericptr_t));
 
@@ -849,6 +850,16 @@ struct obj *sobj;
 	}
 }
 
+/* where a stinking cloud can be centered (from NetHack 3.6); also a
+   getpos() callback for highlighting those spots */
+STATIC_PTR boolean
+get_valid_stinking_cloud_pos(x, y)
+int x, y;
+{
+	return (isok(x, y) && cansee(x, y) && ACCESSIBLE(levl[x][y].typ)
+		&& distu(x, y) < 32);
+}
+
 int
 seffects(sobj)
 register struct obj	*sobj;
@@ -1601,11 +1612,12 @@ register struct obj	*sobj;
 		pline("Where do you want to center the cloud?");
 		cc.x = u.ux;
 		cc.y = u.uy;
+		getpos_sethilite(get_valid_stinking_cloud_pos);
 		if (getpos(&cc, TRUE, "the desired position") < 0) {
 		    pline(Never_mind);
 		    return 0;
 		}
-		if (!cansee(cc.x, cc.y) || distu(cc.x, cc.y) >= 32) {
+		if (!get_valid_stinking_cloud_pos(cc.x, cc.y)) {
 		    You("smell rotten eggs.");
 		    return 0;
 		}

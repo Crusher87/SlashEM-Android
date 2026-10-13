@@ -46,6 +46,9 @@ E boolean FDECL(snuff_candle, (struct obj *));
 E boolean FDECL(snuff_lit, (struct obj *));
 E boolean FDECL(catch_lit, (struct obj *));
 E void FDECL(use_unicorn_horn, (struct obj *));
+E int FDECL(use_whip, (struct obj *));
+E int FDECL(use_pole, (struct obj *,BOOLEAN_P));
+E boolean NDECL(could_pole_mon);
 E boolean FDECL(tinnable, (struct obj *));
 E void NDECL(reset_trapset);
 E void FDECL(fig_transform, (genericptr_t, long));
@@ -361,12 +364,14 @@ E void NDECL(heal_legs);
 
 /* ### do_name.c ### */
 
+E void FDECL(getpos_sethilite, (boolean FDECL((*),(int,int))));
 E int FDECL(getpos, (coord *,BOOLEAN_P,const char *));
 E struct monst *FDECL(christen_monst, (struct monst *,const char *));
 E int NDECL(do_mname);
 E struct obj *FDECL(oname, (struct obj *,const char *));
 E int NDECL(ddocall);
 E void FDECL(docall, (struct obj *));
+E void FDECL(do_oname, (struct obj *));
 E const char *NDECL(rndghostname);
 E char *FDECL(x_monnam, (struct monst *,int,const char *,int,BOOLEAN_P));
 E char *FDECL(l_monnam, (struct monst *));
@@ -902,6 +907,7 @@ E boolean FDECL(is_worn, (struct obj *));
 E struct obj *FDECL(g_at, (int,int));
 E struct obj *FDECL(mkgoldobj, (long));
 E struct obj *FDECL(getobj, (const char *,const char *));
+E void FDECL(getobj_answer, (struct obj *,int,const char *));
 E int FDECL(ggetobj, (const char *,int (*)(OBJ_P),int,BOOLEAN_P,unsigned *));
 E void FDECL(fully_identify_obj, (struct obj *));
 E int FDECL(identify, (struct obj *));
@@ -1574,6 +1580,7 @@ E void NDECL(free_autopickup_exceptions);
 
 E int NDECL(dowhatis);
 E int NDECL(doquickwhatis);
+E int FDECL(do_screen_description, (coord,BOOLEAN_P,int,char *,const char **,struct permonst **));
 E int NDECL(doidtrap);
 E int NDECL(dowhatdoes);
 E char *FDECL(dowhatdoes_core,(CHAR_P, char *));
