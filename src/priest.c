@@ -528,6 +528,7 @@ register struct monst *priest;
 			HProtection |= FROMOUTSIDE;
 			if (!u.ublessed)  u.ublessed = rn1(3, 2);
 		} else u.ublessed++;
+		legacy_feat(F_PROTECTION);
 	    } else {
 		verbalize("Thy selfless generosity is deeply appreciated.");
 #ifndef GOLDOBJ

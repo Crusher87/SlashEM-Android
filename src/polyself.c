@@ -469,6 +469,7 @@ int	mntmp;
 	else
 	    livelog_printf(LL_MINORAC, "polymorphed into %s",
 			   an(mons[mntmp].mname));
+	legacy_polymorphed();
 
 	if (!Upolyd) {
 		/* Human to monster; save human stats */

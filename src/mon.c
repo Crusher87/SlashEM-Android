@@ -1737,6 +1737,7 @@ register struct monst *mtmp;
 	tmp = monsndx(mtmp->data);
 	if (mvitals[tmp].died < 255) mvitals[tmp].died++;
 	logdeadmon(mtmp, tmp);	/* #chronicle */
+	legacy_mon_died(mtmp, !flags.mon_moving);
 
 	/* if it's a (possibly polymorphed) quest leader, mark him as dead */
 	if (mtmp->m_id == quest_status.leader_m_id)

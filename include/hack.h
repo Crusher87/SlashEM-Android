@@ -137,6 +137,7 @@ typedef struct sortloot_item Loot;
 
 #include "extern.h"
 #include "winprocs.h"
+#include "legacy.h"
 
 #ifdef USE_TRAMPOLI
 #include "wintty.h"

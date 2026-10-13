@@ -980,6 +980,7 @@ boolean atme;
 	}
 
 	u.uen -= energy;
+	legacy_count(LC_SPELLS);	/* the Ice Mage's feat */
 	
 	flags.botl = 1;
 	exercise(A_WIS, TRUE);

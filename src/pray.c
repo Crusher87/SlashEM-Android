@@ -689,6 +689,7 @@ gcrownu()
     int sp_no;
 #define ok_wep(o) ((o) && ((o)->oclass == WEAPON_CLASS || is_weptool(o)))
 
+    legacy_feat(F_CROWNED);
     HSee_invisible |= FROMOUTSIDE;
     HFire_resistance |= FROMOUTSIDE;
     HCold_resistance |= FROMOUTSIDE;
@@ -1097,7 +1098,8 @@ pleased(g_align)
 	    break;
 	}
 
-	u.ublesscnt = rnz(350);
+	/* Legacy: Patron II shortens the wait */
+	u.ublesscnt = rnz(lrun.lineage[LIN_PATRON] >= 2 ? 250 : 350);
 	kick_on_butt = u.uevent.udemigod ? 1 : 0;
 #ifdef ELBERETH
 	if (u.uevent.uhand_of_elbereth) kick_on_butt++;
@@ -1748,6 +1750,7 @@ verbalize("In return for thy service, I grant thee the gift of Immortality!");
 				   "was bestowed with %s by %s",
 				   artiname(otmp->oartifact),
 				   align_gname(u.ualign.type));
+		    legacy_feat(F_GIFT);
 		    u.ublesscnt = rnz(300 + (50 * nartifacts));
 		    exercise(A_WIS, TRUE);
 		    /* make sure we can use this weapon */

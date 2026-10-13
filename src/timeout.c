@@ -243,6 +243,7 @@ nh_timeout()
 	int baseluck = (flags.moonphase == FULL_MOON) ? 1 : 0;
 
 	if (flags.friday13) baseluck -= 1;
+	if (lrun.lineage[LIN_PATRON] >= 3) baseluck += 1;	/* Legacy */
 
 	if (u.uluck != baseluck &&
 		moves % (u.uhave.amulet || u.ugangr ? 300 : 600) == 0) {

@@ -1673,4 +1673,45 @@ register struct trobj *trop;
 	}
 }
 
+/* Slash'EM Legacy: the starting items from the Provisions, Remedies and
+   Escape tracks of the Lineage.  Their types are known, since the point
+   of them is that you can count on them. */
+STATIC_OVL void
+lineage_item(otyp, quan, spe)
+int otyp, quan, spe;
+{
+	struct obj *obj = mksobj(otyp, TRUE, FALSE);
+
+	obj->quan = (long) quan;	/* exactly this many */
+	obj->dknown = obj->bknown = obj->rknown = 1;
+	if (objects[otyp].oc_uses_known) obj->known = 1;
+	obj->cursed = obj->blessed = 0;
+	if (objects[otyp].oc_charged) obj->spe = spe;
+	obj->owt = weight(obj);
+	(void) addinv(obj);
+	discover_object(otyp, TRUE, FALSE);
+}
+
+void
+lineage_inv()
+{
+	int r;
+
+	if ((r = lrun.lineage[LIN_PROVISIONS]) > 0) {
+	    lineage_item(FOOD_RATION, (r >= 2) ? 2 : 1, 0);
+	    if (r >= 3)
+		lineage_item(LEMBAS_WAFER, 1, 0);
+	}
+	if ((r = lrun.lineage[LIN_REMEDIES]) > 0) {
+	    lineage_item(POT_HEALING, (r >= 2) ? 2 : 1, 0);
+	    if (r >= 3)
+		lineage_item(POT_EXTRA_HEALING, 1, 0);
+	}
+	if ((r = lrun.lineage[LIN_ESCAPE]) > 0) {
+	    lineage_item(SCR_TELEPORTATION, (r >= 2) ? 2 : 1, 0);
+	    if (r >= 3)
+		lineage_item(WAN_DIGGING, 1, 3);
+	}
+}
+
 /*u_init.c*/

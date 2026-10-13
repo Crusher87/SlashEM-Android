@@ -803,6 +803,26 @@ int how;
 			return;
 		}
 	}
+	/* Slash'EM Legacy: the Ancestor's Ward, once per game */
+	if (legacy_ward(how)) {
+		pline("But wait...");
+		pline_The("spirits of your ancestors stand between you and death!");
+		if (how == CHOKING) You("vomit ...");
+		You_feel("the Ward break as it saves you.");
+		if (u.uhpmax <= 0) u.uhpmax = 1;
+		savelife(how);
+		u.uhp = (u.uhpmax + 1) / 2;
+		nomovemsg = "You are alive.  The Ward is spent for this game.";
+		livelog_printf(LL_LIFESAVE, "averted death (%s%s) with the Ward",
+			       killer_format == NO_KILLER_PREFIX ? "" :
+			       killed_by_prefix[how],
+			       killer_format == KILLED_BY_AN ?
+			       an(killer) : killer);
+		killer = 0;
+		killer_format = 0;
+		legacy_ward_move(how);
+		return;
+	}
 	if ((
 #ifdef WIZARD
 			wizard ||
@@ -920,6 +940,15 @@ die:
 		       killer_format == NO_KILLER_PREFIX ? "" :
 		       killed_by_prefix[how],
 		       killer_format == KILLED_BY_AN ? an(killer) : killer);
+	/* Slash'EM Legacy: pay Renown and record the ancestor now, so a
+	   crash later in the ending can't lose them */
+	Sprintf(pbuf, "%s%s",
+		killer_format == NO_KILLER_PREFIX ? "" : killed_by_prefix[how],
+		killer_format == KILLED_BY_AN ? an(killer) : killer);
+	if (how == ESCAPED || how == ASCENDED || how == QUIT)
+	    Strcpy(pbuf, how == ASCENDED ? "ascended" :
+			 how == ESCAPED ? "escaped the dungeon" : "quit");
+	legacy_game_over(how, pbuf);
 
 	if (strcmp(flags.end_disclose, "none") && how != PANICKED)
 		disclose(how, taken);
@@ -982,8 +1011,12 @@ die:
 	    display_nhwindow(WIN_MESSAGE, TRUE);
 	    destroy_nhwindow(WIN_MAP);
 	    destroy_nhwindow(WIN_STATUS);
-	    destroy_nhwindow(WIN_MESSAGE);
-	    WIN_MESSAGE = WIN_STATUS = WIN_MAP = WIN_ERR;
+	    /* the Legacy recap below still asks questions */
+	    if (!lres.valid) {
+		destroy_nhwindow(WIN_MESSAGE);
+		WIN_MESSAGE = WIN_ERR;
+	    }
+	    WIN_STATUS = WIN_MAP = WIN_ERR;
 
 	    if(!done_stopprint || flags.tombstone)
 		endwin = create_nhwindow(NHW_TEXT);
@@ -1142,10 +1175,21 @@ die:
 	    putstr(endwin, 0, "");
 	}
 #endif
+	/* the map window is gone, so nothing may redraw it; with the message
+	   window kept for the Legacy recap, closing a window would try */
+	if (lres.valid)
+	    u.ux = 0;
 	if (!done_stopprint)
 	    display_nhwindow(endwin, TRUE);
 	if (endwin != WIN_ERR)
 	    destroy_nhwindow(endwin);
+
+	/* Slash'EM Legacy: what the game paid, and what to do next */
+	if (have_windows && lres.valid) {
+	    legacy_recap(how);
+	    destroy_nhwindow(WIN_MESSAGE);
+	    WIN_MESSAGE = WIN_ERR;
+	}
 
 	/* "So when I die, the first thing I will see in Heaven is a
 	 * score list?" */

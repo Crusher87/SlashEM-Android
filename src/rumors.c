@@ -358,6 +358,7 @@ register struct monst *oracl;
 	flags.botl = 1;
 	if (!u.uevent.minor_oracle && !u.uevent.major_oracle)
 	    livelog_printf(LL_ACHIEVE, "consulted the Oracle");
+	legacy_feat(F_ORACLE);
 	add_xpts = 0;	/* first oracle of each type gives experience points */
 	if (u_pay == minor_cost) {
 		outrumor(1, BY_ORACLE);

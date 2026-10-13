@@ -32,6 +32,14 @@
 					android:name="android.intent.category.LAUNCHER"/>
 			</intent-filter>
 		</activity>
+		<!-- Reopens the game after it closes, for "Play again". -->
+		<activity
+			android:name="com.tbd.SlashEM.RestartActivity"
+			android:exported="false"
+			android:process=":restart"
+			android:theme="@android:style/Theme.Translucent.NoTitleBar"
+			android:excludeFromRecents="true">
+		</activity>
 		<activity
 			android:name="com.tbd.forkfront.Settings"
 			android:exported="false"

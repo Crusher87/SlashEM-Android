@@ -1460,6 +1460,7 @@ boolean at_stairs, falling, portal;
 
 	if (new)
 	    log_new_level(newbranch);	/* #chronicle */
+	    legacy_arrived(newbranch);	/* landmarks and feats */
 
 	if (on_level(&u.uz, &astral_level))
 	    final_level();

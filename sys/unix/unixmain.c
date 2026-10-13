@@ -271,6 +271,7 @@ char *argv[];
 		flags.move = 0;
 	} else {
 not_recovered:
+		legacy_startup();	/* the Hall */
 		player_selection();
 		newgame();
 		wd_message();

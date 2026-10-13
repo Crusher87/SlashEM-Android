@@ -202,6 +202,7 @@ struct obj *obj;	/* quest artifact; possibly null if carrying Amulet */
 		livelog_printf(LL_ACHIEVE, "completed the quest for %s",
 			       ldrname());
 	    u.uevent.qcompleted = 1;	/* you did it! */
+	    legacy_feat(F_QUEST);
 	    /* behave as if leader imparts sufficient info about the
 	       quest artifact */
 	    fully_identify_obj(obj);

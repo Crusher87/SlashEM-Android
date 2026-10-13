@@ -192,7 +192,8 @@ int NetHackMain(int argc, char** argv)
 	}
 	else
 	{
-		not_recovered: player_selection();
+		not_recovered: legacy_startup();	/* the Hall */
+		player_selection();
 		newgame();
 		wd_message();
 	}

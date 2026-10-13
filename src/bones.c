@@ -496,6 +496,12 @@ getbones()
 				/* to correctly reset named artifacts on the level */
 				resetobjs(mtmp->minvent,TRUE);
 			}
+			/* Slash'EM Legacy: the ghost is named after the
+			   character who died here */
+			for (mtmp = fmon; mtmp; mtmp = mtmp->nmon)
+			    if (mtmp->data == &mons[PM_GHOST] && mtmp->mnamelth)
+				break;
+			legacy_bones_loaded(mtmp ? NAME(mtmp) : (char *) 0);
 			resetobjs(fobj,TRUE);
 			resetobjs(level.buriedobjlist,TRUE);
 		}

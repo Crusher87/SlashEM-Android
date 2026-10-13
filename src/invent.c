@@ -727,6 +727,7 @@ void
 addinv_core1(obj)
 struct obj *obj;
 {
+	legacy_got_object(obj);	/* Slash'EM Legacy feats */
 	if (obj->oclass == COIN_CLASS) {
 #ifndef GOLDOBJ
 		u.ugold += obj->quan;
