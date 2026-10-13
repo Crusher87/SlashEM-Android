@@ -601,23 +601,26 @@ hurtle_step(arg, x, y)
 		s = "bumping into a wall";
 	    else
 		s = "bumping into a door";
-	    losehp(rnd(2+*range), s, KILLED_BY);
+	    losehp(Maybe_Half_Phys(rnd(2+*range)), s, KILLED_BY);
 	    return FALSE;
 	}
 	if (levl[x][y].typ == IRONBARS) {
 	    You("crash into some iron bars.  Ouch!");
-	    losehp(rnd(2+*range), "crashing into iron bars", KILLED_BY);
+	    losehp(Maybe_Half_Phys(rnd(2+*range)), "crashing into iron bars",
+		   KILLED_BY);
 	    return FALSE;
 	}
 	if ((obj = sobj_at(BOULDER,x,y)) != 0) {
 	    You("bump into a %s.  Ouch!", xname(obj));
-	    losehp(rnd(2+*range), "bumping into a boulder", KILLED_BY);
+	    losehp(Maybe_Half_Phys(rnd(2+*range)), "bumping into a boulder",
+		   KILLED_BY);
 	    return FALSE;
 	}
 	if (!may_pass) {
 	    /* did we hit a no-dig non-wall position? */
 	    You("smack into something!");
-	    losehp(rnd(2+*range), "touching the edge of the universe", KILLED_BY);
+	    losehp(Maybe_Half_Phys(rnd(2+*range)),
+		   "touching the edge of the universe", KILLED_BY);
 	    return FALSE;
 	}
 	if ((u.ux - x) && (u.uy - y) &&
@@ -627,7 +630,8 @@ hurtle_step(arg, x, y)
 	    if (bigmonst(youmonst.data) || too_much) {
 		You("%sget forcefully wedged into a crevice.",
 			too_much ? "and all your belongings " : "");
-		losehp(rnd(2+*range), "wedging into a narrow crevice", KILLED_BY);
+		losehp(Maybe_Half_Phys(rnd(2+*range)),
+		       "wedging into a narrow crevice", KILLED_BY);
 		return FALSE;
 	    }
 	}
@@ -933,7 +937,7 @@ boolean hitsroof;
 	if (dmg > 1 && less_damage) dmg = 1;
 	if (dmg > 0) dmg += u.udaminc;
 	if (dmg < 0) dmg = 0;	/* beware negative rings of increase damage */
-	if (Half_physical_damage) dmg = (dmg + 1) / 2;
+	dmg = Maybe_Half_Phys(dmg);
 
 	if (uarmh) {
 	    if (less_damage && dmg < (Upolyd ? u.mh : u.uhp)) {
@@ -1255,7 +1259,7 @@ int thrown;
 				  body_part(ARM));
 			    (void) artifact_hit((struct monst *)0,
 						&youmonst, obj, &dmg, 0);
-			    losehp(dmg, xname(obj),
+			    losehp(Maybe_Half_Phys(dmg), xname(obj),
 				obj_is_pname(obj) ? KILLED_BY : KILLED_BY_AN);
 			}
 			if (ship_object(obj, u.ux, u.uy, FALSE)) {

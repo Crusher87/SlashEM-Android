@@ -1652,7 +1652,7 @@ lootcont:
 		    You("carefully open the bag...");
 		    pline("It develops a huge set of teeth and bites you!");
 		    tmp = rnd(10);
-		    if (Half_physical_damage) tmp = (tmp+1) / 2;
+		    tmp = Maybe_Half_Phys(tmp);
 		    losehp(tmp, "carnivorous bag", KILLED_BY_AN);
 		    makeknown(BAG_OF_TRICKS);
 		    timepassed = 1;
@@ -1897,7 +1897,8 @@ boolean silent;
 		    uqwepgone();
 		    stop_occupation();
 		}
-		losehp(d(6,6), "carrying live explosives", KILLED_BY);
+		losehp(Maybe_Half_Phys(d(6,6)), "carrying live explosives",
+		       KILLED_BY);
 		break;
 	    case OBJ_FLOOR:
 		underwater = is_pool(x, y);

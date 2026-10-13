@@ -1504,7 +1504,8 @@ int magic; /* 0=Physical, otherwise skill level */
 #ifdef STEED
 			if (!u.usteed)
 #endif
-		    losehp(rnd(10), "jumping out of a bear trap", KILLED_BY);
+		    losehp(Maybe_Half_Phys(rnd(10)),
+			   "jumping out of a bear trap", KILLED_BY);
 		    set_wounded_legs(side, rn1(1000,500));
 		    break;
 		  }
@@ -2582,7 +2583,7 @@ struct obj *obj;
 	if (dam <= 0) dam = 1;
 	You("hit your %s with your bullwhip.", body_part(FOOT));
 	Sprintf(buf, "killed %sself with %s bullwhip", uhim(), uhis());
-	losehp(dam, buf, NO_KILLER_PREFIX);
+	losehp(Maybe_Half_Phys(dam), buf, NO_KILLER_PREFIX);
 	flags.botl = 1;
 	return 1;
 
@@ -2831,7 +2832,8 @@ use_pole (obj)
 		case 1:
 		    /* Snag yourself */
 		    You("hook yourself!");
-		    losehp(rn1(10,10), "a fishing hook", KILLED_BY);
+		    losehp(Maybe_Half_Phys(rn1(10,10)), "a fishing hook",
+			   KILLED_BY);
 		    return 1;
 		case 2:
 		    /* Reel in a fish */
@@ -3079,7 +3081,8 @@ use_grapple (obj)
 	default:	/* Yourself (oops!) */
 	    if (P_SKILL(typ) <= P_BASIC) {
 		You("hook yourself!");
-		losehp(rn1(10,10), "a grappling hook", KILLED_BY);
+		losehp(Maybe_Half_Phys(rn1(10,10)), "a grappling hook",
+		       KILLED_BY);
 		return (1);
 	    }
 	    break;
@@ -3290,9 +3293,10 @@ wand_explode(obj, hero_broke)
 		if (damage) {
 		    if (hero_broke) {
 		    Sprintf(buf, "killed %sself by breaking a wand", uhim());
-		    losehp(damage, buf, NO_KILLER_PREFIX);
+		    losehp(Maybe_Half_Phys(damage), buf, NO_KILLER_PREFIX);
 		    } else
-			losehp(damage, "exploding wand", KILLED_BY_AN);
+			losehp(Maybe_Half_Phys(damage), "exploding wand",
+			       KILLED_BY_AN);
 		}
 		if (flags.botl) bot();		/* blindness */
 	    } else if ((mon = m_at(x, y)) != 0 && !DEADMONSTER(mon)) {

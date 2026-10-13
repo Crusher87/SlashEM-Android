@@ -560,8 +560,8 @@ boolean yours; /* is it your fault (for killing monsters) */
 		if (Invulnerable) {
 		    damu = 0;
 		    You("are unharmed!");
-		} else if (Half_physical_damage && adtyp == AD_PHYS)
-		    damu = (damu+1) / 2;
+		} else if (adtyp == AD_PHYS || adtyp == AD_ACID)
+		    damu = Maybe_Half_Phys(damu);
 		if (adtyp == AD_FIRE) (void) burnarmor(&youmonst);
 		destroy_item(SCROLL_CLASS, (int) adtyp);
 		destroy_item(SPBOOK_CLASS, (int) adtyp);

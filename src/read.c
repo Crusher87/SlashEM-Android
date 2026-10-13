@@ -453,7 +453,7 @@ int curse_bless;
 		if (is_on) Ring_gone(obj);
 		s = rnd(3 * abs(obj->spe));	/* amount of damage */
 		useup(obj);
-		losehp(s, "exploding ring", KILLED_BY_AN);
+		losehp(Maybe_Half_Phys(s), "exploding ring", KILLED_BY_AN);
 	    } else {
 		long mask = is_on ? (obj == uleft ? LEFT_RING :
 				     RIGHT_RING) : 0L;
@@ -1576,7 +1576,8 @@ register struct obj	*sobj;
 			stackobj(otmp2);
 			newsym(u.ux, u.uy);
 		    }
-		    if (dmg) losehp(dmg, "scroll of earth", KILLED_BY_AN);
+		    if (dmg) losehp(Maybe_Half_Phys(dmg), "scroll of earth",
+				    KILLED_BY_AN);
 		}
 	    }
 	    break;
@@ -1622,7 +1623,8 @@ register struct obj *obj;
     obj->in_use = TRUE;	/* in case losehp() is fatal */
     Your("%s vibrates violently, and explodes!",xname(obj));
     nhbell();
-    losehp(rnd(2*(u.uhpmax+1)/3), "exploding wand", KILLED_BY_AN);
+    losehp(Maybe_Half_Phys(rnd(2*(u.uhpmax+1)/3)), "exploding wand",
+	   KILLED_BY_AN);
     useup(obj);
     exercise(A_STR, FALSE);
 }
