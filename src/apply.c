@@ -963,6 +963,7 @@ struct obj **optr;
 	register struct obj *otmp;
 	const char *s = (obj->quan != 1) ? "candles" : "candle";
 	char qbuf[QBUFSZ];
+	boolean was_lamplit;
 
 	if(u.uswallow) {
 		You(no_elbow_room);
@@ -995,11 +996,19 @@ struct obj **optr;
 		if ((long)otmp->spe + obj->quan > 7L)
 		    obj = splitobj(obj, 7L - (long)otmp->spe);
 		else *optr = 0;
+
+		/* The candle's age field doesn't correctly reflect the amount
+		   of fuel in it while it's lit, because the fuel is measured
+		   by the timer.  So to get accurate age updating, we need to
+		   end the burn temporarily while attaching the candle. */
+		was_lamplit = obj->lamplit;
+		if (was_lamplit) end_burn(obj, TRUE);
+
 		You("attach %ld%s %s to %s.",
 		    obj->quan, !otmp->spe ? "" : " more",
 		    s, the(xname(otmp)));
 		if (obj->otyp == MAGIC_CANDLE) {
-		    if (obj->lamplit)
+		    if (was_lamplit)
 			pline_The("new %s %s very ordinary.", s,
 				vtense(s, "look"));
 		    else
@@ -1011,9 +1020,9 @@ struct obj **optr;
 		if (!otmp->spe || otmp->age > obj->age)
 		    otmp->age = obj->age;
 		otmp->spe += (int)obj->quan;
-		if (otmp->lamplit && !obj->lamplit)
+		if (otmp->lamplit && !was_lamplit)
 		    pline_The("new %s magically %s!", s, vtense(s, "ignite"));
-		else if (!otmp->lamplit && obj->lamplit)
+		else if (!otmp->lamplit && was_lamplit)
 		    pline("%s out.", (obj->quan > 1L) ? "They go" : "It goes");
 		if (obj->unpaid)
 		    verbalize("You %s %s, you bought %s!",
@@ -1025,9 +1034,8 @@ struct obj **optr;
 			  The(xname(otmp)), otmp->lamplit ? " lit" : "");
 		/* candelabrum's light range might increase */
 		if (otmp->lamplit) obj_merge_light_sources(otmp, otmp);
-		/* candles are no longer a separate light source */
-		if (obj->lamplit) end_burn(obj, TRUE);
-		/* candles are now gone */
+		/* candles are no longer a separate light source (the burn
+		   was ended above); candles are now gone */
 		useupall(obj);
 	}
 }
