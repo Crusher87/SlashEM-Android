@@ -825,7 +825,13 @@ dodown()
 	    return (0);   /* didn't move */
 	}
 	if (!stairs_down && !ladder_down) {
-		if (!(trap = t_at(u.ux,u.uy)) ||
+		trap = t_at(u.ux,u.uy);
+		/* '>' while at the edge of a known pit: go into it */
+		if (uteetering_at_seen_pit(trap)) {
+			dotrap(trap, TOOKPLUNGE);
+			return(1);
+		}
+		if (!trap ||
 			(trap->ttyp != TRAPDOOR && trap->ttyp != HOLE)
 			|| !Can_fall_thru(&u.uz) || !trap->tseen) {
 
@@ -875,6 +881,12 @@ dodown()
 int
 doup()
 {
+	/* "up" to get out of a pit... */
+	if (u.utrap && u.utraptype == TT_PIT) {
+		climb_pit();
+		return(1);
+	}
+
 	if( (u.ux != xupstair || u.uy != yupstair)
 	     && (!xupladder || u.ux != xupladder || u.uy != yupladder)
 	     && (!sstairs.sx || u.ux != sstairs.sx || u.uy != sstairs.sy

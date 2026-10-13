@@ -2206,6 +2206,8 @@ E void FDECL(selftouch, (const char *));
 E void FDECL(mselftouch, (struct monst *,const char *,BOOLEAN_P));
 E void NDECL(float_up);
 E void FDECL(fill_pit, (int,int));
+E void NDECL(climb_pit);
+E boolean FDECL(uteetering_at_seen_pit, (struct trap *));
 E int FDECL(float_down, (long, long));
 E int FDECL(fire_damage, (struct obj *,BOOLEAN_P,BOOLEAN_P,XCHAR_P,XCHAR_P));
 E void FDECL(water_damage, (struct obj *,BOOLEAN_P,BOOLEAN_P));
