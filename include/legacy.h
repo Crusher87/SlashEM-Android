@@ -10,7 +10,7 @@
 #define LEGACY_BACKUP	"legacy.bak"	/* the profile before its last write */
 #define LEGACY_TMP	"legacy.tmp"	/* a profile being written */
 #define LEGACY_RESTART	"legacy.restart" /* what to do when the app restarts */
-#define LEGACY_VERSION	1
+#define LEGACY_VERSION	2
 
 /* how a game is played */
 #define LMODE_CLASSIC	0	/* the original game; nothing carries in */
@@ -93,12 +93,49 @@
 #define F_LESSONS10	41
 #define F_GHOST		42
 #define F_ANCESTORS25	43
-#define NUM_FEATS	44
+#define F_ID50		44
+#define F_BESTIARY100	45
+#define F_INSIGHT	46
+#define NUM_FEATS	47
 
 /* counters kept across games */
 #define LC_SPELLS	0	/* spells cast */
 #define LC_UNDEAD	1	/* undead destroyed */
 #define NUM_LCOUNTERS	2
+
+/* Insight: help earned by doing things, counted across all games */
+#define INS_FACTS	0	/* monster fact sheets */
+#define INS_THREAT	1	/* a threat word when looking at a monster */
+#define INS_WARN	2	/* learned warnings */
+#define INS_CORPSE	3	/* corpse sense */
+#define INS_PRAYER	4	/* prayer sense */
+#define INS_PRICE	5	/* price sense */
+#define INS_WAND	6	/* wand sense */
+#define INS_ELBERETH	7	/* quick Elbereth */
+#define INS_SOKOBAN	8	/* Sokoban memory */
+#define NUM_INSIGHT	9
+
+/* Insight counters kept in the profile */
+#define IC_CORPSES	0	/* corpses eaten */
+#define IC_PRAYERS	1	/* successful prayers */
+#define IC_WANDS	2	/* wands engrave-tested */
+#define IC_ELBERETH	3	/* Elbereths engraved */
+#define NUM_ICOUNTERS	4
+
+/* learned warnings: each switches on when its cause has killed you */
+#define LW_FLOATEYE	0	/* hitting a floating eye that can see */
+#define LW_TOUCH	1	/* hitting a cockatrice bare-handed */
+#define LW_WATER	2	/* stepping into water */
+#define LW_LAVA		3	/* stepping into lava */
+#define LW_FOUNTAIN	4	/* fountains in front of the Minetown watch */
+#define NUM_LWARN	5
+
+/* Codex volumes */
+#define CX_BESTIARY	0
+#define CX_ARMORY	1
+#define CX_ATLAS	2
+#define CX_LESSONS	3
+#define NUM_CODEX	4
 
 /* one finished game, as the Ancestors list shows it */
 struct legacy_ancestor {
@@ -135,8 +172,25 @@ struct legacy_profile {
 	char **lessons;		/* causes of death met so far */
 	int nlessons, maxlessons;
 	struct legacy_ancestor *ancestors;	/* newest first */
+	long icount[NUM_ICOUNTERS];	/* Insight counters */
+	boolean ins_off[NUM_INSIGHT];	/* Insight switched off in Settings */
 	boolean dirty;		/* changed since it was written */
 };
+
+/* Sokoban memory's recording of each level */
+#define SOKO_LEVS	6	/* indexed by dunlev */
+#define SOKO_ROWS	21
+#define SOKO_COLS	32
+#define SOKO_MAXB	26
+#define SOKO_LOG	600
+#define SOKO_UNSEEN	0
+#define SOKO_RECORDING	1
+#define SOKO_LOST	2	/* a boulder it didn't know about was pushed */
+#define SOKO_DONE	3
+/* how good a remembered Sokoban record is, best first */
+#define SQ_SOLVED	0	/* every hole filled */
+#define SQ_PARTIAL	1	/* got to the level above */
+#define SQ_LOST		2	/* some pushes weren't recorded */
 
 /* the current game's Legacy state; saved with the game */
 struct legacy_run {
@@ -156,6 +210,22 @@ struct legacy_run {
 	long feat_renown;	/* Renown those feats paid */
 	int ghost_ledger;	/* level where an ancestor's ghost waits, or 0 */
 	char ghost_name[PL_NSIZ];
+	/* the Codex and Insight (Phase 2) */
+	int cx_new[NUM_CODEX];	/* Codex entries this game added */
+	long ins_had;		/* Insight items earned before this game */
+	long ins_told;		/* Insight items announced so far */
+	long ic_start[NUM_ICOUNTERS];	/* counters when the game began */
+	long kills_start, ids_start;	/* likewise */
+	xchar soko_layout[6];	/* Sokoban layout used on each level */
+	boolean pray_safe;	/* prayer sense showed "safe" last turn */
+	/* Sokoban memory: each level as first seen, and the pushes made */
+	char soko_map[SOKO_LEVS][SOKO_ROWS][SOKO_COLS];
+	xchar soko_bx[SOKO_LEVS][SOKO_MAXB];	/* where each boulder is now, */
+	xchar soko_by[SOKO_LEVS][SOKO_MAXB];	/* bx -1 once it fills a hole */
+	uchar soko_nb[SOKO_LEVS];
+	uchar soko_log[SOKO_LEVS][SOKO_LOG];	/* boulder<<3 | dir<<1 | filled */
+	short soko_nlog[SOKO_LEVS];
+	uchar soko_state[SOKO_LEVS];	/* SOKO_xxx */
 };
 
 /* what the last game paid, for the recap */
@@ -179,6 +249,7 @@ extern struct legacy_run lrun;
 extern struct legacy_result lres;
 extern boolean legacy_selecting;	/* role selection honours locks */
 extern boolean legacy_throwing;		/* a thrown or fired missile is hitting */
+extern const char *legacy_frozen_by;	/* why the hero is helpless, or 0 */
 
 #define E extern
 
@@ -226,6 +297,56 @@ E boolean FDECL(legacy_buy_unlock, (BOOLEAN_P, int));
 E void FDECL(legacy_set_epitaph, (const char *));
 E void FDECL(legacy_save_run_fd, (int));
 E void FDECL(legacy_restore_run_fd, (int));
+E void FDECL(legacy_clean_field, (char *, const char *, int));
+E boolean FDECL(legacy_know_lesson_like, (const char *));
+E void FDECL(legacy_lesson_key, (char *, const char *));
+E void FDECL(legacy_soko_layout, (const char *));
+E void NDECL(legacy_soko_arrived);
+E void FDECL(legacy_soko_push, (int, int, int, int));
+
+/* codex.c */
+E void NDECL(codex_init);
+E boolean FDECL(codex_read, (const char *, char *));
+E void FDECL(codex_write, (FILE *));
+E void FDECL(codex_saw, (struct permonst *));
+E void FDECL(codex_killed, (struct permonst *));
+E void FDECL(codex_identified, (int));
+E void FDECL(codex_place, (int));
+E void NDECL(codex_arrived);
+E void NDECL(codex_entered_shop);
+E void NDECL(codex_entered_temple);
+E void FDECL(codex_soko_remember, (const char *, char **, int, char **, int, int));
+E long NDECL(codex_total_kills);
+E char *FDECL(legacy_type_name, (int));
+E int NDECL(codex_armory_count);
+E int FDECL(codex_count, (int));
+E long FDECL(codex_kills, (struct permonst *));
+E const char *FDECL(codex_lesson_tip, (const char *));
+E void FDECL(codex_menu, (BOOLEAN_P));
+E void FDECL(legacy_put_wrapped, (winid, const char *));
+E void FDECL(codex_look, (struct permonst *, struct monst *));
+E int NDECL(docodex);
+
+/* pray.c */
+E boolean NDECL(prayer_is_safe);
+
+/* insight.c */
+E boolean FDECL(insight_earned, (int));
+E boolean FDECL(insight_on, (int));
+E void FDECL(insight_progress, (int, char *));
+E const char *FDECL(insight_name, (int));
+E const char *FDECL(insight_desc, (int));
+E void FDECL(insight_count, (int));
+E void NDECL(insight_check);
+E long NDECL(insight_mask);
+E boolean FDECL(insight_warning, (int));
+E boolean FDECL(insight_hit_check, (struct monst *, BOOLEAN_P));
+E boolean NDECL(insight_fountain_check);
+E boolean FDECL(insight_corpse_check, (struct obj *));
+E void NDECL(insight_turn);
+E boolean NDECL(insight_pray_marker);
+E void FDECL(insight_wand_sense, (int, BOOLEAN_P));
+E int NDECL(doelbereth);
 
 /* u_init.c */
 E void NDECL(lineage_inv);

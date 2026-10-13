@@ -30,6 +30,7 @@ STATIC_DCL void FDECL(add_text, (winid, const char *));
 STATIC_DCL void FDECL(add_choice, (winid, int, CHAR_P, const char *));
 STATIC_DCL void FDECL(set_hero, (int *));
 STATIC_DCL void FDECL(money_line, (char *, const char *, long));
+STATIC_DCL void FDECL(recap_knowledge, (winid));
 
 boolean
 legacy_hall_active()
@@ -482,7 +483,8 @@ hall_settings()
 	winid win;
 	menu_item *pick = 0;
 	char buf[BUFSZ];
-	int n;
+	int n, i;
+	boolean any;
 
 	for (;;) {
 	    win = create_nhwindow(NHW_MENU);
@@ -496,6 +498,17 @@ hall_settings()
 	    if (lprof.skip_hall)
 		add_text(win,
 		   "    (the end-of-game menu still leads back to the Hall)");
+	    add_text(win, "");
+	    add_text(win, "Insight you have earned:");
+	    for (i = 0, any = FALSE; i < NUM_INSIGHT; i++)
+		if (insight_earned(i)) {
+		    Sprintf(buf, "[%c] %s", lprof.ins_off[i] ? ' ' : 'x',
+			    insight_name(i));
+		    add_choice(win, 10 + i, (char) ('c' + i), buf);
+		    any = TRUE;
+		}
+	    if (!any)
+		add_text(win, "    (none yet; see the Codex)");
 	    end_menu(win, "Settings");
 	    n = select_menu(win, PICK_ONE, &pick);
 	    destroy_nhwindow(win);
@@ -503,8 +516,11 @@ hall_settings()
 		return;
 	    if (pick[0].item.a_int == 1)
 		lprof.unlock_all = !lprof.unlock_all;
-	    else
+	    else if (pick[0].item.a_int == 2)
 		lprof.skip_hall = !lprof.skip_hall;
+	    else if (pick[0].item.a_int >= 10)
+		lprof.ins_off[pick[0].item.a_int - 10] =
+		    !lprof.ins_off[pick[0].item.a_int - 10];
 	    free((genericptr_t) pick), pick = 0;
 	    lprof.dirty = TRUE;
 	    legacy_write(FALSE);
@@ -650,7 +666,8 @@ legacy_startup()
 	    add_choice(win, 4, 'd', "Roles and races");
 	    add_choice(win, 5, 'e', "Feats");
 	    add_choice(win, 6, 'f', "Ancestors");
-	    add_choice(win, 7, 'g', "Settings");
+	    add_choice(win, 9, 'g', "The Codex and Insight");
+	    add_choice(win, 7, 'h', "Settings");
 	    add_choice(win, 8, 'q', "Quit");
 	    Sprintf(buf, "The Hall of %s's line", plname);
 	    end_menu(win, buf);
@@ -691,6 +708,9 @@ legacy_startup()
 	    case 7:
 		hall_settings();
 		break;
+	    case 9:
+		codex_menu(TRUE);
+		break;
 	    default:
 		hall_active = FALSE;
 		legacy_write(FALSE);
@@ -703,6 +723,74 @@ legacy_startup()
 
 /* ------------------------------------------------------------------ */
 /* the recap at the end of a game */
+
+/* what this game added to the Codex and Insight */
+STATIC_OVL void
+recap_knowledge(win)
+winid win;
+{
+	static const char *const vol[] = { "monsters", "object types",
+					   "places" };
+	char buf[BUFSZ], prog[BUFSZ];
+	long now = insight_mask();
+	int i;
+	boolean first = TRUE, moved;
+
+	Strcpy(buf, "Codex: ");
+	for (i = 0; i < 3; i++)
+	    if (lrun.cx_new[i]) {
+		Sprintf(eos(buf), "%s%d new %s", first ? "" : ", ",
+			lrun.cx_new[i], vol[i]);
+		first = FALSE;
+	    }
+	if (lres.lesson == 1) {
+	    Sprintf(eos(buf), "%sa new Lesson", first ? "" : ", ");
+	    first = FALSE;
+	}
+	if (first && !now)
+	    return;
+	putstr(win, 0, "");
+	putstr(win, ATR_BOLD, "Knowledge");
+	if (!first)
+	    putstr(win, 0, buf);
+	for (i = 0; i < NUM_INSIGHT; i++) {
+	    if ((now & (1L << i)) && !(lrun.ins_had & (1L << i))) {
+		Sprintf(buf, "Insight earned: %s", insight_name(i));
+		putstr(win, 0, buf);
+		continue;
+	    }
+	    if (now & (1L << i))
+		continue;
+	    /* not earned yet: did this game move it closer? */
+	    switch (i) {
+	    case INS_THREAT:
+		moved = codex_total_kills() > lrun.kills_start;
+		break;
+	    case INS_PRICE:
+		moved = codex_armory_count() > lrun.ids_start;
+		break;
+	    case INS_CORPSE:
+		moved = lprof.icount[IC_CORPSES] > lrun.ic_start[IC_CORPSES];
+		break;
+	    case INS_PRAYER:
+		moved = lprof.icount[IC_PRAYERS] > lrun.ic_start[IC_PRAYERS];
+		break;
+	    case INS_WAND:
+		moved = lprof.icount[IC_WANDS] > lrun.ic_start[IC_WANDS];
+		break;
+	    case INS_ELBERETH:
+		moved = lprof.icount[IC_ELBERETH] > lrun.ic_start[IC_ELBERETH];
+		break;
+	    default:
+		moved = FALSE;
+	    }
+	    if (moved) {
+		insight_progress(i, prog);
+		Sprintf(buf, "Toward %s: %s", insight_name(i), prog);
+		putstr(win, 0, buf);
+	    }
+	}
+}
 
 void
 legacy_recap(how)
@@ -729,10 +817,15 @@ int how;
 	    Sprintf(buf, "The Ward saved you on turn %ld.", lrun.ward_turn);
 	    putstr(win, 0, buf);
 	}
-	if (lres.lesson == 1)
-	    putstr(win, 0, "A new Lesson: this hasn't killed you before.");
-	else if (lres.lesson == 2)
-	    putstr(win, 0, "You have died this way before.");
+	if (lres.lesson) {
+	    char key[BUFSZ];
+
+	    putstr(win, 0, lres.lesson == 1
+			   ? "A new Lesson: this hasn't killed you before."
+			   : "You have died this way before. The Lesson:");
+	    legacy_lesson_key(key, lres.death);
+	    legacy_put_wrapped(win, codex_lesson_tip(key));
+	}
 
 	putstr(win, 0, "");
 	putstr(win, ATR_BOLD, "Renown from this game");
@@ -784,6 +877,7 @@ int how;
 	    }
 	money_line(buf, "Total", lres.total + lrun.feat_renown);
 	putstr(win, ATR_BOLD, buf);
+	recap_knowledge(win);
 	putstr(win, 0, "");
 	Sprintf(buf, "You have %ld Renown to spend (%ld earned in all).",
 		legacy_renown(), lprof.renown_earned);

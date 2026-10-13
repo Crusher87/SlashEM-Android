@@ -389,6 +389,7 @@ register int roomno;
 		/* recognize the Valley of the Dead and Moloch's Sanctum
 		   once hero has encountered the temple priest on those levels */
 		mapseen_temple(priest);
+		codex_entered_temple();	/* the Atlas */
 	    } else {
 		switch(rn2(3)) {
 		  case 0: You("have an eerie feeling..."); break;

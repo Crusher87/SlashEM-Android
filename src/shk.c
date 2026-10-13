@@ -41,6 +41,7 @@ STATIC_DCL void FDECL(clear_unpaid,(struct obj *));
 STATIC_DCL long FDECL(check_credit, (long, struct monst *));
 STATIC_DCL void FDECL(pay, (long, struct monst *));
 STATIC_DCL long FDECL(get_cost, (struct obj *, struct monst *));
+STATIC_DCL void FDECL(price_sense, (struct obj *, struct monst *, long));
 STATIC_DCL long FDECL(set_cost, (struct obj *, struct monst *));
 STATIC_DCL const char *FDECL(shk_embellish, (struct obj *, long));
 STATIC_DCL long FDECL(cost_per_charge, (struct monst *,struct obj *,BOOLEAN_P));
@@ -697,6 +698,7 @@ register char *enterstring;
 		      eshkp->visitct++ ? " again" : "",
 		      s_suffix(shkname(shkp)),
 		      shtypes[rt - SHOPBASE].name);
+	    codex_entered_shop();	/* the Atlas */
 	}
 	/* can't do anything about blocking if teleported in */
 	if (!inside_shop(u.ux, u.uy)) {
@@ -2670,6 +2672,58 @@ register struct obj *unp_obj;	/* known to be unpaid */
 	return bp ? unp_obj->quan * bp->price : 0L;
 }
 
+/* Insight's price sense: a shopkeeper asked 'price' apiece for an
+   unidentified object; name the types of its class that would cost the
+   same.  Prices depend on the object only through its type here, so the
+   same object with each other type in turn gives the exact answer. */
+STATIC_OVL void
+price_sense(obj, shkp, price)
+struct obj *obj;
+struct monst *shkp;
+long price;
+{
+	struct obj fake;
+	char buf[BUFSZ];
+	int i, cnt = 0, n = 0, first, oc = obj->oclass;
+	static int match[NUM_OBJECTS];
+
+	if (price <= 0L || !obj->dknown || obj->oartifact
+		|| objects[obj->otyp].oc_name_known || !insight_on(INS_PRICE)
+		|| (oc != POTION_CLASS && oc != SCROLL_CLASS && oc != RING_CLASS
+		    && oc != AMULET_CLASS && oc != WAND_CLASS
+		    && oc != SPBOOK_CLASS))
+	    return;
+#ifdef BLACKMARKET
+	if (Is_blackmarket(&u.uz))
+	    return;
+#endif
+	first = bases[oc];
+	for (i = first; i < NUM_OBJECTS && objects[i].oc_class == oc; i++) {
+	    if (!OBJ_NAME(objects[i]) || (i != obj->otyp
+		    && (objects[i].oc_name_known || !objects[i].oc_prob)))
+		continue;
+	    fake = *obj;
+	    fake.otyp = i;
+	    if (get_cost(&fake, shkp) == price)
+		match[cnt++] = i;
+	}
+	if (!cnt)
+	    return;
+	Strcpy(buf, cnt == 1 ? "Price sense: at that price it can only be "
+			     : "Price sense: at that price it could be ");
+	for (n = 0; n < cnt; n++) {
+	    if (n)
+		Strcat(buf, n == cnt - 1 ? " or " : ", ");
+	    if (strlen(buf) > BUFSZ - 50) {
+		Strcat(buf, "...");
+		break;
+	    }
+	    Strcat(buf, an(legacy_type_name(match[n])));
+	}
+	Strcat(buf, ".");
+	pline("%s", buf);
+}
+
 /* price notes: remember that a shopkeeper has quoted a price for one of
    this type of object (adapted from NetHack 5.0's price_quotes) */
 void
@@ -2961,6 +3015,7 @@ speak:
 		pline("%s will cost you %ld %s%s.",
 			The(xname(obj)), ltmp, currency(ltmp),
 			(obj->quan > 1L) ? " each" : "");
+	    price_sense(obj, shkp, ltmp);	/* Insight */
 	} else if(!silent) {
 	    if(ltmp) pline_The("list price of %s is %ld %s%s.",
 				   the(xname(obj)), ltmp, currency(ltmp),
@@ -4430,6 +4485,8 @@ register struct obj *first_obj;
 	    pline("%s, price %ld %s%s%s", doname(first_obj),
 		cost, currency(cost), first_obj->quan > 1L ? " each" : "",
 		shk_embellish(first_obj, cost));
+	    if (!Has_contents(first_obj))
+		price_sense(first_obj, (struct monst *)0, cost);
 	}
     }
     destroy_nhwindow(tmpwin);

@@ -242,7 +242,9 @@ register struct monst *mtmp;
 		    Sprintf(eos(buf), " called %s", NAME(mtmp));
 	}
 
-		if (multi) Strcat(buf,", while helpless");
+		if (multi < 0 && legacy_frozen_by)
+		    Sprintf(eos(buf), ", while %s", legacy_frozen_by);
+		else if (multi) Strcat(buf,", while helpless");
 	} else {
 		killer_format = KILLED_BY;
 		Strcat(buf,"something while blind");

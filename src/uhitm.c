@@ -136,6 +136,12 @@ boolean barehanded;
 
 	if (u.uswallow && mtmp == u.ustuck) return retval;
 
+	/* Insight: ask before repeating what killed you before */
+	if (insight_hit_check(mtmp, barehanded)) {
+		flags.move = 0;
+		return 0;
+	}
+
 	if (flags.forcefight) {
 		/* Do this in the caller, after we checked that the monster
 		 * didn't die from the blow.  Reason: putting the 'I' there
@@ -3171,6 +3177,8 @@ uchar aatyp;
 			    You("are frozen by %s gaze!",
 				  s_suffix(mon_nam(mon)));
 			    nomul((ACURR(A_WIS) > 12 || rn2(4)) ? -tmp : -127);
+			    /* for the death message and its Lesson */
+			    legacy_frozen_by = "frozen by a floating eye's gaze";
 			}
 		    } else {
 			pline("%s cannot defend itself.",

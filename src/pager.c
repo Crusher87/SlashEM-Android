@@ -806,6 +806,10 @@ do_look(quick)
 	/* Finally, print out our explanation. */
 	if (found) {
 	    pline("%s", out_str);
+	    /* Insight: threat sense and the monster's fact sheet */
+	    if (from_screen && pm && !Hallucination
+		    && glyph_is_monster(glyph_at(cc.x, cc.y)))
+		codex_look(pm, m_at(cc.x, cc.y));
 	    /* check the data file for information about this thing */
 	    if (found == 1 && ans != LOOK_QUICK && ans != LOOK_ONCE &&
 			(ans == LOOK_VERBOSE || (flags.help && !quick))) {

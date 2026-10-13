@@ -625,6 +625,10 @@ register const char *s;
 	}
 #endif
 
+	/* Slash'EM Legacy: which Sokoban layout, for Sokoban memory */
+	if (*protofile && In_sokoban(&u.uz))
+	    legacy_soko_layout(protofile);
+
 	if(*protofile) {
 	    Strcat(protofile, LEV_EXT);
 	    if(load_special(protofile)) {
