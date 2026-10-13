@@ -14,16 +14,16 @@ To build locally on 64-bit Ubuntu:
      https://developer.android.com/studio#command-tools
 
  - Install the SDK platform, build tools and NDK r21e:
-     sdkmanager "platforms;android-30" "build-tools;30.0.3" "ndk;21.4.7075529"
+     sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;21.4.7075529"
 
  - Install 'bison', 'flex', 'gcc-multilib' and 'groff-base'
 
- - Install JDK 11 (needed by the Gradle build)
+ - Install JDK 17 (needed by the Gradle build)
 
  - Set ANDROID_SDK_ROOT to the SDK installation directory
 
  - Check out the source
-     git clone https://github.com/Crusher87/SlashEM-Android.git
+     git clone --recursive https://github.com/Crusher87/SlashEM-Android.git
 
 
 
@@ -31,8 +31,8 @@ To build locally on 64-bit Ubuntu:
 
 1. cd <SlashEM-Android>/sys/android
 2. Open Makefile.src and set NDK to the NDK path
-   (e.g. $ANDROID_SDK_ROOT/ndk/21.4.7075529). ABI selects the CPU
-   architecture; the default is armeabi-v7a.
+   (e.g. $ANDROID_SDK_ROOT/ndk/21.4.7075529). The CPU architecture
+   defaults to arm64-v8a; pass e.g. ABI=armeabi-v7a to make to change it.
 3. sh ./setup.sh
 4. cd ../..
 5. make install
@@ -47,8 +47,9 @@ This writes app/libs/<ABI>/libslashem.so and app/assets/slashemdir.
 2. ./gradlew assembleDebug
 3. Install app/build/outputs/apk/debug/app-debug.apk on your device.
 
-The ForkFront front end (https://github.com/gurrhack/ForkFront-Android) is
-fetched and built by Gradle automatically.
+The ForkFront front end (https://github.com/gurrhack/ForkFront-Android) is a
+git submodule in ForkFront-Android/. It is built unmodified by forkfront/,
+and app/src/com/tbd/SlashEM/SlashEM.java adapts it to current Android.
 
 
 Happy hacking!

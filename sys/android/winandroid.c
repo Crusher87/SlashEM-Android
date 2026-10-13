@@ -150,9 +150,9 @@ void Java_com_tbd_forkfront_NetHackIO_RunNetHack(JNIEnv* env, jobject thiz, jstr
 	jYNFunction = (*jEnv)->GetMethodID(jEnv, jApp, "ynFunction", "([B[BI)V");
 	jGetLine = (*jEnv)->GetMethodID(jEnv, jApp, "getLine", "([BIII)Ljava/lang/String;");
 	jStartMenu = (*jEnv)->GetMethodID(jEnv, jApp, "startMenu", "(I)V");
-	jAddMenu = (*jEnv)->GetMethodID(jEnv, jApp, "addMenu", "(IIIIII[BII)V");
+	jAddMenu = (*jEnv)->GetMethodID(jEnv, jApp, "addMenu", "(IIJIII[BII)V");
 	jEndMenu = (*jEnv)->GetMethodID(jEnv, jApp, "endMenu", "(I[B)V");
-	jSelectMenu = (*jEnv)->GetMethodID(jEnv, jApp, "selectMenu", "(III)[I");
+	jSelectMenu = (*jEnv)->GetMethodID(jEnv, jApp, "selectMenu", "(III)[J");
 	jCliparound = (*jEnv)->GetMethodID(jEnv, jApp, "cliparound", "(IIII)V");
 	jDelayOutput = (*jEnv)->GetMethodID(jEnv, jApp, "delayOutput", "()V");
 	jShowDPad = (*jEnv)->GetMethodID(jEnv, jApp, "askDirection", "()V");
@@ -747,6 +747,21 @@ int *color, *attr;
 	return FALSE;
 }
 #endif /* MENU_COLOR */
+/* Menu identifiers are passed to Java as a jlong holding the raw bytes of the
+ * union, so pointer identifiers (a_obj) survive the round trip on 64-bit. */
+static jlong ident_to_jlong(const ANY_P *ident)
+{
+	jlong id = 0;
+	memcpy(&id, ident, sizeof(anything) < sizeof(jlong) ? sizeof(anything) : sizeof(jlong));
+	return id;
+}
+
+static void jlong_to_ident(jlong id, ANY_P *ident)
+{
+	memset(ident, 0, sizeof(anything));
+	memcpy(ident, &id, sizeof(anything) < sizeof(jlong) ? sizeof(anything) : sizeof(jlong));
+}
+
 void and_add_menu(winid wid, int glyph, const ANY_P *ident, CHAR_P accelerator, CHAR_P groupacc, int attr, const char *str, BOOLEAN_P preselected)
 {
 	int tile, color;
@@ -765,7 +780,7 @@ void and_add_menu(winid wid, int glyph, const ANY_P *ident, CHAR_P accelerator, 
 	}
 
 	jbyteArray jstr = create_bytearray(str);
-	JNICallV(jAddMenu, wid, tile, ident->a_int, (int)accelerator, (int)groupacc, 1<<attr, jstr, (int)preselected, color);
+	JNICallV(jAddMenu, wid, tile, ident_to_jlong(ident), (int)accelerator, (int)groupacc, 1<<attr, jstr, (int)preselected, color);
 	destroy_jobject(jstr);
 }
 
@@ -820,13 +835,13 @@ int and_select_menu(winid wid, int how, MENU_ITEM_P **selected)
 int and_select_menu_r(winid wid, int how, MENU_ITEM_P **selected, int reentry)
 {
 	int i, n;
-	jintArray a;
-	jint* p;
-	jint* q;
+	jlongArray a;
+	jlong* p;
+	jlong* q;
 
 	//debuglog("and_select_menu");
 
-	a = (jintArray)JNICallO(jSelectMenu, wid, how, reentry);
+	a = (jlongArray)JNICallO(jSelectMenu, wid, how, reentry);
 
 	*selected = 0;
 
@@ -840,14 +855,14 @@ int and_select_menu_r(winid wid, int how, MENU_ITEM_P **selected, int reentry)
 	{
 		n >>= 1;
 
-		q = p = (*jEnv)->GetIntArrayElements(jEnv, a, 0);
+		q = p = (*jEnv)->GetLongArrayElements(jEnv, a, 0);
 		*selected = (MENU_ITEM_P*)malloc(sizeof(MENU_ITEM_P) * n);
 		for(i = 0; i < n; i++)
 		{
-			(*selected)[i].item.a_int = *p++;
-			(*selected)[i].count = *p++;
+			jlong_to_ident(*p++, &(*selected)[i].item);
+			(*selected)[i].count = (long)*p++;
 		}
-		(*jEnv)->ReleaseIntArrayElements(jEnv, a, q, 0);
+		(*jEnv)->ReleaseLongArrayElements(jEnv, a, q, 0);
 	}
 	else if(n == 1)
 	{
@@ -1157,11 +1172,8 @@ char and_yn_function(const char *question, const char *choices, CHAR_P def)
 	if(choices)
 	{
 		nChoices = strlen(choices);
-		esc = (int)index(choices, '\033');
-		if(esc)
-			esc -= (int)choices;
-		else
-			esc = -1;
+		const char *escp = index(choices, '\033');
+		esc = escp ? (int)(escp - choices) : -1;
 	}
 	else
 	{

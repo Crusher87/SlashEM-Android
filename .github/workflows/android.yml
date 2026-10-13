@@ -13,11 +13,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Install host build tools
         run: sudo apt-get update && sudo apt-get install -y gcc-multilib bison flex groff-base bsdextrautils
 
-      # The Android command-line tools need Java 17.
+      # The Android command-line tools and the Android Gradle Plugin need Java 17.
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -27,7 +29,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-30 build-tools;30.0.3 ndk;21.4.7075529'
+          packages: 'platforms;android-36 build-tools;36.0.0 ndk;21.4.7075529'
 
       - name: Point the native build at the NDK
         run: sed -i -e "s,^NDK = .*,NDK = $ANDROID_SDK_ROOT/ndk/21.4.7075529,g" sys/android/Makefile.src
@@ -41,13 +43,6 @@ jobs:
           if readelf -d sys/android/app/libs/*/libslashem.so | grep -q TEXTREL; then
             echo "libslashem.so has text relocations; Android will refuse to load it"; exit 1
           fi
-
-      # Android Gradle Plugin 4.x and Gradle 6.9 need Java 8 or 11.
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          java-version: '11'
-          distribution: 'temurin'
 
       - name: Build APK
         run: cd sys/android && sh gradlew assembleDebug

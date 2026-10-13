@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest
 	xmlns:android="http://schemas.android.com/apk/res/android"
-	package="com.tbd.SlashEM"
 	android:installLocation="auto">
-	<uses-sdk />
+	<!-- Only needed before Android 10; later versions use app-specific storage. -->
 	<uses-permission
-		android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+		android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+		android:maxSdkVersion="28"/>
     <uses-permission android:name="android.permission.INTERNET"/>
 
 	<application
@@ -13,9 +13,13 @@
 		android:icon="@drawable/icon"
 		android:largeHeap="true"
 		android:theme="@android:style/Theme"
-		android:allowBackup="true">
+		android:allowBackup="true"
+		android:enableOnBackInvokedCallback="false">
+		<!-- enableOnBackInvokedCallback="false" keeps the Back key working as
+		     Escape inside the game on Android 16+. -->
 		<activity
-			android:name="com.tbd.forkfront.ForkFront"
+			android:name="com.tbd.SlashEM.SlashEM"
+			android:exported="true"
 			android:label="Slash'EM"
 			android:windowSoftInputMode="adjustResize|stateAlwaysHidden"
 			android:launchMode="singleTask"
@@ -30,6 +34,7 @@
 		</activity>
 		<activity
 			android:name="com.tbd.forkfront.Settings"
+			android:exported="false"
 			android:label="Slash'EM Settings">
 		</activity>
 	</application>

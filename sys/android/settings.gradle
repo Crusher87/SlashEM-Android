@@ -1,7 +1,21 @@
-include ':app'
-rootProject.name = 'SlashEM-Android'
-sourceControl {
-    gitRepository("https://github.com/gurrhack/ForkFront-Android.git") {
-        producesModule("com.tbd.forkfront:lib")
-    }
+pluginManagement {
+  repositories {
+    google()
+    mavenCentral()
+    gradlePluginPortal()
+  }
 }
+
+dependencyResolutionManagement {
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+
+rootProject.name = 'SlashEM-Android'
+include ':app'
+
+// The ForkFront front end, built from the ForkFront-Android submodule with
+// the build script in forkfront/.
+include ':forkfront'

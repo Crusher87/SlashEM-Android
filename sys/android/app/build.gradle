@@ -3,16 +3,18 @@ plugins {
 }
 
 android {
-
-  compileSdkVersion 30
-  buildToolsVersion "30.0.3"
+  namespace 'com.tbd.SlashEM'
+  compileSdk 36
 
   defaultConfig {
-    // Keep minSdkVersion in sync with API in Makefile.src
-    minSdkVersion 21
-    targetSdkVersion 30
-    versionName '0.0.7E7F3-1'
-    versionCode 101
+    applicationId 'com.tbd.SlashEM'
+    // Keep minSdk in sync with API in Makefile.src
+    minSdk 21
+    // Play Protect warns about apps targeting more than two versions below
+    // the device's Android version, so keep this on the latest release.
+    targetSdk 36
+    versionName '0.0.7E7F3-2'
+    versionCode 102
   }
 
   // A fixed debug key, so every CI build can be installed over the previous
@@ -27,11 +29,11 @@ android {
   }
 
   compileOptions {
-    sourceCompatibility JavaVersion.VERSION_1_7
-    targetCompatibility JavaVersion.VERSION_1_7
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
   }
 
-  lintOptions {
+  lint {
     disable 'MissingClass'
     abortOnError false
   }
@@ -39,6 +41,7 @@ android {
   sourceSets {
     main {
       manifest.srcFile 'AndroidManifest.xml'
+      java.srcDirs = ['src']
       res.srcDirs = ['res']
       assets.srcDirs = ['assets']
       jniLibs.srcDirs = ['libs']
@@ -47,7 +50,5 @@ android {
 }
 
 dependencies {
-  // ForkFront 1.2 changed menu item ids to long; winandroid.c still passes
-  // int, so stay on 1.1 until the C side is updated.
-  implementation 'com.tbd.forkfront:lib:1.1'
+  implementation project(':forkfront')
 }
