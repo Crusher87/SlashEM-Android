@@ -1317,6 +1317,12 @@ sokoban_detect()
 int
 dosearch()
 {
+	static int already_found_flag = 0;
+
+	if (cmd_safety_prevention("Searching", "another search",
+				  "You already found a monster.",
+				  &already_found_flag))
+	    return 0;
 	return(dosearch0(0));
 }
 

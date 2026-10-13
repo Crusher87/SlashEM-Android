@@ -347,6 +347,8 @@ E void NDECL(deferred_goto);
 E boolean FDECL(revive_corpse, (struct obj *, BOOLEAN_P));
 E void FDECL(revive_mon, (genericptr_t, long));
 E void FDECL(moldy_corpse, (genericptr_t, long));
+E boolean FDECL(cmd_safety_prevention, (const char *,const char *,
+					 const char *,int *));
 E int NDECL(donull);
 E int NDECL(dowipe);
 E void FDECL(set_wounded_legs, (long,int));

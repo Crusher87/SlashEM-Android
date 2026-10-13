@@ -2208,6 +2208,10 @@ used `teleport' only.  Whether or not the effect is noticeable will
 depend upon the window port used or on the type of terminal.
 .lp safe_pet
 Prevent you from (knowingly) attacking your pets (default on).
+.lp safe_wait
+Refuse to wait (`.') or search (`s') while a hostile monster is next to you
+or while you are turning to stone or slime, being strangled or fatally ill;
+prefix the command with `m' or give it a count to do it anyway (default on).
 .lp scores
 Control what parts of the score list you are shown at the end (ex.
 ``scores:5 top scores/4 around my score/own scores'').  Only the first

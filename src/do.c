@@ -1745,9 +1745,43 @@ long timeout;
     }
 }
 
+/* safe_wait: refuse to rest or search when that looks like a mistake;
+   the 'm' prefix or a count overrides */
+boolean
+cmd_safety_prevention(ucverb, cmddesc, act, flagcounter)
+const char *ucverb;	/* "Waiting" */
+const char *cmddesc;	/* "a no-op (to rest)" */
+const char *act;	/* "Are you waiting to get hit?" */
+int *flagcounter;	/* show the hint about 'm' only the first time */
+{
+	if (flags.safe_wait && !iflags.menu_requested && !multi) {
+	    char buf[QBUFSZ];
+
+	    buf[0] = '\0';
+	    if (iflags.cmdassist || !(*flagcounter)++)
+		Sprintf(buf, "  Use 'm' prefix to force %s.", cmddesc);
+
+	    if (monster_nearby()) {
+		Norep("%s%s", act, buf);
+		return TRUE;
+	    } else if (Stoned || Slimed || Strangled || Sick) {
+		Norep("%s doesn't feel like a good idea right now.", ucverb);
+		return TRUE;
+	    }
+	}
+	*flagcounter = 0;
+	return FALSE;
+}
+
 int
 donull()
 {
+	static int did_nothing_flag = 0;
+
+	if (cmd_safety_prevention("Waiting", "a no-op (to rest)",
+				  "Are you waiting to get hit?",
+				  &did_nothing_flag))
+	    return 0;
 	return(1);	/* Do nothing, but let other things happen */
 }
 

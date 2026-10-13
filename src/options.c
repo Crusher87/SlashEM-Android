@@ -206,6 +206,7 @@ static struct Bool_Opt
 #endif
 	{"rest_on_space", &flags.rest_on_space, FALSE, SET_IN_GAME},
 	{"safe_pet", &flags.safe_dog, TRUE, SET_IN_GAME},
+	{"safe_wait", &flags.safe_wait, TRUE, SET_IN_GAME},
 #if defined(OBJ_SANITY)
 	{"sanity_check", &iflags.sanity_check, TRUE, SET_IN_GAME},
 #elif defined(WIZARD)

@@ -2790,8 +2790,10 @@ register char *cmd;
 	}
 
 	/* some special prefix handling */
-	/* overload 'm' prefix for ',' to mean "request a menu" */
-	if (prefix_seen && cmd[1] == ',') {
+	/* overload 'm' prefix for ',' to mean "request a menu",
+	   and for '.' and 's' to mean "wait or search anyway" (safe_wait) */
+	if (prefix_seen && (cmd[1] == ',' || cmd[1] == '.' || cmd[1] == 's' ||
+			    (cmd[1] == ' ' && flags.rest_on_space))) {
 		iflags.menu_requested = TRUE;
 		++cmd;
 	}
