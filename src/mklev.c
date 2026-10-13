@@ -612,6 +612,7 @@ clear_level_structures()
 
 	/* [DS] - Michael Clarke's Lethe flag */
 	level.flags.lethe = 0;
+	level.flags.sokoban_rules = 0;	/* set by sokoban_detect() */
 
 	nroom = 0;
 	rooms[0].hx = -1;

@@ -1005,7 +1005,7 @@ int tech_no;
 		    }
 
 		    /* A little Sokoban guilt... */
-		    if (In_sokoban(&u.uz))
+		    if (Sokoban)
 			change_luck(-1);
 		    You("reform!");
 		    teleds(cc.x, cc.y, FALSE);

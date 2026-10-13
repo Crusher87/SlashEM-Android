@@ -709,7 +709,7 @@ forget_map(howmuch)
 {
 	register int zx, zy;
 
-	if (In_sokoban(&u.uz))
+	if (Sokoban)
 	    return;
 
 	known = TRUE;
@@ -1477,7 +1477,7 @@ register struct obj	*sobj;
 	    	pline_The("%s rumbles %s you!", ceiling(u.ux,u.uy),
 	    			sobj->blessed ? "around" : "above");
 	    	known = 1;
-	    	if (In_sokoban(&u.uz))
+	    	if (Sokoban)
 	    	    change_luck(-1);	/* Sokoban guilt */
 
 	    	/* Loop through the surrounding squares */

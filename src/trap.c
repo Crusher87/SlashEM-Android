@@ -26,6 +26,7 @@ STATIC_DCL boolean FDECL(thitm, (int,struct monst *,struct obj *,int,BOOLEAN_P))
 STATIC_DCL int FDECL(mkroll_launch,
 			(struct trap *,XCHAR_P,XCHAR_P,SHORT_P,long));
 STATIC_DCL boolean FDECL(isclearpath,(coord *, int, SCHAR_P, SCHAR_P));
+STATIC_DCL void NDECL(maybe_finish_sokoban);
 #ifdef STEED
 STATIC_OVL int FDECL(steedintrap, (struct trap *, struct obj *));
 STATIC_OVL boolean FDECL(keep_saddle_with_steedcorpse,
@@ -317,6 +318,10 @@ register int x, y, typ;
 	if (!oldplace) {
 	    ttmp->ntrap = ftrap;
 	    ftrap = ttmp;
+	} else if (Sokoban) {
+	    /* it shouldn't be possible to override a sokoban pit or hole
+	       with some other trap, but check just to be safe */
+	    maybe_finish_sokoban();
 	}
 	return(ttmp);
 }
@@ -331,7 +336,7 @@ boolean td;	/* td == TRUE : trap door or hole */
 	register int newlevel = dunlev(&u.uz);
 
 	/* KMH -- You can't escape the Sokoban level traps */
-	if(Blind && Levitation && !In_sokoban(&u.uz)) return;
+	if(Blind && Levitation && !Sokoban) return;
 
 	do {
 	    newlevel++;
@@ -340,7 +345,7 @@ boolean td;	/* td == TRUE : trap door or hole */
 	if(td) {
 	    struct trap *t=t_at(u.ux,u.uy);
 	    seetrap(t);
-	    if (!In_sokoban(&u.uz)) {
+	    if (!Sokoban) {
 		if (t->ttyp == TRAPDOOR)
 			pline("A trap door opens up under you!");
 		else 
@@ -348,7 +353,7 @@ boolean td;	/* td == TRUE : trap door or hole */
 	    }
 	} else pline_The("%s opens up under you!", surface(u.ux,u.uy));
 
-	if (In_sokoban(&u.uz) && Can_fall_thru(&u.uz))
+	if (Sokoban && Can_fall_thru(&u.uz))
 	    ;	/* KMH -- You can't escape the Sokoban level traps */
 	else if(Levitation || u.ustuck || !Can_fall_thru(&u.uz)
 	   || Flying || is_clinger(youmonst.data)
@@ -600,7 +605,7 @@ unsigned trflags;
 	nomul(0);
 
 	/* KMH -- You can't escape the Sokoban level traps */
-	if (In_sokoban(&u.uz) &&
+	if (Sokoban &&
 			(ttype == PIT || ttype == SPIKED_PIT || ttype == HOLE ||
 			ttype == TRAPDOOR)) {
 	    /* The "air currents" message is still appropriate -- even when
@@ -879,9 +884,9 @@ glovecheck:		(void) rust_dmg(uarmg, "gauntlets", 1, TRUE, &youmonst);
 	    case PIT:
 	    case SPIKED_PIT:
 		/* KMH -- You can't escape the Sokoban level traps */
-		if (!In_sokoban(&u.uz) && (Levitation || Flying)) break;
+		if (!Sokoban && (Levitation || Flying)) break;
 		seetrap(trap);
-		if (!In_sokoban(&u.uz) && is_clinger(youmonst.data)) {
+		if (!Sokoban && is_clinger(youmonst.data)) {
 		    if(trap->tseen) {
 			You("see %s %spit below you.", a_your[trap->madeby_u],
 			    ttype == SPIKED_PIT ? "spiked " : "");
@@ -893,7 +898,7 @@ glovecheck:		(void) rust_dmg(uarmg, "gauntlets", 1, TRUE, &youmonst);
 		    }
 		    break;
 		}
-		if (!In_sokoban(&u.uz)) {
+		if (!Sokoban) {
 		   char verbbuf[BUFSZ];
 #ifdef STEED
 		    if (u.usteed) {
@@ -1740,7 +1745,7 @@ register struct monst *mtmp;
 	    register int tt = trap->ttyp;
 	    boolean in_sight, tear_web, see_it,
 		    inescapable = ((tt == HOLE || tt == PIT) &&
-				   In_sokoban(&u.uz) && !trap->madeby_u);
+				   Sokoban && !trap->madeby_u);
 	    const char *fallverb;
 
 #ifdef STEED
@@ -2481,7 +2486,7 @@ long hmask, emask;     /* might cancel timeout */
 		if (!(emask & W_SADDLE))
 #endif
 		{
-		    boolean sokoban_trap = (In_sokoban(&u.uz) && trap);
+		    boolean sokoban_trap = (Sokoban && trap);
 		    if (Hallucination)
 			pline("Bummer!  You've %s.",
 			      is_pool(u.ux,u.uy) ?
@@ -4117,7 +4122,33 @@ register struct trap *trap;
 		for(ttmp = ftrap; ttmp->ntrap != trap; ttmp = ttmp->ntrap) ;
 		ttmp->ntrap = trap->ntrap;
 	}
+	if (Sokoban && (trap->ttyp == PIT || trap->ttyp == HOLE))
+		maybe_finish_sokoban();
 	dealloc_trap(trap);
+}
+
+/* called when a trap has been deleted or had its ttyp replaced */
+STATIC_OVL void
+maybe_finish_sokoban()
+{
+	struct trap *t;
+
+	if (Sokoban && !in_mklev) {
+	    /* scan all remaining traps, ignoring any created by the hero;
+	       if this level has no more pits or holes, the current sokoban
+	       puzzle has been solved */
+	    for (t = ftrap; t; t = t->ntrap) {
+		if (t->madeby_u) continue;
+		if (t->ttyp == PIT || t->ttyp == HOLE) break;
+	    }
+	    if (!t) {
+		/* we've passed the last trap without finding a pit or hole;
+		   clear the sokoban_rules flag so that luck penalties for
+		   things like breaking boulders or jumping will no longer
+		   be given, and restrictions on diagonal moves are lifted */
+		Sokoban = 0;	/* clear level.flags.sokoban_rules */
+	    }
+	}
 }
 
 boolean

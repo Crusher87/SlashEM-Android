@@ -1310,6 +1310,9 @@ sokoban_detect()
 	for (ttmp = ftrap; ttmp; ttmp = ttmp->ntrap) {
 	    ttmp->tseen = 1;
 	    map_trap(ttmp, 1);
+	    /* set sokoban_rules when there is at least one pit or hole */
+	    if (ttmp->ttyp == PIT || ttmp->ttyp == HOLE)
+		Sokoban = 1;
 	}
 }
 

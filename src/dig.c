@@ -1304,7 +1304,7 @@ zap_dig()
                 if (otmp->otyp == BOULDER) {
 		    delobj(otmp);
 		    /* A little Sokoban guilt... */
-		    if (In_sokoban(&u.uz))
+		    if (Sokoban)
 			change_luck(-1);
 		    unblock_point(zx, zy);
 		    newsym(zx, zy);
