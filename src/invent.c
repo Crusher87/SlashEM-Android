@@ -3515,56 +3515,81 @@ reassign()
 int
 doorganize()	/* inventory organizer by Del Lamb */
 {
-	struct obj *obj, *otmp;
-	register int ix, cur;
+	struct obj *obj, *otmp, *splitting, *bumped;
+	register int ix, cur, trycnt;
 	register char let;
 	char alphabet[52+1], buf[52+1];
 	char qbuf[QBUFSZ];
-	char allowall[2];
+	char allowall[3];
 	const char *adj_type;
+	boolean collect;
 
 	if (!flags.invlet_constant) reassign();
-	/* get a pointer to the object the user wants to organize */
-	allowall[0] = ALL_CLASSES; allowall[1] = '\0';
+	/* get a pointer to the object the user wants to organize;
+	   a count splits that many off into the 'to' slot */
+	allowall[0] = ALLOW_COUNT; allowall[1] = ALL_CLASSES;
+	allowall[2] = '\0';
 	if (!(obj = getobj(allowall,"adjust"))) return(0);
+
+	/* figure out whether user gave a split count to getobj() */
+	splitting = bumped = (struct obj *)0;
+	for (otmp = invent; otmp; otmp = otmp->nobj)
+		if (otmp->nobj == obj) {  /* knowledge of splitobj() operation */
+			if (otmp->invlet == obj->invlet) splitting = otmp;
+			break;
+		}
 
 	/* initialize the list with all upper and lower case letters */
 	for (let = 'a', ix = 0;  let <= 'z';) alphabet[ix++] = let++;
 	for (let = 'A', ix = 26; let <= 'Z';) alphabet[ix++] = let++;
 	alphabet[52] = 0;
+	/* for floating inv letters, truncate list after the first open slot */
+	if (!flags.invlet_constant && (ix = inv_cnt()) < 52)
+		alphabet[ix + (splitting ? 0 : 1)] = '\0';
 
 	/* blank out all the letters currently in use in the inventory */
 	/* except those that will be merged with the selected object   */
 	for (otmp = invent; otmp; otmp = otmp->nobj)
 		if (otmp != obj && !mergable(otmp,obj)) {
-			if (otmp->invlet <= 'Z')
-				alphabet[(otmp->invlet) - 'A' + 26] = ' ';
-			else	alphabet[(otmp->invlet) - 'a']	    = ' ';
+			let = otmp->invlet;
+			if (let >= 'a' && let <= 'z')
+				alphabet[let - 'a'] = ' ';
+			else if (let >= 'A' && let <= 'Z')
+				alphabet[let - 'A' + 26] = ' ';
 		}
 
 	/* compact the list by removing all the blanks */
-	for (ix = cur = 0; ix <= 52; ix++)
+	for (ix = cur = 0; alphabet[ix]; ix++)
 		if (alphabet[ix] != ' ') buf[cur++] = alphabet[ix];
+	buf[cur] = '\0';
 
 	/* and by dashing runs of letters */
 	if(cur > 5) compactify(buf);
 
 	/* get new letter to use as inventory letter */
-	for (;;) {
-		Sprintf(qbuf, "Adjust letter to what [%s]?",buf);
+	Sprintf(qbuf, "Adjust letter to what [%s]?", buf);
+	for (trycnt = 1; ; ++trycnt) {
 		let = yn_function(qbuf, (char *)0, '\0');
-		if(index(quitchars,let)) {
+		if (index(quitchars,let) ||
+			/* adjusting to same slot is meaningful since all
+			   compatible stacks get collected along the way,
+			   but splitting to same slot is not */
+			(splitting && let == obj->invlet)) {
+ noadjust:
+			if (splitting) (void) merged(&splitting, &obj);
 			pline(Never_mind);
 			return(0);
 		}
-		if (let == '@' || !letter(let))
-			pline("Select an inventory slot letter.");
-		else
-			break;
+		if (letter(let) && let != '@')
+			break;	/* got one */
+		if (trycnt == 5) goto noadjust;
+		pline("Select an inventory slot letter.");
 	}
 
 	/* change the inventory and print the resulting item */
-	adj_type = "Moving:";
+	collect = (let == obj->invlet);
+	adj_type = collect ? "Collecting:" :
+		   !splitting ? "Moving:" : "Splitting:";
 
 	/*
 	 * don't use freeinv/addinv to avoid double-touching artifacts,
@@ -3572,28 +3597,64 @@ doorganize()	/* inventory organizer by Del Lamb */
 	 */
 	extract_nobj(obj, &invent);
 
-	for (otmp = invent; otmp;)
-		if (merged(&otmp,&obj)) {
-			adj_type = "Merging:";
-			obj = otmp;
-			otmp = otmp->nobj;
-			extract_nobj(obj, &invent);
-		} else {
-			if (otmp->invlet == let) {
+	for (otmp = invent; otmp;) {
+		if (collect) {
+			/* Collecting: #adjust an inventory stack into its
+			   same slot; keep it there and merge other
+			   compatible stacks into it */
+			if (merged(&otmp,&obj)) {
+				adj_type = "Merging:";
+				obj = otmp;
+				otmp = otmp->nobj;
+				extract_nobj(obj, &invent);
+				continue;
+			}
+		} else if (otmp->invlet == let) {
+			/* Moving or splitting: found 'otmp' in destination
+			   slot; merge if compatible, otherwise swap (moving)
+			   or bump it to an open slot (splitting) */
+			if (merged(&otmp,&obj)) {
+				adj_type = splitting ?
+					"Splitting and merging:" : "Merging:";
+				obj = otmp;
+				extract_nobj(obj, &invent);
+			} else if (!splitting) {
 				adj_type = "Swapping:";
 				otmp->invlet = obj->invlet;
+			} else if (inv_cnt() >= 52) {
+				(void) merged(&splitting, &obj); /* undo split */
+				/* "knapsack cannot accommodate any more items" */
+				Your("pack is too full.");
+				return(0);
+			} else {
+				bumped = otmp;
+				extract_nobj(bumped, &invent);
 			}
-			otmp = otmp->nobj;
+			break;	/* not collecting and found 'to' slot */
 		}
+		otmp = otmp->nobj;
+	}
 
-	/* inline addinv (assuming flags.invlet_constant and !merged) */
+	/* inline addinv; insert loose object at beginning of inventory */
 	obj->invlet = let;
-	obj->nobj = invent; /* insert at beginning */
+	obj->nobj = invent;
 	obj->where = OBJ_INVENT;
 	invent = obj;
 	reorder_invent();
+	if (bumped) {
+		/* splitting the 'from' stack is causing an incompatible
+		   stack in the 'to' slot to be moved into an open one;
+		   we need to do another inline insertion to inventory */
+		assigninvlet(bumped);
+		bumped->nobj = invent;
+		bumped->where = OBJ_INVENT;
+		invent = bumped;
+		reorder_invent();
+	}
 
+	/* messages deferred until inventory has been fully reestablished */
 	prinv(adj_type, obj, 0L);
+	if (bumped) prinv("Moving:", bumped, 0L);
 	update_inventory();
 	return(0);
 }
