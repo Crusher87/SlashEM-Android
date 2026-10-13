@@ -113,6 +113,11 @@ pline VA_DECL(const char *, line)
 	if (no_repeat && !strcmp(line, toplines))
 	    return;
 #endif /* MAC */
+	if (iflags.in_dumplog) {
+	    /* putstr() writes to the dump log; leave the screen alone */
+	    putstr(WIN_MESSAGE, 0, line);
+	    return;
+	}
 	if (vision_full_recalc) vision_recalc(0);
 	if (u.ux) flush_screen(1);		/* %% */
 	if (!no_history) msghist_add(line);

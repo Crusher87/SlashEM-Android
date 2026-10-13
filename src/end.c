@@ -42,6 +42,11 @@ STATIC_DCL void FDECL(savelife, (int));
 STATIC_DCL boolean FDECL(list_vanquished, (CHAR_P, BOOLEAN_P));
 STATIC_DCL void FDECL(list_genocided, (CHAR_P, BOOLEAN_P));
 STATIC_DCL boolean FDECL(should_query_disclose_option, (int,char *));
+STATIC_DCL void FDECL(end_putstr, (winid,const char *));
+#ifdef DUMPLOG
+STATIC_DCL char *FDECL(dump_datetime, (time_t,char *));
+STATIC_DCL void FDECL(dump_everything, (int,time_t));
+#endif
 
 #if defined(__BEOS__) || defined(MICRO) || defined(WIN32) || defined(OS2) || defined(ANDROID)
 extern void FDECL(nethack_exit,(int));
@@ -432,6 +437,120 @@ boolean taken;
 	}
 }
 
+#ifdef DUMPLOG
+/* date and time as YYYY-MM-DD hh:mm:ss */
+STATIC_OVL char *
+dump_datetime(date, buf)
+time_t date;
+char *buf;
+{
+	long ymd = yyyymmdd(date), hms = hhmmss(date);
+
+	Sprintf(buf, "%04ld-%02ld-%02ld %02ld:%02ld:%02ld",
+		ymd / 10000L, (ymd / 100L) % 100L, ymd % 100L,
+		hms / 10000L, (hms / 100L) % 100L, hms % 100L);
+	return buf;
+}
+
+/*
+ * Write the game that just ended to the dump log: everything the
+ * end-of-game disclosure can show, whatever the player chose to see, plus
+ * the final map and status and the latest messages.  The tombstone and the
+ * score summary are added later by done().
+ */
+STATIC_OVL void
+dump_everything(how, when)
+int how;
+time_t when;	/* date+time at end of game */
+{
+	char pbuf[BUFSZ], tbuf[BUFSZ];
+	struct obj *obj;
+	boolean hallu = FALSE;
+	int final = (how >= PANICKED) ? 1 : 2;	/* survived : died */
+
+	dump_redirect(TRUE);
+	if (!iflags.in_dumplog) return;		/* no dump log file */
+
+	putstr(0, 0, getversionstring(pbuf));
+	putstr(0, 0, "");
+	Sprintf(pbuf, "Game began %s, ", dump_datetime(u.ubirthday, tbuf));
+	Sprintf(eos(pbuf), "ended %s.", dump_datetime(when, tbuf));
+	putstr(0, 0, pbuf);
+	putstr(0, 0, "");
+	Sprintf(pbuf, "%s, %s %s %s %s", plname,
+		aligns[1 - u.ualign.type].adj, genders[flags.female].adj,
+		urace.adj,
+		(flags.female && urole.name.f) ? urole.name.f : urole.name.m);
+	putstr(0, 0, pbuf);
+	putstr(0, 0, "");
+
+	dump_map();
+	dump_status();
+	putstr(0, 0, "");
+	dump_msghistory();
+	putstr(0, 0, "");
+
+	/* list the inventory identified, and with true names even when
+	   hallucinating (as disclose() does) */
+	dump_redirect(FALSE);
+	if (Hallucination) {
+	    make_hallucinated(0L, FALSE, 0L);
+	    hallu = TRUE;
+	}
+	for (obj = invent; obj; obj = obj->nobj) {
+	    makeknown(obj->otyp);
+	    obj->known = obj->bknown = obj->dknown = obj->rknown = 1;
+	}
+	dump_redirect(TRUE);
+	putstr(0, 0, "Inventory:");
+	(void) display_inventory((char *)0, TRUE);
+	container_contents(invent, TRUE, TRUE);
+	dump_redirect(FALSE);
+	if (hallu) make_hallucinated(20L, FALSE, 0L);
+	dump_redirect(TRUE);
+
+	enlightenment(final);
+	putstr(0, 0, "");
+	show_conduct(final);
+	putstr(0, 0, "");
+	dump_skills();
+	dump_spells();
+	dump_techniques();
+
+	/*
+	 * More end-of-game sections go here.  A function that shows its
+	 * information in a window (putstr() to an NHW_MENU or NHW_TEXT window,
+	 * or a menu) writes it to the dump log when called at this point,
+	 * since the window procedures are redirected; putstr(0, 0, text)
+	 * writes a single line.  End each section with a blank line.
+	 */
+
+	if (!list_vanquished('y', FALSE))
+	    putstr(0, 0, "No creatures were vanquished.");
+	putstr(0, 0, "");
+	if (!num_genocides())
+	    putstr(0, 0, "No species were genocided.");
+	else
+	    list_genocided('y', FALSE);
+	putstr(0, 0, "");
+
+	dump_redirect(FALSE);
+}
+#endif /* DUMPLOG */
+
+/* show a line of the end-of-game summary, and put it in the dump log */
+STATIC_OVL void
+end_putstr(win, str)
+winid win;
+const char *str;
+{
+#ifdef DUMPLOG
+	dump_forward_putstr(win, 0, str, done_stopprint);
+#else
+	if (!done_stopprint) putstr(win, 0, str);
+#endif
+}
+
 /* try to get the player back in a viable state after being killed */
 STATIC_OVL void
 	savelife(how)
@@ -567,6 +686,9 @@ int how;
 	boolean bones_ok, have_windows = iflags.window_inited;
 	struct obj *corpse = (struct obj *)0;
 	long umoney;
+#ifdef DUMPLOG
+	time_t endtime;
+#endif
 
 	if (how == TRICKED) {
 	    if (killer) {
@@ -675,6 +797,11 @@ die:
 	   it's gone prior to inventory disclosure and creation of bones data */
 	inven_inuse(TRUE);
 
+#ifdef DUMPLOG
+	endtime = getnow();
+	dump_open_log(endtime);
+#endif
+
 	/* Sometimes you die on the first move.  Life's not fair.
 	 * On those rare occasions you get hosed immediately, go out
 	 * smiling... :-)  -3.
@@ -755,6 +882,11 @@ die:
 
 	if (strcmp(flags.end_disclose, "none") && how != PANICKED)
 		disclose(how, taken);
+#ifdef DUMPLOG
+	/* the dump log gets all of it, whatever the player chose to see */
+	if (how != PANICKED)
+		dump_everything(how, endtime);
+#endif
 	/* finish_paybill should be called after disclosure but before bones */
 	if (bones_ok && taken) finish_paybill();
 
@@ -819,6 +951,14 @@ die:
 		outrip(endwin, how);
 	} else
 	    done_stopprint = 1; /* just avoid any more output */
+#ifdef DUMPLOG
+	/* the dump log gets the tombstone even if the screen didn't */
+	if (how < GENOCIDED) {
+	    dump_redirect(TRUE);
+	    if (iflags.in_dumplog) genl_outrip(0, how);
+	    dump_redirect(FALSE);
+	}
+#endif
 
 /* changing kilbuf really changes killer. we do it this way because
    killer is declared a (const char *)
@@ -832,15 +972,13 @@ die:
 		/* don't bother counting to see whether it should be plural */
 	}
 
-	if (!done_stopprint) {
-	    Sprintf(pbuf, "%s %s the %s...", Goodbye(), plname,
-		   how != ASCENDED ?
-		      (const char *) ((flags.female && urole.name.f) ?
-		         urole.name.f : urole.name.m) :
-		      (const char *) (flags.female ? "Demigoddess" : "Demigod"));
-	    putstr(endwin, 0, pbuf);
-	    putstr(endwin, 0, "");
-	}
+	Sprintf(pbuf, "%s %s the %s...", Goodbye(), plname,
+	       how != ASCENDED ?
+		  (const char *) ((flags.female && urole.name.f) ?
+		     urole.name.f : urole.name.m) :
+		  (const char *) (flags.female ? "Demigoddess" : "Demigod"));
+	end_putstr(endwin, pbuf);
+	end_putstr(endwin, "");
 
 	if (how == ESCAPED || how == ASCENDED) {
 	    register struct monst *mtmp;
@@ -867,35 +1005,38 @@ die:
 	    keepdogs(TRUE);
 	    viz_array[0][0] |= IN_SIGHT; /* need visibility for naming */
 	    mtmp = mydogs;
-	    if (!done_stopprint) Strcpy(pbuf, "You");
+	    Strcpy(pbuf, "You");
 	    if (mtmp) {
 		while (mtmp) {
-		    if (!done_stopprint)
+		    if (strlen(pbuf) < BUFSZ / 2)
 			Sprintf(eos(pbuf), " and %s", mon_nam(mtmp));
 		    if (mtmp->mtame)
 			u.urexp += mtmp->mhp;
 		    mtmp = mtmp->nmon;
 		}
-		if (!done_stopprint) putstr(endwin, 0, pbuf);
+		end_putstr(endwin, pbuf);
 		pbuf[0] = '\0';
 	    } else {
-		if (!done_stopprint) Strcat(pbuf, " ");
+		Strcat(pbuf, " ");
 	    }
-	    if (!done_stopprint) {
-		Sprintf(eos(pbuf), "%s with %ld point%s,",
-			how==ASCENDED ? "went to your reward" :
-					"escaped from the dungeon",
-			u.urexp, plur(u.urexp));
-		putstr(endwin, 0, pbuf);
-	    }
+	    Sprintf(eos(pbuf), "%s with %ld point%s,",
+		    how==ASCENDED ? "went to your reward" :
+				    "escaped from the dungeon",
+		    u.urexp, plur(u.urexp));
+	    end_putstr(endwin, pbuf);
 
 	    if (!done_stopprint)
 		artifact_score(invent, FALSE, endwin);	/* list artifacts */
+#ifdef DUMPLOG
+	    dump_redirect(TRUE);
+	    if (iflags.in_dumplog) artifact_score(invent, FALSE, (winid) 0);
+	    dump_redirect(FALSE);
+#endif
 
 	    /* list valuables here */
 	    for (val = valuables; val->list; val++) {
 		sort_valuables(val->list, val->size);
-		for (i = 0; i < val->size && !done_stopprint; i++) {
+		for (i = 0; i < val->size; i++) {
 		    int typ = val->list[i].typ;
 		    long count = val->list[i].count;
 
@@ -916,11 +1057,11 @@ die:
 				"%8ld worthless piece%s of colored glass,",
 				count, plur(count));
 		    }
-		    putstr(endwin, 0, pbuf);
+		    end_putstr(endwin, pbuf);
 		}
 	    }
 
-	} else if (!done_stopprint) {
+	} else {
 	    /* did not escape or ascend */
 	    if (u.uz.dnum == 0 && u.uz.dlevel <= 0) {
 		/* level teleported out of the dungeon; `how' is DIED,
@@ -940,21 +1081,26 @@ die:
 
 	    Sprintf(eos(pbuf), " with %ld point%s,",
 		    u.urexp, plur(u.urexp));
-	    putstr(endwin, 0, pbuf);
+	    end_putstr(endwin, pbuf);
 	}
 
-	if (!done_stopprint) {
-	    Sprintf(pbuf, "and %ld piece%s of gold, after %ld move%s.",
-		    umoney, plur(umoney), moves, plur(moves));
-	    putstr(endwin, 0, pbuf);
-	}
-	if (!done_stopprint) {
-	    Sprintf(pbuf,
+	Sprintf(pbuf, "and %ld piece%s of gold, after %ld move%s.",
+		umoney, plur(umoney), moves, plur(moves));
+	end_putstr(endwin, pbuf);
+	Sprintf(pbuf,
 	     "You were level %d with a maximum of %d hit point%s when you %s.",
-		    u.ulevel, u.uhpmax, plur(u.uhpmax), ends[how]);
-	    putstr(endwin, 0, pbuf);
+		u.ulevel, u.uhpmax, plur(u.uhpmax), ends[how]);
+	end_putstr(endwin, pbuf);
+	end_putstr(endwin, "");
+#ifdef DUMPLOG
+	dump_close_log();
+	if (!done_stopprint && dumplog_filename()) {
+	    /* tell the player where to find it (not part of the dump) */
+	    putstr(endwin, 0, "The dump log of this game was saved as");
+	    putstr(endwin, 0, dumplog_filename());
 	    putstr(endwin, 0, "");
 	}
+#endif
 	if (!done_stopprint)
 	    display_nhwindow(endwin, TRUE);
 	if (endwin != WIN_ERR)
@@ -993,15 +1139,22 @@ boolean identified, all_containers;
 		    winid tmpwin = create_nhwindow(NHW_MENU);
 		    Sprintf(buf, "Contents of %s:", the(xname(box)));
 		    putstr(tmpwin, 0, buf);
-		    putstr(tmpwin, 0, "");
+		    if (!iflags.in_dumplog) putstr(tmpwin, 0, "");
 		    for (obj = box->cobj; obj; obj = obj->nobj) {
 			if (identified) {
 			    makeknown(obj->otyp);
 			    obj->known = obj->bknown =
 			    obj->dknown = obj->rknown = 1;
 			}
-			putstr(tmpwin, 0, doname(obj));
+			if (iflags.in_dumplog) {
+			    /* indent the contents in the dump log */
+			    Strcpy(buf, "  ");
+			    (void) strncat(buf, doname(obj), BUFSZ - 3);
+			    putstr(tmpwin, 0, buf);
+			} else
+			    putstr(tmpwin, 0, doname(obj));
 		    }
+		    if (iflags.in_dumplog) putstr(tmpwin, 0, "");
 		    display_nhwindow(tmpwin, TRUE);
 		    destroy_nhwindow(tmpwin);
 		    if (all_containers)
