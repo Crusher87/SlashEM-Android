@@ -45,8 +45,8 @@ standout       use standout mode for --More-- on messages         [FALSE]
 time           display elapsed game time, in moves                [FALSE]
 tombstone      print tombstone when you die                       [TRUE]
 toptenwin      print topten in a window rather than stdout        [FALSE]
-travel         enable the command to travel to a map location via [TRUE]
-               a shortest-path algorithm, usually invoked by '_'.
+travel         let a mouse click on the map travel to that spot   [TRUE]
+               via a shortest-path algorithm ('_' always works).
 verbose        print more commentary during the game              [TRUE]
 
 

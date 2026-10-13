@@ -123,6 +123,7 @@ STATIC_PTR int NDECL(doborgtoggle);
 #endif
 STATIC_PTR int NDECL(domonability);
 STATIC_PTR int NDECL(dotravel);
+STATIC_PTR int NDECL(doretravel);
 STATIC_PTR int NDECL(playersteal);
 #if 0
 STATIC_PTR int NDECL(specialpower); /* WAC -- use techniques */
@@ -2227,6 +2228,7 @@ static const struct func_tab cmdlist[] = {
 	{SPBOOK_SYM, TRUE, dovspell},			/* Mike Stephenson */
 	{'#', TRUE, doextcmd},
 	{'_', TRUE, dotravel},
+	{C('_'), TRUE, doretravel},
 	{0,0,0,0}
 };
 
@@ -2252,6 +2254,8 @@ struct ext_func_tab extcmdlist[] = {
 	{"offer", "offer a sacrifice to the gods", dosacrifice, FALSE},
 	{"pray", "pray to the gods for help", dopray, TRUE},
 	{"quit", "exit without saving current game", done2, TRUE},
+	{"retravel", "travel to the previously selected travel destination",
+		doretravel, TRUE},
 #ifdef STEED
 	{"ride", "ride (or stop riding) a monster", doride, FALSE},
 #endif
@@ -2762,15 +2766,15 @@ register char *cmd;
 		    multi = 0;
 		    return;
 	 case CMD_TRAVEL:
-		    if (iflags.travelcmd) {
-			    flags.travel = 1;
-			    iflags.travel1 = 1;
-			    flags.run = 8;
-			    flags.nopick = 1;
-			    do_rush = TRUE;
-			    break;
-		    }
-		    /*FALLTHRU*/
+		    /* only map clicks are suppressed by !travel (they never
+		       produce CMD_TRAVEL then); '_' asks for a destination,
+		       which gives a chance to cancel an accidental keypress */
+		    flags.travel = 1;
+		    iflags.travel1 = 1;
+		    flags.run = 8;
+		    flags.nopick = 1;
+		    do_rush = TRUE;
+		    break;
 	 default:   if (movecmd(*cmd)) {	/* ordinary movement */
 			flags.run = 0;	/* only matters here if it was 8 */
 			do_walk = TRUE;
@@ -3106,8 +3110,9 @@ click_to_cmd(x, y, mod)
         if (abs(x) <= 1 && abs(y) <= 1 ) {
 	x = sgn(x), y = sgn(y);
     } else {
-	u.tx = u.ux+x;
-	u.ty = u.uy+y;
+	/* remember the destination for #retravel and '_' */
+	iflags.travelcc.x = u.tx = u.ux+x;
+	iflags.travelcc.y = u.ty = u.uy+y;
 	cmd[0] = CMD_TRAVEL;
 	return cmd;
     }
@@ -3411,6 +3416,10 @@ readchar()
 	return((char) sym);
 }
 
+/* getpos() treats '_' as "pick" while the cursor is still on the
+   remembered destination when called with this goal */
+const char travel_destination[] = "the desired destination";
+
 STATIC_PTR int
 dotravel()
 {
@@ -3418,23 +3427,52 @@ dotravel()
 	static char cmd[2];
 	coord cc;
 
-	if (!iflags.travelcmd) return 0;
+	/*
+	 * The travel option only stops mouse clicks (or taps) on the map
+	 * from travelling; '_' asks for a destination first, which gives
+	 * a chance to cancel if it was typed by accident.
+	 */
 	cmd[1]=0;
 	cc.x = iflags.travelcc.x;
 	cc.y = iflags.travelcc.y;
-	if (cc.x == -1 && cc.y == -1) {
+	if (!isok(cc.x, cc.y)) {
 	    /* No cached destination, start attempt from current position */
 	    cc.x = u.ux;
 	    cc.y = u.uy;
 	}
 	pline("Where do you want to travel to?");
-	if (getpos(&cc, TRUE, "the desired destination") < 0) {
+	if (getpos(&cc, TRUE, travel_destination) < 0) {
 		/* user pressed ESC */
 		return 0;
 	}
 	iflags.travelcc.x = u.tx = cc.x;
 	iflags.travelcc.y = u.ty = cc.y;
 	cmd[0] = CMD_TRAVEL;
+	readchar_queue = cmd;
+	return 0;
+}
+
+/* #retravel: travel to the previously selected destination again */
+STATIC_PTR int
+doretravel()
+{
+	static char cmd[2];
+
+	if (!isok(iflags.travelcc.x, iflags.travelcc.y)) {
+	    /* reset when travel reaches its destination */
+	    pline("No travel destination set.");
+	    return 0;
+	} else if (iflags.travelcc.x == u.ux && iflags.travelcc.y == u.uy) {
+	    /* maybe interrupted while travelling, then walked the rest
+	       of the way, so the destination hasn't been reset yet */
+	    You("are already here.");
+	    iflags.travelcc.x = iflags.travelcc.y = -1;
+	    return 0;
+	}
+	u.tx = iflags.travelcc.x;
+	u.ty = iflags.travelcc.y;
+	cmd[0] = CMD_TRAVEL;
+	cmd[1] = 0;
 	readchar_queue = cmd;
 	return 0;
 }

@@ -548,6 +548,9 @@ the same conditions as the `G' command, but without picking up
 objects, similar to the `M' command.  For ports with mouse 
 support, the command is also invoked when a mouse-click takes place on a 
 location other than the current position.
+If travel was interrupted, the cursor starts on its destination;
+type `.' or `_' to continue there.
+See also `#retravel'.
 .lp .
 Rest, do nothing for one turn.
 .lp a
@@ -774,6 +777,9 @@ Offer a sacrifice to the gods.
 Pray to the gods for help.
 .lp #quit
 Quit the program without saving your game.
+.lp #retravel
+Travel to the previously selected travel destination again.
+Default key is `^_'.
 .lp #ride
 Ride (or stop riding) a monster.
 .lp #rub
@@ -2277,9 +2283,10 @@ magic portal, web, statue trap, magic trap, anti-magic field, polymorph trap.
 
 Cannot be set with the `O' command.
 .lp travel
-Allow the travel command (default on).  Turning this option off will
-prevent the game from attempting unintended moves if you make inadvertent
-mouse clicks on the map window.
+Allow the travel command via mouse click (default on).  Turning this
+option off will prevent the game from attempting unintended moves if you
+make inadvertent mouse clicks on the map window.  Does not affect
+travelling via the `_' command.
 .lp verbose
 Provide more commentary during the game (default on).
 .lp windowtype

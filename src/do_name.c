@@ -10,6 +10,7 @@ STATIC_DCL void FDECL(do_oname, (struct obj *));
 static void FDECL(getpos_help, (BOOLEAN_P,const char *));
 
 extern const char what_is_an_unknown_object[];		/* from pager.c */
+extern const char travel_destination[];			/* from cmd.c */
 
 /* the response for '?' help request in getpos() */
 static void
@@ -86,6 +87,14 @@ const char *goal;
 	if ((cp = index(pick_chars, c)) != 0) {
 	    /* '.' => 0, ',' => 1, ';' => 2, ':' => 3 */
 	    result = cp - pick_chars;
+	    break;
+	}
+	/* "_ _" travels to the remembered travel destination again; once
+	   the cursor has moved, '_' looks for an altar as usual */
+	if (c == '_' && goal == travel_destination &&
+		cx == cc->x && cy == cc->y &&
+		cx == iflags.travelcc.x && cy == iflags.travelcc.y) {
+	    result = 0;
 	    break;
 	}
 	for (i = 0; i < 8; i++) {

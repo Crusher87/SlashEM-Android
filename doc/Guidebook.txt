@@ -738,6 +738,9 @@
                objects, similar to the `M' command.  For ports  with  mouse
                support,  the  command  is  also  invoked when a mouse-click
                takes place on a location other than the current position.
+               If travel was interrupted, the cursor starts on its destina-
+               tion; type `.' or `_' to continue there.  See also `#retrav-
+               el'.
 
           .    Rest, do nothing for one turn.
 
@@ -1022,6 +1025,10 @@
 
           #quit
                Quit the program without saving your game.
+
+          #retravel
+               Travel to the previously selected travel destination again.
+               Default key is `^_'.
 
           #ride
                Ride (or stop riding) a monster.
@@ -2991,9 +2998,10 @@
                Cannot be set with the `O' command.
 
           travel
-            Allow the travel command (default on).  Turning this option off
-            will prevent the game from attempting unintended moves  if  you
-            make inadvertent mouse clicks on the map window.
+            Allow the travel command via mouse click (default on).  Turning
+            this option off will prevent the game from attempting  unintend-
+            ed moves if you make inadvertent mouse clicks on the map window.
+            Does not affect travelling via the `_' command.
 
           verbose
                Provide more commentary during the game (default on).
