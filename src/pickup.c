@@ -1348,6 +1348,21 @@ boolean telekinesis;	/* not picking it up directly by hand */
 		return -1;
 	    }
 	} else  if (obj->otyp == SCR_SCARE_MONSTER) {
+	    int old_wt, new_wt;
+
+	    /* process a count before altering/deleting scrolls;
+	       tricky because being unable to lift full stack imposes an
+	       implicit count; unliftable ones should be treated as if
+	       the count excluded them so that they don't change state */
+	    if ((count = carry_count(obj, (struct obj *)0,
+				     count ? count : obj->quan,
+				     telekinesis, &old_wt, &new_wt)) < 1L)
+		return -1;	/* couldn't even pick up 1; effectively untouched */
+	    /* the other half of a split is left as-is; whatever already
+	       follows 'obj' will still be processed next */
+	    if (count < obj->quan)
+		obj = splitobj(obj, count);
+
 	    if (obj->blessed) obj->blessed = 0;
 	    else if (!obj->spe && !obj->cursed) obj->spe = 1;
 	    else {
