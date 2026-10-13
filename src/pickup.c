@@ -22,6 +22,7 @@ STATIC_DCL boolean FDECL(all_but_uchain, (struct obj *));
 #if 0 /* not used */
 STATIC_DCL boolean FDECL(allow_cat_no_uchain, (struct obj *));
 #endif
+STATIC_DCL boolean FDECL(autopick_testobj, (struct obj *, BOOLEAN_P));
 STATIC_DCL int FDECL(autopick, (struct obj*, int, menu_item **));
 STATIC_DCL int FDECL(count_categories, (struct obj *,int));
 STATIC_DCL long FDECL(carry_count,
@@ -622,6 +623,37 @@ boolean grab;	 /* forced pickup, rather than forced leave behind? */
 }
 #endif /* AUTOPICKUP_EXCEPTIONS */
 
+/* should autopickup pick up this object? */
+STATIC_OVL boolean
+autopick_testobj(otmp, calc_costly)
+struct obj *otmp;
+boolean calc_costly;
+{
+	static boolean costly = FALSE;
+	const char *otypes = flags.pickup_types;
+	boolean pickit;
+
+	/* calculate 'costly' just once for a given autopickup operation */
+	if (calc_costly)
+	    costly = (otmp->where == OBJ_FLOOR &&
+		      costly_spot(otmp->ox, otmp->oy));
+
+	/* first check: reject if an unpaid item in a shop */
+	if (costly && !otmp->no_charge)
+	    return FALSE;
+
+	pickit = (!*otypes || index(otypes, otmp->oclass) ||
+		  (flags.pickup_thrown && otmp->was_thrown));
+#ifdef AUTOPICKUP_EXCEPTIONS
+	/* "always pick up" and "never pick up" exceptions */
+	if (!pickit)
+	    pickit = is_autopickup_exception(otmp, TRUE);
+	if (pickit)
+	    pickit = !is_autopickup_exception(otmp, FALSE);
+#endif
+	return pickit;
+}
+
 /*
  * Pick from the given list using flags.pickup_types.  Return the number
  * of items picked (not counts).  Create an array that returns pointers
@@ -638,35 +670,19 @@ menu_item **pick_list;	/* list of objects and counts to pick up */
 	menu_item *pi;	/* pick item */
 	struct obj *curr;
 	int n;
-	const char *otypes = flags.pickup_types;
+	boolean check_costly = TRUE;
 
 	/* first count the number of eligible items */
-	for (n = 0, curr = olist; curr; curr = FOLLOW(curr, follow))
-
-
-#ifndef AUTOPICKUP_EXCEPTIONS
-	    if (!*otypes || index(otypes, curr->oclass) ||
-		flags.pickup_thrown && curr->was_thrown)
-#else
-	    if ((!*otypes || index(otypes, curr->oclass) ||
-		flags.pickup_thrown && curr->was_thrown ||
-		is_autopickup_exception(curr, TRUE)) &&
-		!is_autopickup_exception(curr, FALSE))
-#endif
+	for (n = 0, curr = olist; curr; curr = FOLLOW(curr, follow)) {
+	    if (autopick_testobj(curr, check_costly))
 		n++;
+	    check_costly = FALSE;	/* only need to check once per autopickup */
+	}
 
 	if (n) {
 	    *pick_list = pi = (menu_item *) alloc(sizeof(menu_item) * n);
 	    for (n = 0, curr = olist; curr; curr = FOLLOW(curr, follow))
-#ifndef AUTOPICKUP_EXCEPTIONS
-		if (!*otypes || index(otypes, curr->oclass) ||
-			flags.pickup_thrown && curr->was_thrown) {
-#else
-		if ((!*otypes || index(otypes, curr->oclass) ||
-			flags.pickup_thrown && curr->was_thrown ||
-			is_autopickup_exception(curr, TRUE)) &&
-			!is_autopickup_exception(curr, FALSE)) {
-#endif
+		if (autopick_testobj(curr, FALSE)) {
 		    pi[n].item.a_obj = curr;
 		    pi[n].count = curr->quan;
 		    n++;
