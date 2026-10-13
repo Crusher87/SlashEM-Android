@@ -130,6 +130,7 @@ STATIC_OVL boolean
 cursed_book(bp)
 	struct obj *bp;
 {
+	boolean was_in_use;
 	int lev = objects[bp->otyp].oc_level;
 
 	switch(rn2(lev)) {
@@ -173,11 +174,12 @@ cursed_book(bp)
 		    break;
 		}
 		/* temp disable in_use; death should not destroy the book */
+		was_in_use = bp->in_use;
 		bp->in_use = FALSE;
 		losestr(Poison_resistance ? rn1(2,1) : rn1(4,3));
 		losehp(rnd(Poison_resistance ? 6 : 10),
 		       "contact-poisoned spellbook", KILLED_BY_AN);
-		bp->in_use = TRUE;
+		bp->in_use = was_in_use;
 		break;
 	case 6:
 		if(Antimagic) {
