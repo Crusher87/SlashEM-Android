@@ -164,6 +164,17 @@ lookat(x, y, buf, monbuf)
 	    if (u.ustuck == mtmp)
 		Strcat(buf, (Upolyd && sticks(youmonst.data)) ?
 			", being held" : ", holding you");
+	    /* if it isn't able to move (other than because it is a type of
+	       monster that never moves), say so; mcanmove covers paralysis,
+	       timed sleep and being busy (donning armor, for instance) */
+	    if (!mtmp->mcanmove || mtmp->mfrozen)
+		Strcat(buf, ", can't move");
+	    else if (mtmp->msleeping)
+		/* sleeping for an indeterminate duration */
+		Strcat(buf, ", asleep");
+	    else if ((mtmp->mstrategy & STRAT_WAITMASK) != 0)
+		/* waiting for the hero to approach */
+		Strcat(buf, ", meditating");
 	    if (mtmp->mleashed)
 		Strcat(buf, ", leashed to you");
 
