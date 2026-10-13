@@ -774,7 +774,8 @@ int tech_no;
 		    You("decide against that idea.");
 		    return(0);
 		}
-		mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+		mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 		if (!mtmp) {
 		    You("perform a flashy twirl!");
 		    return (0);
@@ -814,7 +815,8 @@ int tech_no;
 		    pline("Things may be going badly, but that's extreme.");
 		    return 0;
 		}
-		mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+		mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 		if (!mtmp) {
 		    You("attack...nothing!");
 		    return 0;
@@ -1232,9 +1234,11 @@ int tech_no;
 			pline("Why don't you try wielding something else instead.");
 			return(0);
 		}
-		mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+		mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 		if (!mtmp || !canspotmon(mtmp)) {
-			if (memory_is_invisible(u.ux + u.dx, u.uy + u.dy))
+			if (isok(u.ux + u.dx, u.uy + u.dy) &&
+				memory_is_invisible(u.ux + u.dx, u.uy + u.dy))
 			    You("don't know where to aim for!");
 			else
 			    You("don't see anything there!");
@@ -2070,7 +2074,8 @@ blitz_pummel()
 	if (u.uswallow)
 	    mtmp = u.ustuck;
 	else
-	    mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+	    mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 
 	if (!mtmp) {
 		You("strike nothing.");
@@ -2086,7 +2091,8 @@ blitz_pummel()
 	    if (u.uswallow)
 		mtmp = u.ustuck;
 	    else
-		mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+		mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 
 	    if (!mtmp) return (1);
 	    if (!attack(mtmp)) return (1);
@@ -2109,7 +2115,8 @@ blitz_g_slam()
 		return(0);
 	}
 
-	mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+	mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 	if (!mtmp) {
 		You("strike nothing.");
 		return (0);
@@ -2117,7 +2124,8 @@ blitz_g_slam()
 	if (!attack(mtmp)) return (0);
 
 	/* Slam the monster into the ground */
-	mtmp = m_at(u.ux + u.dx, u.uy + u.dy);
+	mtmp = isok(u.ux + u.dx, u.uy + u.dy) ?
+			m_at(u.ux + u.dx, u.uy + u.dy) : (struct monst *)0;
 	if (!mtmp || u.uswallow) return(1);
 
 	You("hurl %s downwards...", mon_nam(mtmp));

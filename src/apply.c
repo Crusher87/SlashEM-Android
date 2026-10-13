@@ -2514,10 +2514,20 @@ struct obj *obj;
     }
     if (!getdir((char *)0)) return res;
 
-    if (Stunned || (Confusion && !rn2(5))) confdir();
-    rx = u.ux + u.dx;
-    ry = u.uy + u.dy;
-    mtmp = m_at(rx, ry);
+    if (u.uswallow) {
+	mtmp = u.ustuck;
+	rx = mtmp->mx;
+	ry = mtmp->my;
+    } else {
+	if (Stunned || (Confusion && !rn2(5))) confdir();
+	rx = u.ux + u.dx;
+	ry = u.uy + u.dy;
+	if (!isok(rx, ry)) {
+	    You("miss.");
+	    return res;
+	}
+	mtmp = m_at(rx, ry);
+    }
 
     /* fake some proficiency checks */
     proficient = 0;

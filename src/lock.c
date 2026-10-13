@@ -810,6 +810,10 @@ doforce()		/* try to force a chest with your weapon */
 	} else {		/* break down/open door */
 	    struct monst *mtmp;
 
+	    if (!isok(x, y)) {
+		You("%s no door there.", Blind ? "feel" : "see");
+		return(0);
+	    }
 	    door = &levl[x][y];
 	    if ((mtmp = m_at(x, y)) && canseemon(mtmp)
 			&& mtmp->m_ap_type != M_AP_FURNITURE
@@ -1039,6 +1043,11 @@ doclose()		/* try to close a door */
 	if((x == u.ux) && (y == u.uy)) {
 		You("are in the way!");
 		return(1);
+	}
+
+	if (!isok(x, y)) {
+		You("%s no door there.", Blind ? "feel" : "see");
+		return(0);
 	}
 
 	if ((mtmp = m_at(x,y))				&&

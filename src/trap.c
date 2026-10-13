@@ -3719,6 +3719,10 @@ boolean force;
 	if(!getdir((char *)0)) return(0);
 	x = u.ux + u.dx;
 	y = u.uy + u.dy;
+	if (!isok(x, y)) {
+		pline_The("perils lurking there are beyond your grasp.");
+		return(0);
+	}
 
 	for(otmp = level.objects[x][y]; otmp; otmp = otmp->nexthere) {
 		if(Is_box(otmp) && !u.dx && !u.dy) {

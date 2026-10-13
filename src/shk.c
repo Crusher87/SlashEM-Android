@@ -245,10 +245,20 @@ void
 replshk(mtmp,mtmp2)
 register struct monst *mtmp, *mtmp2;
 {
-	rooms[ESHK(mtmp2)->shoproom - ROOMOFFSET].resident = mtmp2;
-	if (inhishop(mtmp) && *u.ushops == ESHK(mtmp)->shoproom) {
-		ESHK(mtmp2)->bill_p = &(ESHK(mtmp2)->bill[0]);
-	}
+	struct eshk *eshkp = ESHK(mtmp2);
+
+	rooms[eshkp->shoproom - ROOMOFFSET].resident = mtmp2;
+	/*
+	 * When a shopkeeper's corpse is revived, 'mtmp' is a temporary
+	 * monster of the corpse's type which needn't have any shopkeeper
+	 * data at all (reading ESHK(mtmp) went past the end of it), so
+	 * look at 'mtmp2', which has already taken over mtmp's location.
+	 * Also repoint a bill pointer which still refers to the old
+	 * monster's bill.
+	 */
+	if ((inhishop(mtmp2) && *u.ushops == eshkp->shoproom) ||
+		(eshkp->bill_p && eshkp->bill_p != (struct bill_x *) -1000))
+	    eshkp->bill_p = &(eshkp->bill[0]);
 }
 
 /* do shopkeeper specific structure munging -dlc */
