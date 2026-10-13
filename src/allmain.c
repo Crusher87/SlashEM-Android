@@ -17,6 +17,9 @@
 #ifdef POSITIONBAR
 STATIC_DCL void NDECL(do_positionbar);
 #endif
+#ifdef OVL0
+STATIC_DCL void FDECL(interrupt_multi, (const char *));
+#endif
 
 #define decrnknow(spell)	spl_book[spell].sp_know--
 #define spellid(spell)		spl_book[spell].sp_id
@@ -101,6 +104,8 @@ moveloop()
 		    /* both you and the monsters are out of steam this round */
 		    /* set up for a new turn */
 		    struct monst *mtmp;
+		    int prev_hp, prev_en;	/* to notice reaching maximum */
+		    boolean was_polyd;
 		    mcalcdistress();	/* adjust monsters' trap, blind, etc */
 
 		    /* reallocate movement rations to monsters */
@@ -185,6 +190,9 @@ moveloop()
 		     * Another possible result is rehumanization, which requires
 		     * that encumbrance and movement rate be recalculated.
 		     */
+		    was_polyd = Upolyd;
+		    prev_hp = Upolyd ? u.mh : u.uhp;
+		    prev_en = u.uen;
 		    if (u.uinvulnerable) {
 			/* for the moment at least, you're in tiptop shape */
 			wtcap = UNENCUMBERED;
@@ -271,6 +279,15 @@ moveloop()
 			if (u.uen > u.uenmax)  u.uen = u.uenmax;
 			flags.botl = 1;
 		    }
+
+		    /* stop voluntary multi-turn activity (counted search or
+		       rest) once hit points or energy have been restored */
+		    if (Upolyd == was_polyd &&
+			    (Upolyd ? (u.mh == u.mhmax && prev_hp < u.mhmax) :
+				  (u.uhp == u.uhpmax && prev_hp < u.uhpmax)))
+			interrupt_multi("You are in full health.");
+		    if (u.uen == u.uenmax && prev_en < u.uenmax)
+			interrupt_multi("You feel full of energy.");
 
 		    if(!u.uinvulnerable) {
 			if(Teleportation && !rn2(85)) {
@@ -482,6 +499,16 @@ moveloop()
     }
 }
 
+/* stop a counted search or rest (but not running or travel) */
+STATIC_OVL void
+interrupt_multi(msg)
+const char *msg;
+{
+	if (multi > 0 && !flags.travel && !flags.run) {
+	    nomul(0);
+	    if (flags.verbose && msg) Norep("%s", msg);
+	}
+}
 
 #endif /* OVL0 */
 #ifdef OVL1
