@@ -45,6 +45,8 @@ STATIC_DCL long FDECL(set_cost, (struct obj *, struct monst *));
 STATIC_DCL const char *FDECL(shk_embellish, (struct obj *, long));
 STATIC_DCL long FDECL(cost_per_charge, (struct monst *,struct obj *,BOOLEAN_P));
 STATIC_DCL long FDECL(cheapest_item, (struct monst *));
+STATIC_DCL int FDECL(menu_pick_pay_items, (struct monst *, unsigned **));
+STATIC_DCL boolean FDECL(bill_id_picked, (unsigned, unsigned *, int));
 STATIC_DCL int FDECL(dopayobj, (struct monst *, struct bill_x *,
 			    struct obj **, int, BOOLEAN_P));
 STATIC_DCL long FDECL(stolen_container, (struct obj *, struct monst *, long,
@@ -1337,6 +1339,87 @@ register struct monst *shkp;
 	}
 	return(gmin);
 }
+
+/* show the items on the bill in a menu and ask which to pay for;
+   returns the number picked and their bill ids via *picked_p
+   (caller frees it) */
+STATIC_OVL int
+menu_pick_pay_items(shkp, picked_p)
+struct monst *shkp;
+unsigned **picked_p;
+{
+	struct eshk *eshkp = ESHK(shkp);
+	struct bill_x *bp;
+	struct obj *otmp;
+	winid win;
+	anything any;
+	menu_item *pick_list = (menu_item *)0;
+	char buf[BUFSZ];
+	const char *used;
+	long amt, largest_amt, save_quan;
+	int i, n, amt_width;
+	unsigned save_unpaid;
+
+	*picked_p = (unsigned *)0;
+	/* go through the bill twice, first to control price formatting */
+	largest_amt = 0L;
+	for (i = 0; i < eshkp->billct; i++) {
+	    bp = &eshkp->bill_p[i];
+	    if (bp->price * bp->bquan > largest_amt)
+		largest_amt = bp->price * bp->bquan;
+	}
+	Sprintf(buf, "%ld", largest_amt);
+	amt_width = (int) strlen(buf);
+
+	any.a_void = 0;
+	win = create_nhwindow(NHW_MENU);
+	start_menu(win);
+	for (i = 0; i < eshkp->billct; i++) {
+	    bp = &eshkp->bill_p[i];
+	    if ((otmp = bp_to_obj(bp)) == 0) continue;
+	    used = (otmp->where == OBJ_ONBILL) ? " (used up)" :
+		   (otmp->quan < bp->bquan) ? " (partly used up)" : "";
+	    /* name the whole billed quantity, without the price suffix */
+	    save_quan = otmp->quan;
+	    save_unpaid = otmp->unpaid;
+	    otmp->quan = bp->bquan;
+	    otmp->unpaid = 0;
+	    amt = bp->price * bp->bquan;
+	    Sprintf(buf, "%*ld %s, %s%s", amt_width, amt,
+		    "Zm", doname(otmp), used);
+	    otmp->quan = save_quan;
+	    otmp->unpaid = save_unpaid;
+	    any.a_int = i + 1;	/* +1: avoid 0 */
+	    add_menu(win, NO_GLYPH, &any, 0, 0, ATR_NONE, buf,
+		     MENU_UNSELECTED);
+	}
+	end_menu(win, "Pay for which items?");
+	n = select_menu(win, PICK_ANY, &pick_list);
+	destroy_nhwindow(win);
+
+	if (n > 0) {
+	    *picked_p = (unsigned *) alloc(n * sizeof (unsigned));
+	    for (i = 0; i < n; i++)
+		(*picked_p)[i] =
+		    eshkp->bill_p[pick_list[i].item.a_int - 1].bo_id;
+	    free((genericptr_t)pick_list);
+	}
+	return (n > 0) ? n : 0;
+}
+
+/* is bill entry 'id' among those picked via menu_pick_pay_items()? */
+STATIC_OVL boolean
+bill_id_picked(id, picked, npicked)
+unsigned id;
+unsigned *picked;
+int npicked;
+{
+	int i;
+
+	for (i = 0; i < npicked; i++)
+	    if (picked[i] == id) return TRUE;
+	return FALSE;
+}
 #endif /*OVL3*/
 #ifdef OVL0
 
@@ -1684,6 +1767,8 @@ proceed:
 	/* now check items on bill */
 	if (eshkp->billct) {
 	    register boolean itemize;
+	    unsigned *picked = (unsigned *)0;
+	    int npicked = 0;
 #ifndef GOLDOBJ
 	    if (!u.ugold && !eshkp->credit) {
 #else
@@ -1711,6 +1796,12 @@ proceed:
 		return(0);
 	    }
 
+	    if (eshkp->billct > 1 && flags.menu_style != MENU_TRADITIONAL) {
+		/* pick the items to pay for from a menu */
+		itemize = FALSE;
+		npicked = menu_pick_pay_items(shkp, &picked);
+		if (!npicked) goto thanks;
+	    } else
 	    /* this isn't quite right; it itemizes without asking if the
 	     * single item on the bill is partly used up and partly unpaid */
 	    itemize = (eshkp->billct > 1 ? yn("Itemized billing?") == 'y' : 1);
@@ -1730,9 +1821,13 @@ proceed:
 		    } else {
 			impossible("Shopkeeper administration out of order.");
 			setpaid(shkp);	/* be nice to the player */
+			if (picked) free((genericptr_t)picked);
 			return 1;
 		    }
-		    if (pass == bp->useup && otmp->quan == bp->bquan) {
+		    if ((pass == bp->useup && otmp->quan == bp->bquan) ||
+			    /* not picked from the menu */
+			    (picked && !bill_id_picked(bp->bo_id,
+						       picked, npicked))) {
 			/* pay for used-up items on first pass and others
 			 * on second, so player will be stuck in the store
 			 * less often; things which are partly used up
@@ -1741,6 +1836,7 @@ proceed:
 		    } else {
 			switch (dopayobj(shkp, bp, &otmp, pass, itemize)) {
 			  case PAY_CANT:
+				if (picked) free((genericptr_t)picked);
 				return 1;	/*break*/
 			  case PAY_BROKE:
 				paid = TRUE;
@@ -1762,6 +1858,7 @@ proceed:
 		}
 	    }
 	thanks:
+	    if (picked) free((genericptr_t)picked);
 	    if (!itemize)
 	        update_inventory(); /* Done in dopayobj() if itemize. */
 	}
@@ -4487,7 +4584,8 @@ boolean altusage; /* some items have an "alternate" use with different cost */
 	} else if(otmp->otyp == BAG_OF_TRICKS ||	 /* 1 - 20 */
 		  otmp->otyp == MEDICAL_KIT ||                  
 		  otmp->otyp == HORN_OF_PLENTY) {
-		tmp /= 5L;
+		/* altusage: emptying of all the contents at once (#tip) */
+		if (!altusage || otmp->otyp == MEDICAL_KIT) tmp /= 5L;
 	} else if(otmp->otyp == CRYSTAL_BALL ||		 /* 1 - 5 */
 		  /*otmp->otyp == ORB_OF_ENCHANTMENT ||                  
 		  otmp->otyp == ORB_OF_CHARGING ||*/

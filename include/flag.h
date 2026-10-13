@@ -104,6 +104,7 @@ struct flag {
 #endif
 	boolean  silent;	/* whether the bell rings or not */
 	boolean  sortpack;	/* sorted inventory */
+	char	 sortloot;	/* 'n'=none, 'l'=loot (pickup), 'f'=full ('l'+invent) */
 	boolean  soundok;	/* ok to tell about sounds heard */
 	boolean  sparkle;	/* show "resisting" special FX (Scott Bigham) */
 	boolean  standout;	/* use standout for --More-- */

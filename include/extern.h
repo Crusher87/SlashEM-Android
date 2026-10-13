@@ -28,6 +28,7 @@ E void FDECL(welcome, (BOOLEAN_P));
 
 /* ### apply.c ### */
 
+E int FDECL(hornoplenty, (struct obj *,BOOLEAN_P));
 E int NDECL(doapply);
 E int NDECL(dorub);
 E int NDECL(dojump);
@@ -253,6 +254,7 @@ E int NDECL(dosearch);
 E void NDECL(sokoban_detect);
 /* KMH -- Sokoban levels */
 E void NDECL(sokoban_detect);
+E void FDECL(reveal_terrain, (int,int));
 
 /* ### dig.c ### */
 
@@ -866,6 +868,9 @@ E int NDECL(midnight);
 
 /* ### invent.c ### */
 
+E Loot *FDECL(sortloot, (struct obj **,unsigned,BOOLEAN_P,
+			    boolean (*)(OBJ_P)));
+E void FDECL(unsortloot, (Loot **));
 E void FDECL(assigninvlet, (struct obj *));
 E struct obj *FDECL(merge_choice, (struct obj *,struct obj *));
 E int FDECL(merged, (struct obj **,struct obj **));
@@ -875,6 +880,7 @@ E int FDECL(ckunpaid, (struct obj *));
 E void FDECL(addinv_core1, (struct obj *));
 E void FDECL(addinv_core2, (struct obj *));
 E struct obj *FDECL(addinv, (struct obj *));
+E struct obj *FDECL(addinv_nomerge, (struct obj *));
 E struct obj *FDECL(hold_another_object,
 			(struct obj *,const char *,const char *,const char *));
 E struct obj *FDECL(hold_returned_object,
@@ -933,6 +939,7 @@ E int FDECL(count_buc, (struct obj *,int));
 E void FDECL(carry_obj_effects, (struct monst *, struct obj *));
 E const char *FDECL(currency, (long));
 E void FDECL(silly_thing, (const char *,struct obj *));
+E boolean FDECL(splittable, (struct obj *));
 E int NDECL(doinvinuse);
 /* KMH, balance patch -- new function */
 E int NDECL(jumble_pack);
@@ -1070,7 +1077,7 @@ E void FDECL(mimic_hit_msg, (struct monst *, SHORT_P));
 #ifdef GOLDOBJ
 E void FDECL(mkmonmoney, (struct monst *, long));
 #endif
-E void FDECL(bagotricks, (struct obj *));
+E int FDECL(bagotricks, (struct obj *,BOOLEAN_P,int *));
 E boolean FDECL(propagate, (int, BOOLEAN_P,BOOLEAN_P));
 
 /* ### mapglyph.c ### */
@@ -1651,6 +1658,7 @@ E int FDECL(query_objlist, (const char *, struct obj *, int,
 E struct obj *FDECL(pick_obj, (struct obj *));
 E int NDECL(encumber_msg);
 E int NDECL(doloot);
+E int NDECL(dotip);
 E boolean FDECL(container_gone, (int (*)(OBJ_P)));
 E int FDECL(use_container, (struct obj **,int));
 E int FDECL(loot_mon, (struct monst *,int *,boolean *));

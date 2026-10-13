@@ -3348,6 +3348,77 @@ char class;
 	Strcat(cl, tmp);
 }
 
+/* make some food or a potion come out of a horn of plenty; returns the
+   number of objects made (0 if the horn was empty) */
+int
+hornoplenty(horn, tipping)
+struct obj *horn;
+boolean tipping;	/* caller emptying entire contents; affects shop handling */
+{
+	int objcount = 0;
+
+	if (!horn || horn->otyp != HORN_OF_PLENTY) {
+	    impossible("bad horn o' plenty");
+	} else if (horn->spe < 1) {
+	    pline(nothing_happens);
+	} else {
+	    struct obj *obj;
+	    const char *what;
+
+	    consume_obj_charge(horn, !tipping);
+	    if (!rn2(13)) {
+		obj = mkobj(POTION_CLASS, FALSE);
+		/* KMH, balance patch -- rewritten */
+		while ((obj->otyp == POT_SICKNESS) ||
+				objects[obj->otyp].oc_magic)
+		    obj->otyp = rnd_class(POT_BOOZE, POT_WATER);
+		what = (obj->quan > 1L) ? "Some potions" : "A potion";
+	    } else {
+		obj = mkobj(FOOD_CLASS, FALSE);
+		if (obj->otyp == FOOD_RATION && !rn2(7))
+		    obj->otyp = LUMP_OF_ROYAL_JELLY;
+		what = "Some food";
+	    }
+	    ++objcount;
+	    pline("%s %s out.", what, vtense(what, "spill"));
+	    obj->blessed = horn->blessed;
+	    obj->cursed = horn->cursed;
+	    obj->owt = weight(obj);
+	    /* using a shop's horn of plenty entails a usage fee and also
+	       confers ownership of the created item to the shopkeeper */
+	    if (horn->unpaid
+		    || (tipping && !carried(horn) && !horn->no_charge
+			&& costly_spot(horn->ox, horn->oy)))
+		addtobill(obj, FALSE, FALSE, tipping);
+	    if (!tipping) {
+		obj = hold_another_object(obj, u.uswallow ?
+				   "Oops!  %s out of your reach!" :
+				    (Is_airlevel(&u.uz) ||
+				     Is_waterlevel(&u.uz) ||
+				     levl[u.ux][u.uy].typ < IRONBARS ||
+				     levl[u.ux][u.uy].typ >= ICE) ?
+					   "Oops!  %s away from you!" :
+					   "Oops!  %s to the floor!",
+					   The(aobjnam(obj, "slip")),
+					   (const char *)0);
+	    } else {
+		/* assumes this is taking place at hero's location */
+		if (!can_reach_floor()) {
+		    hitfloor(obj);	/* does altar check, message, drop */
+		} else {
+		    if (IS_ALTAR(levl[u.ux][u.uy].typ))
+			doaltarobj(obj);	/* does its own drop message */
+		    else
+			pline("%s %s to the %s.", Doname2(obj),
+			      otense(obj, "drop"), surface(u.ux, u.uy));
+		    dropy(obj);
+		}
+	    }
+	    makeknown(HORN_OF_PLENTY);
+	}
+	return objcount;
+}
+
 int
 doapply()
 {
@@ -3405,7 +3476,7 @@ doapply()
 		res = use_container(&obj, 1);
 		break;
 	case BAG_OF_TRICKS:
-		bagotricks(obj);
+		(void) bagotricks(obj, FALSE, (int *) 0);
 		break;
 	case CAN_OF_GREASE:
 		use_grease(obj);
@@ -3672,41 +3743,7 @@ doapply()
 		} else You("seem to be out of medical supplies");
 		break;
 	case HORN_OF_PLENTY:	/* not a musical instrument */
-		if (obj->spe > 0) {
-		    struct obj *otmp;
-		    const char *what;
-
-		    consume_obj_charge(obj, TRUE);
-		    if (!rn2(13)) {
-			otmp = mkobj(POTION_CLASS, FALSE);
-			/* KMH, balance patch -- rewritten */
-			while ((otmp->otyp == POT_SICKNESS) ||
-					objects[otmp->otyp].oc_magic)
-			    otmp->otyp = rnd_class(POT_BOOZE, POT_WATER);
-			what = "A potion";
-		    } else {
-			otmp = mkobj(FOOD_CLASS, FALSE);
-			if (otmp->otyp == FOOD_RATION && !rn2(7))
-			    otmp->otyp = LUMP_OF_ROYAL_JELLY;
-			what = "Some food";
-		    }
-		    pline("%s spills out.", what);
-		    otmp->blessed = obj->blessed;
-		    otmp->cursed = obj->cursed;
-		    otmp->owt = weight(otmp);
-		    otmp = hold_another_object(otmp, u.uswallow ?
-				       "Oops!  %s out of your reach!" :
-					(Is_airlevel(&u.uz) ||
-					 Is_waterlevel(&u.uz) ||
-					 levl[u.ux][u.uy].typ < IRONBARS ||
-					 levl[u.ux][u.uy].typ >= ICE) ?
-					       "Oops!  %s away from you!" :
-					       "Oops!  %s to the floor!",
-					       The(aobjnam(otmp, "slip")),
-					       (const char *)0);
-		    makeknown(HORN_OF_PLENTY);
-		} else
-		    pline(nothing_happens);
+		(void) hornoplenty(obj, FALSE);
 		break;
 	case LAND_MINE:
 	case BEARTRAP:

@@ -789,6 +789,13 @@ Sit down.
 .lp #technique
 Perform a role or race specific technique. A menu showing the techniques
 available to your character will be displayed.
+.lp #terrain
+Show the known map without monsters, objects, and traps, so that
+what they cover can be seen.  A menu lets you keep the traps, or the
+traps and the objects.
+.lp #tip
+Tip over a container (bag or box) to pour out its contents.
+Default key is `M-T'.
 .lp #turn
 Turn undead.
 .lp #twoweapon
@@ -2264,6 +2271,19 @@ enough to quantify their damage.
 Show total weight in inventory on bottom line (default off).
 .lp "silent  "
 Suppress terminal beeps (default on).
+.lp sortloot
+Controls the sorting behavior of the pickup lists for inventory
+and #loot commands and some others.
+The possible values are:
+.sd
+.si
+full - always sort the lists;
+loot - only sort the lists that don't use inventory letters, like with
+the #loot and pickup commands;
+none - show lists the traditional way without sorting.
+.ei
+.ed
+The default is loot.
 .lp sortpack
 Sort the pack contents by type when displaying inventory (default on).
 .lp sound

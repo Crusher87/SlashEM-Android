@@ -2499,28 +2499,37 @@ assign_sym:
 	mtmp->mappearance = appear;
 }
 
-/* release a monster from a bag of tricks */
-void
-bagotricks(bag)
+/* release a monster from a bag of tricks; return number of monsters made */
+int
+bagotricks(bag, tipping, seencount)
 struct obj *bag;
+boolean tipping;	/* caller emptying entire contents; affects shop handling */
+int *seencount;		/* secondary output */
 {
+    int moncount = 0;
+
     if (!bag || bag->otyp != BAG_OF_TRICKS) {
 	impossible("bad bag o' tricks");
     } else if (bag->spe < 1) {
 	pline(nothing_happens);
     } else {
-	boolean gotone = FALSE;
-	int cnt = 1;
+	struct monst *mtmp;
+	int cnt = 1, seecount = 0;
 
-	consume_obj_charge(bag, TRUE);
+	consume_obj_charge(bag, !tipping);
 
 	if (!rn2(23)) cnt += rn1(7, 1);
 	while (cnt-- > 0) {
-	    if (makemon((struct permonst *)0, u.ux, u.uy, NO_MM_FLAGS))
-		gotone = TRUE;
+	    if ((mtmp = makemon((struct permonst *)0, u.ux, u.uy,
+				NO_MM_FLAGS)) != 0) {
+		++moncount;
+		if (canspotmon(mtmp)) ++seecount;
+	    }
 	}
-	if (gotone) makeknown(BAG_OF_TRICKS);
+	if (moncount) makeknown(BAG_OF_TRICKS);
+	if (seencount) *seencount += seecount;
     }
+    return moncount;
 }
 
 #endif /* OVLB */

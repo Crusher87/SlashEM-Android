@@ -1174,10 +1174,18 @@ boolean identified, all_containers;
 		    continue;	/* wrong type of container */
 		} else if (box->cobj) {
 		    winid tmpwin = create_nhwindow(NHW_MENU);
+		    Loot *sortedcobj, *srtc;
+		    unsigned sortflags;
+
 		    Sprintf(buf, "Contents of %s:", the(xname(box)));
 		    putstr(tmpwin, 0, buf);
 		    if (!iflags.in_dumplog) putstr(tmpwin, 0, "");
-		    for (obj = box->cobj; obj; obj = obj->nobj) {
+		    sortflags = (((flags.sortloot == 'l' || flags.sortloot == 'f')
+				  ? SORTLOOT_LOOT : 0)
+				 | (flags.sortpack ? SORTLOOT_PACK : 0));
+		    sortedcobj = sortloot(&box->cobj, sortflags, FALSE,
+					  (boolean FDECL((*), (OBJ_P))) 0);
+		    for (srtc = sortedcobj; (obj = srtc->obj) != 0; ++srtc) {
 			if (identified) {
 			    makeknown(obj->otyp);
 			    obj->known = obj->bknown =
@@ -1191,6 +1199,7 @@ boolean identified, all_containers;
 			} else
 			    putstr(tmpwin, 0, doname(obj));
 		    }
+		    unsortloot(&sortedcobj);
 		    if (iflags.in_dumplog) putstr(tmpwin, 0, "");
 		    display_nhwindow(tmpwin, TRUE);
 		    destroy_nhwindow(tmpwin);
