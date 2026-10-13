@@ -43,6 +43,9 @@ STATIC_PTR int FDECL(CFDECLSPEC sortloot_cmp, (const genericptr,
 #ifdef OVLB
 
 static int lastinvnr = 51;	/* 0 ... 51 (never saved&restored) */
+/* object which mergable() must not merge with anything (a split-off
+   stack that is being given its own inventory slot) */
+static struct obj *nomerge_obj = (struct obj *)0;
 
 #ifdef WIZARD
 /* wizards can wish for venom, which will become an invisible inventory
@@ -794,6 +797,13 @@ struct obj *obj;
 	    return obj;
 #endif
 
+	/* merge with quiver in preference to any other inventory slot
+	   in case quiver and wielded object are both eligible; adding
+	   extra to quivered stack is more useful than to wielded one */
+	if (uquiver && merged(&uquiver, &obj)) {
+	    obj = uquiver;
+	    goto added;
+	}
 	/* merge if possible; find end of chain in the process */
 	for (prev = 0, otmp = invent; otmp; prev = otmp, otmp = otmp->nobj)
 	    if (merged(&otmp, &obj)) {
@@ -818,6 +828,19 @@ added:
 	update_inventory();
 	return(obj);
 }
+/* Give part of a stack, just split off from an inventory object, its own
+   inventory slot instead of leaving it sharing the original's letter. */
+struct obj *
+addinv_nomerge(obj)
+struct obj *obj;
+{
+	if (obj->where == OBJ_INVENT) freeinv(obj);
+	nomerge_obj = obj;
+	obj = addinv(obj);
+	nomerge_obj = (struct obj *)0;
+	return obj;
+}
+
 /*
  * Some objects are affected by being carried.
  * Make those adjustments here. Called _after_ the object
@@ -1741,15 +1764,24 @@ register const char *let,*word;
 	if(allowcnt == 2) {	/* cnt given */
 	    if(cnt == 0) return (struct obj *)0;
 	    if(cnt != otmp->quan) {
-		/* don't split a stack of cursed loadstones */
-		if (otmp->otyp == LOADSTONE && otmp->cursed)
+		/* don't split a stack of cursed loadstones or welded weapons */
+		if (splittable(otmp))
+		    otmp = splitobj(otmp, cnt);
+		else if (otmp->otyp == LOADSTONE && otmp->cursed)
 		    /* kludge for canletgo()'s can't-drop-this message */
 		    otmp->corpsenm = (int) cnt;
-		else
-		    otmp = splitobj(otmp, cnt);
 	    }
 	}
 	return(otmp);
+}
+
+/* some objects shouldn't be split when count given to getobj or askchain */
+boolean
+splittable(obj)
+struct obj *obj;
+{
+	return !((obj->otyp == LOADSTONE && obj->cursed) ||
+		 (obj == uwep && welded(uwep)));
 }
 
 void
@@ -3113,6 +3145,7 @@ mergable(otmp, obj)	/* returns TRUE if obj  & otmp can be merged */
 	register struct obj *otmp, *obj;
 {
 	if (obj->otyp != otmp->otyp) return FALSE;
+	if (obj == nomerge_obj || otmp == nomerge_obj) return FALSE;
 #ifdef GOLDOBJ
 	/* coins of the same kind will always merge */
 	if (obj->oclass == COIN_CLASS) return TRUE;

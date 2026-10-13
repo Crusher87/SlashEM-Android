@@ -402,6 +402,7 @@ autoquiver()
 int
 dofire()
 {
+	struct obj *obj;
 	int result, shotlimit;
 
 	if (notake(youmonst.data)) {
@@ -410,21 +411,6 @@ dofire()
 	}
 
 	if(check_capacity((char *)0)) return(0);
-	if (!uquiver) {
-		if (!flags.autoquiver) {
-			/* Don't automatically fill the quiver */
-			You("have no ammunition readied!");
-			return(dothrow());
-		}
-		autoquiver();
-		if (!uquiver) {
-			You("have nothing appropriate for your quiver!");
-			return(dothrow());
-		} else {
-			You("fill your quiver:");
-			prinv((char *)0, uquiver, 0L);
-		}
-	}
 
 	/*
 	 * Since some characters shoot multiple missiles at one time,
@@ -440,7 +426,33 @@ dofire()
 	shotlimit = (multi || save_cm) ? multi + 1 : 0;
 	multi = 0;		/* reset; it's been used up */
 
-	if (u.twoweap) {
+	if ((obj = uquiver) == 0) {
+		if (!flags.autoquiver) {
+			/* Don't automatically fill the quiver */
+			You("have no ammunition readied.");
+		} else {
+			autoquiver();
+			if ((obj = uquiver) == 0)
+				You("have nothing appropriate for your quiver.");
+		}
+		/* if autoquiver is disabled or has failed, prompt for
+		   missile; fill quiver with it if it's not wielded or worn */
+		if (!obj) {
+			obj = getobj(uslinging() ? bullets : toss_objs, "throw");
+			/* Q command doesn't allow gold in quiver */
+			if (obj && !obj->owornmask && obj->oclass != COIN_CLASS)
+				setuqwep(obj);	/* demi-autoquiver */
+		}
+		/* give feedback if quiver has now been filled */
+		if (uquiver) {
+			uquiver->owornmask &= ~W_QUIVER;	/* less verbose */
+			prinv("You ready:", uquiver, 0L);
+			uquiver->owornmask |= W_QUIVER;
+		}
+		if (!obj) return 0;
+	}
+
+	if (u.twoweap && obj == uquiver) {
 		if (!can_twoweapon()) untwoweapon();
 		else if (ammo_and_launcher(uquiver,uwep) 
 		    && ammo_and_launcher(uquiver, uswapwep)){
@@ -451,7 +463,7 @@ dofire()
 			return(result);
 		}
 	}
-	result = (throw_obj(uquiver, shotlimit, THROW_UWEP));
+	result = throw_obj(obj, shotlimit, THROW_UWEP);
 	
 	return result;
 }

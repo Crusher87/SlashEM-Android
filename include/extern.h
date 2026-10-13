@@ -853,6 +853,7 @@ E int FDECL(ckunpaid, (struct obj *));
 E void FDECL(addinv_core1, (struct obj *));
 E void FDECL(addinv_core2, (struct obj *));
 E struct obj *FDECL(addinv, (struct obj *));
+E struct obj *FDECL(addinv_nomerge, (struct obj *));
 E struct obj *FDECL(hold_another_object,
 			(struct obj *,const char *,const char *,const char *));
 E void FDECL(useupall, (struct obj *));
@@ -909,6 +910,7 @@ E int FDECL(count_buc, (struct obj *,int));
 E void FDECL(carry_obj_effects, (struct monst *, struct obj *));
 E const char *FDECL(currency, (long));
 E void FDECL(silly_thing, (const char *,struct obj *));
+E boolean FDECL(splittable, (struct obj *));
 E int NDECL(doinvinuse);
 /* KMH, balance patch -- new function */
 E int NDECL(jumble_pack);
