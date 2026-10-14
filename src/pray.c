@@ -1873,6 +1873,10 @@ dopray()
 	    !paranoid_query(ParanoidConfirm, "Are you sure you want to pray?"))
 	return 0;
 
+    if (lrun.fate_nopray) {	/* Slash'EM Legacy: the wish Bargain */
+	pline("You traded your prayers for a wish.  No god will listen.");
+	return 0;
+    }
     u.uconduct.gnostic++;
     /* Praying implies that the hero is conscious and since we have
        no deafness attribute this implies that all verbalized messages

@@ -381,6 +381,8 @@ const char *name;
 			lprof.unlock_all = !!val;
 		    else if (!strcmp(sname, "skip_hall"))
 			lprof.skip_hall = !!val;
+		    else if (!strcmp(sname, "drafts_off"))
+			lprof.drafts_off = !!val;
 		}
 	    } else if (!strcmp(key, "lineage")) {
 		char tname[BUFSZ];
@@ -471,6 +473,7 @@ boolean force;
 	fprintf(fp, "lastmode %d\n", lprof.last_mode);
 	fprintf(fp, "setting unlock_all %d\n", lprof.unlock_all ? 1 : 0);
 	fprintf(fp, "setting skip_hall %d\n", lprof.skip_hall ? 1 : 0);
+	fprintf(fp, "setting drafts_off %d\n", lprof.drafts_off ? 1 : 0);
 	for (i = 0; i < NUM_LINEAGE; i++)
 	    if (lprof.lineage[i] || lprof.lin_off[i])
 		fprintf(fp, "lineage %s %d %d\n", lineage_tracks[i].key,
@@ -884,6 +887,9 @@ boolean shortform;
 			    lineage_tracks[t].name, roman[lrun.lineage[t]]);
 	/* blessings, kit, heirloom and vows; kept short enough for BUFSZ */
 	fate_help_text(buf, BUFSZ - 40);
+	if (lrun.nfates && strlen(buf) < BUFSZ - 60)
+	    Sprintf(eos(buf), "%s%d fate%s", *buf ? ", " : "", lrun.nfates,
+		    plur(lrun.nfates));
 	if (pact_level() && strlen(buf) < BUFSZ - 60)
 	    Sprintf(eos(buf), "%spact level %d", *buf ? ", " : "",
 		    pact_level());
@@ -1208,14 +1214,19 @@ boolean newbranch;
 	    landmark(LM_MINES);
 	    legacy_feat(F_MINES);
 	}
-	if (Is_oracle_level(&u.uz))
+	if (Is_oracle_level(&u.uz)) {
 	    landmark(LM_ORACLE);
+	    draft_milestone(DM_ORACLE);
+	}
 	if (slev && slev->flags.town && In_mines(&u.uz)) {
 	    landmark(LM_MINETOWN);
 	    legacy_feat(F_MINETOWN);
+	    draft_milestone(DM_MINETOWN);
 	}
-	if (slev && !strcmp(slev->proto, "minend"))
+	if (slev && !strcmp(slev->proto, "minend")) {
 	    landmark(LM_MINESEND);
+	    draft_milestone(DM_MINESEND);
+	}
 	if (Is_bigroom(&u.uz)) {
 	    landmark(LM_BIGROOM);
 	    legacy_feat(F_BIGROOM);
@@ -1224,13 +1235,17 @@ boolean newbranch;
 	    landmark(LM_QPORTAL);
 	    legacy_feat(F_QPORTAL);
 	    fate_mastery(3);
+	    draft_milestone(DM_QPORTAL);
 	}
 	if (Is_stronghold(&u.uz)) {
 	    landmark(LM_CASTLE);
 	    legacy_feat(F_CASTLE);
+	    draft_milestone(DM_CASTLE);
 	}
-	if (Is_valley(&u.uz))
+	if (Is_valley(&u.uz)) {
 	    landmark(LM_VALLEY);
+	    draft_milestone(DM_VALLEY);
+	}
 	if (In_hell(&u.uz))
 	    legacy_feat(F_GEHENNOM);
 	if (In_V_tower(&u.uz))
@@ -1297,6 +1312,7 @@ boolean byhero;
 	    landmark(LM_MEDUSA);
 	    legacy_feat(F_MEDUSA);
 	    fate_mastery(4);
+	    draft_milestone(DM_MEDUSA);
 	    modes_act_cleared(2);
 	}
 	if (!byhero || mtmp->mtame)
@@ -1477,6 +1493,7 @@ int n;
 	if (n >= dunlevs_in_dungeon(&u.uz)) {
 	    landmark(LM_SOKOBAN);
 	    legacy_feat(F_SOKOBAN);
+	    draft_milestone(DM_SOKOBAN);
 	}
 }
 
@@ -1560,6 +1577,7 @@ legacy_turn()
 		    codex_saw(mtmp->data);
 	insight_turn();
 	fate_turn();	/* vows and timed blessings */
+	draft_turn();	/* fate drafts */
 	modes_turn();	/* an Expedition act's choice */
 
 	/* lycanthropy caught and later cured (the race doesn't count) */
@@ -1689,8 +1707,9 @@ const char *death;
 	}
 
 	modes_game_over(how);	/* pacts, the act pot and the Daily */
+	lres.skip_pts = (long) lrun.draft_skips * 15L;
 	lres.subtotal = lres.depth_pts + lres.landmark_pts + lres.soko_pts
-			+ lres.lesson_pts + lres.pot_pts;
+			+ lres.lesson_pts + lres.pot_pts + lres.skip_pts;
 	lres.vow_pct = fate_vow_bonus();
 	lres.mult = 100 + (lrun.unaided ? 25 : 0) + lres.vow_pct
 		    + lres.pact_pct;

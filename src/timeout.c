@@ -244,6 +244,7 @@ nh_timeout()
 
 	if (flags.friday13) baseluck -= 1;
 	if (lrun.lineage[LIN_PATRON] >= 3) baseluck += 1;	/* Legacy */
+	baseluck += lrun.fate_luck;	/* Legacy: the speed Bargain */
 
 	if (u.uluck != baseluck &&
 		moves % (u.uhave.amulet || u.ugangr ? 300 : 600) == 0) {

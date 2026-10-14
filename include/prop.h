@@ -110,6 +110,7 @@ struct prop {
 #endif
 #	define W_BALL	    0x00200000L /* Punishment ball */
 #	define W_CHAIN	    0x00400000L /* Punishment chain */
+#	define W_FATE	    0x00800000L /* Slash'EM Legacy: a fate draft */
 
 	/*** Property is blocked by an object ***/
 	long blocked;					/* Same assignments as extrinsic */
