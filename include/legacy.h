@@ -16,8 +16,8 @@
 #define LMODE_CLASSIC	0	/* the original game; nothing carries in */
 #define LMODE_LEGACY	1	/* Lineage, locked roles and the Ward */
 
-/* Lineage tracks, bought with Renown.  Only the first LIN_AVAILABLE are
-   in the game so far; the others arrive with later parts of Legacy. */
+/* Lineage tracks, bought with Renown.  LIN_OPEN() says which are in the
+   game so far; Fortune arrives with fate drafts. */
 #define LIN_VIGOR	0
 #define LIN_PROVISIONS	1
 #define LIN_REMEDIES	2
@@ -31,7 +31,7 @@
 #define LIN_FORTUNE	10
 #define LIN_INHERITANCE	11
 #define NUM_LINEAGE	12
-#define LIN_AVAILABLE	9
+#define LIN_OPEN(t)	((t) != LIN_FORTUNE)
 #define LIN_MAXRANK	3
 
 /* landmarks: each pays Renown once per game */
@@ -96,7 +96,10 @@
 #define F_ID50		44
 #define F_BESTIARY100	45
 #define F_INSIGHT	46
-#define NUM_FEATS	47
+#define F_BELONGINGS	47	/* recover an ancestor's belongings */
+#define F_HEIRLOOM3	48	/* carry one heirloom through three runs */
+#define F_MASTERY5	49	/* mastery 5 with any role */
+#define NUM_FEATS	50
 
 /* counters kept across games */
 #define LC_SPELLS	0	/* spells cast */
@@ -137,6 +140,69 @@
 #define CX_LESSONS	3
 #define NUM_CODEX	4
 
+/* blessings: small boons drawn at the start of a Legacy game (Favor) */
+#define BL_HEARTY	0
+#define BL_LUCKY	1
+#define BL_CARTOGRAPHER	2
+#define BL_STRONGBACK	3
+#define BL_PURSE	4
+#define BL_FLEET	5
+#define BL_KEENEYE	6
+#define BL_SCHOLAR	7
+#define BL_PETBOND	8
+#define BL_PACKRAT	9
+#define BL_TORCH	10
+#define BL_HERBALIST	11
+#define BL_LIGHTSTEP	12
+#define BL_HOLYWATER	13
+#define BL_NIGHTEYES	14
+#define BL_MERCHANT	15
+#define BL_DEVOUT	16
+#define BL_TINNER	17
+#define BL_POISONWARD	18
+#define BL_REMOVECURSE	19
+#define BL_STONEWARD	20
+#define BL_SPAREWAND	21
+#define BL_TRAINED	22
+#define BL_HEIRSLUCK	23	/* not drawn: one more blessing in each draw */
+#define NUM_BLESSINGS	24
+
+/* vows: conducts declared before a game, for extra Renown */
+#define VOW_VEGETARIAN	0
+#define VOW_ATHEIST	1
+#define VOW_ILLITERATE	2
+#define VOW_WISHLESS	3
+#define VOW_POLYSELF	4
+#define VOW_CELIBATE	5
+#define VOW_ARTIWISH	6
+#define VOW_POLYPILE	7
+#define VOW_VEGAN	8
+#define VOW_WEAPONLESS	9
+#define VOW_FOODLESS	10
+#define VOW_PACIFIST	11
+#define NUM_VOWS	12
+#define MAX_VOWS	2	/* taken in one game */
+
+/* role mastery and kits */
+#define MAX_ROLES	32
+#define MASTERY_MAX	5
+#define KIT_A		0	/* the usual kit */
+#define KIT_B		1	/* opens at mastery 1 */
+#define KIT_C		2	/* opens at mastery 3 */
+#define KIT_C2		3	/* the Undead Slayer's second kit C */
+
+/* the heirloom vault */
+#define MAX_VAULT	24
+struct legacy_heirloom {
+	char owner[PL_NSIZ];	/* the character who first enshrined it */
+	short otyp;
+	schar spe;		/* enchantment or charges, already capped */
+	short quan;
+	boolean erodeproof;
+	short runs;		/* games it has been carried through */
+	short role;		/* the role whose own slot holds it, or -1 */
+};
+
 /* one finished game, as the Ancestors list shows it */
 struct legacy_ancestor {
 	struct legacy_ancestor *next;	/* the next older one */
@@ -174,6 +240,15 @@ struct legacy_profile {
 	struct legacy_ancestor *ancestors;	/* newest first */
 	long icount[NUM_ICOUNTERS];	/* Insight counters */
 	boolean ins_off[NUM_INSIGHT];	/* Insight switched off in Settings */
+	/* run choices (Phase 3) */
+	unsigned long bless_owned;	/* blessings bought */
+	int vows;			/* VOW_xxx bits for the next game */
+	xchar mastery[MAX_ROLES];	/* by role index */
+	xchar kit[MAX_ROLES];		/* KIT_xxx last chosen */
+	short mskill[MAX_ROLES];	/* the weapon skill mastery 2 raises */
+	struct legacy_heirloom vault[MAX_VAULT];
+	int nvault;
+	int heir_pick;			/* vault index + 1 to take, or 0 */
 	boolean dirty;		/* changed since it was written */
 };
 
@@ -226,6 +301,19 @@ struct legacy_run {
 	uchar soko_log[SOKO_LEVS][SOKO_LOG];	/* boulder<<3 | dir<<1 | filled */
 	short soko_nlog[SOKO_LEVS];
 	uchar soko_state[SOKO_LEVS];	/* SOKO_xxx */
+	/* run choices (Phase 3) */
+	long blessings;		/* BL_xxx bits kept this game */
+	int vows;		/* VOW_xxx bits taken */
+	int vows_broken;
+	long vow_start[NUM_VOWS];	/* the conduct counts at the start */
+	int kit;		/* KIT_xxx */
+	int heir_pick;		/* vault index + 1 to take at the start */
+	unsigned heir_oid;	/* o_id of the heirloom carried, or 0 */
+	short heir_runs;
+	char heir_owner[PL_NSIZ];
+	long fleet_until;	/* the Fleet blessing's speed ends, or 0 */
+	int anc_ledger;		/* an ancestor's bones level, or 0 */
+	boolean mastery_asked;	/* the mastery 2 skill was offered */
 };
 
 /* what the last game paid, for the recap */
@@ -237,6 +325,7 @@ struct legacy_result {
 	long depth_pts, landmark_pts, soko_pts, lesson_pts;
 	long subtotal;		/* before the multiplier */
 	int mult;		/* multiplier, in percent */
+	int vow_pct;		/* the part of it from vows kept */
 	long total;		/* what the game paid, feats aside */
 	boolean floored;	/* raised to the minimum */
 	int lesson;		/* 0: none, 1: new, 2: met before */
@@ -303,6 +392,7 @@ E void FDECL(legacy_lesson_key, (char *, const char *));
 E void FDECL(legacy_soko_layout, (const char *));
 E void NDECL(legacy_soko_arrived);
 E void FDECL(legacy_soko_push, (int, int, int, int));
+E void FDECL(legacy_know_random, (int));
 
 /* codex.c */
 E void NDECL(codex_init);
@@ -350,6 +440,38 @@ E int NDECL(doelbereth);
 
 /* u_init.c */
 E void NDECL(lineage_inv);
+E struct obj *FDECL(legacy_item, (int, int, int, int));
+
+/* fate.c */
+E boolean FDECL(fate_read, (const char *, char *));
+E void FDECL(fate_write, (FILE *));
+E const char *FDECL(fate_bless_name, (int));
+E boolean FDECL(fate_bless_owned, (int));
+E boolean FDECL(fate_blessed, (int));
+E void NDECL(fate_bless_shop);
+E void NDECL(fate_draw);
+E void NDECL(fate_setup_run);
+E void NDECL(fate_kit);
+E void FDECL(fate_newgame, (struct monst *));
+E void NDECL(fate_welcome);
+E void NDECL(fate_turn);
+E void NDECL(fate_arrived);
+E void FDECL(fate_mastery, (int));
+E int NDECL(fate_vow_bonus);
+E void FDECL(fate_vow_text, (char *, BOOLEAN_P));
+E void NDECL(fate_vow_menu);
+E void FDECL(fate_heir_text, (char *));
+E void NDECL(fate_heir_menu);
+E void NDECL(fate_kit_menu);
+E void FDECL(fate_help_text, (char *, int));
+E void FDECL(fate_enshrine, (int));
+E void NDECL(fate_vault_menu);
+E void NDECL(fate_mastery_menu);
+E int NDECL(fate_shop_cha);
+E void FDECL(fate_got_object, (struct obj *));
+
+/* weapon.c */
+E const char *FDECL(legacy_skill_name, (int));
 
 /* hall.c */
 E void NDECL(legacy_startup);

@@ -2465,6 +2465,7 @@ boolean ordinary;
 		    /* KMH, balance patch -- Make it permanent, like NetHack */
 		    /* Note that this is _not_ very fast */
 		    HFast |= FROMOUTSIDE;
+		    lrun.fleet_until = 0;	/* Slash'EM Legacy: keep it */
 		    break;
 		case WAN_HEALING:
 		   You("begin to feel better.");

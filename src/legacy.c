@@ -165,6 +165,11 @@ static const struct feat_def {
 	  0 },
 	{ "bestiary100", "Fill 100 Bestiary entries", 50, FG_KNOWLEDGE, 0 },
 	{ "insight", "Earn every Insight item", 100, FG_KNOWLEDGE, 0 },
+	{ "belongings", "Recover an ancestor's belongings", 30, FG_ANCESTRY,
+	  "the Heir's luck blessing" },
+	{ "heirloom3", "Carry one heirloom through three games", 75,
+	  FG_ANCESTRY, 0 },
+	{ "mastery5", "Reach mastery 5 with any role", 200, FG_ANCESTRY, 0 },
 };
 
 /* roles and races that are not open from the start of a Legacy profile */
@@ -234,7 +239,6 @@ STATIC_DCL char FDECL(soko_glyph, (int, int));
 STATIC_DCL void FDECL(soko_start, (int));
 STATIC_DCL void FDECL(soko_finish, (int, BOOLEAN_P));
 STATIC_DCL boolean FDECL(lore_ok, (int));
-STATIC_DCL void FDECL(know_random, (int));
 STATIC_DCL boolean NDECL(first_pet_alive);
 STATIC_DCL boolean NDECL(on_quest_portal_level);
 
@@ -414,7 +418,7 @@ const char *name;
 		for (i = 0; i < NUM_INSIGHT; i++)
 		    if (!strcmp(rest, insight_keys[i]))
 			lprof.ins_off[i] = TRUE;
-	    } else
+	    } else if (!fate_read(key, rest))
 		(void) codex_read(key, rest);
 	    /* anything else was written by a newer version: skip it */
 	}
@@ -474,6 +478,7 @@ boolean force;
 	    if (lprof.ins_off[i])
 		fprintf(fp, "insightoff %s\n", insight_keys[i]);
 	codex_write(fp);
+	fate_write(fp);
 
 	/* ancestors, oldest first, at most MAX_ANCESTORS of them */
 	for (n = 0, a = lprof.ancestors; a; a = a->next)
@@ -793,8 +798,8 @@ legacy_unaided_possible()
 {
 	int t;
 
-	for (t = 0; t < LIN_AVAILABLE; t++)
-	    if (lprof.lineage[t])
+	for (t = 0; t < NUM_LINEAGE; t++)
+	    if (LIN_OPEN(t) && lprof.lineage[t])
 		return TRUE;
 	return FALSE;
 }
@@ -810,8 +815,8 @@ legacy_setup_run()
 	lrun.mode = mode;
 	if (mode != LMODE_LEGACY)
 	    return;
-	for (t = 0; t < LIN_AVAILABLE; t++) {
-	    if (!lprof.lineage[t])
+	for (t = 0; t < NUM_LINEAGE; t++) {
+	    if (!LIN_OPEN(t) || !lprof.lineage[t])
 		continue;
 	    any_owned = TRUE;
 	    if (!lprof.lin_off[t]) {
@@ -820,6 +825,7 @@ legacy_setup_run()
 	    }
 	}
 	lrun.unaided = (any_owned && !any_on);
+	fate_setup_run();	/* vows, kit and heirloom; may clear unaided */
 }
 
 /* the help a game has, such as "Vigor II, Ward I" */
@@ -836,14 +842,15 @@ boolean shortform;
 	    Strcpy(buf, discover ? "Explore mode" : "Classic");
 	    return;
 	}
-	if (lrun.unaided) {
+	if (lrun.unaided)
 	    Strcpy(buf, shortform ? "Unaided" : "Unaided (+25% Renown)");
-	    return;
-	}
-	for (t = 0; t < LIN_AVAILABLE; t++)
-	    if (lrun.lineage[t])
-		Sprintf(eos(buf), "%s%s %s", *buf ? ", " : "",
-			lineage_tracks[t].name, roman[lrun.lineage[t]]);
+	else
+	    for (t = 0; t < NUM_LINEAGE; t++)
+		if (lrun.lineage[t])
+		    Sprintf(eos(buf), "%s%s %s", *buf ? ", " : "",
+			    lineage_tracks[t].name, roman[lrun.lineage[t]]);
+	/* blessings, kit, heirloom and vows; kept short enough for BUFSZ */
+	fate_help_text(buf, BUFSZ - 40);
 	if (!*buf)
 	    Strcpy(buf, "no Lineage yet");
 	if (discover)
@@ -889,8 +896,8 @@ int otyp;
 }
 
 /* make a random object type of one class known, one not known yet */
-STATIC_OVL void
-know_random(oclass)
+void
+legacy_know_random(oclass)
 int oclass;
 {
 	int otyp, first = bases[oclass], last = bases[oclass + 1] - 1;
@@ -932,6 +939,7 @@ struct monst *pet;
 	if (pet)
 	    lrun.first_pet = pet->m_id;
 	if (lrun.mode == LMODE_LEGACY) {
+	    fate_kit();		/* kit B or C, before Arms improves it */
 	    if ((r = lrun.lineage[LIN_VIGOR]) > 0) {
 		u.uhpmax += 2 * r;
 		u.uhp = u.uhpmax;
@@ -942,11 +950,11 @@ struct monst *pet;
 	    if (lrun.lineage[LIN_PATRON] >= 3)
 		u.uluck++;	/* and timeout.c keeps it from fading */
 	    if ((r = lrun.lineage[LIN_LORE]) > 0) {
-		know_random(POTION_CLASS);
-		if (r >= 2) know_random(SCROLL_CLASS);
+		legacy_know_random(POTION_CLASS);
+		if (r >= 2) legacy_know_random(SCROLL_CLASS);
 		if (r >= 3) {
-		    know_random(WAND_CLASS);
-		    know_random(RING_CLASS);
+		    legacy_know_random(WAND_CLASS);
+		    legacy_know_random(RING_CLASS);
 		}
 	    }
 	    if ((r = lrun.lineage[LIN_COMPANION]) > 0 && pet) {
@@ -975,6 +983,7 @@ struct monst *pet;
 				|| is_weptool(otmp))
 			    otmp->oerodeproof = 1;
 	    }
+	    fate_newgame(pet);	/* blessings, heirloom and vows */
 	    flags.botl = 1;
 	}
 	legacy_write(FALSE);
@@ -986,15 +995,23 @@ legacy_welcome()
 {
 	char buf[BUFSZ];
 
+	int t;
+
 	if (lrun.mode != LMODE_LEGACY)
 	    return;
-	if (lrun.unaided) {
+	if (lrun.unaided)
 	    pline("You set out unaided, for 25%% more Renown.");
-	    return;
+	else {
+	    for (*buf = '\0', t = 0; t < NUM_LINEAGE; t++)
+		if (lrun.lineage[t])
+		    Sprintf(eos(buf), "%s%s %s", *buf ? ", " : "",
+			    lineage_tracks[t].name,
+			    lrun.lineage[t] == 3 ? "III" :
+			    lrun.lineage[t] == 2 ? "II" : "I");
+	    if (*buf)
+		pline("Your lineage gives you: %s.", buf);
 	}
-	legacy_help_text(buf, TRUE);
-	if (strcmp(buf, "no Lineage yet"))
-	    pline("Your lineage gives you: %s.", buf);
+	fate_welcome();	/* blessings, heirloom, vows, mastery */
 }
 
 /* ------------------------------------------------------------------ */
@@ -1162,6 +1179,7 @@ boolean newbranch;
 	if (on_quest_portal_level()) {
 	    landmark(LM_QPORTAL);
 	    legacy_feat(F_QPORTAL);
+	    fate_mastery(3);
 	}
 	if (Is_stronghold(&u.uz)) {
 	    landmark(LM_CASTLE);
@@ -1190,6 +1208,7 @@ boolean newbranch;
 	}
 
 	codex_arrived();	/* the Atlas */
+	fate_arrived();		/* mastery and the Cartographer */
 	if (In_sokoban(&u.uz))
 	    legacy_soko_arrived();	/* Sokoban memory */
 
@@ -1203,6 +1222,7 @@ boolean newbranch;
 			&& a->dnum == u.uz.dnum && a->dlevel == u.uz.dlevel) {
 		    pline("This is where %s the %s fell.", a->name, a->role);
 		    lrun.ghost_ledger = ledger_no(&u.uz);
+		    lrun.anc_ledger = lrun.ghost_ledger;
 		    break;
 		}
 	}
@@ -1231,6 +1251,7 @@ boolean byhero;
 	if (ptr == &mons[PM_MEDUSA]) {
 	    landmark(LM_MEDUSA);
 	    legacy_feat(F_MEDUSA);
+	    fate_mastery(4);
 	}
 	if (!byhero || mtmp->mtame)
 	    return;
@@ -1455,6 +1476,7 @@ struct obj *obj;
 	    legacy_feat(F_WISHWAND);
 	else if (obj->otyp == AMULET_OF_YENDOR)
 	    legacy_feat(F_AMULET);
+	fate_got_object(obj);
 }
 
 void
@@ -1487,6 +1509,7 @@ legacy_turn()
 			&& !mtmp->m_ap_type && !mtmp->mundetected)
 		    codex_saw(mtmp->data);
 	insight_turn();
+	fate_turn();	/* vows and timed blessings */
 
 	/* lycanthropy caught and later cured (the race doesn't count) */
 	if (!Race_if(PM_HUMAN_WEREWOLF)) {
@@ -1616,7 +1639,8 @@ const char *death;
 
 	lres.subtotal = lres.depth_pts + lres.landmark_pts + lres.soko_pts
 			+ lres.lesson_pts;
-	lres.mult = 100 + (lrun.unaided ? 25 : 0);
+	lres.vow_pct = fate_vow_bonus();
+	lres.mult = 100 + (lrun.unaided ? 25 : 0) + lres.vow_pct;
 	if (lres.mult > 300)
 	    lres.mult = 300;
 	lres.total = lres.subtotal * lres.mult / 100;
@@ -1686,8 +1710,8 @@ int maxgoals;
 	long have = legacy_renown();
 
 	/* the cheapest Lineage rank on offer */
-	for (t = 0; t < LIN_AVAILABLE; t++)
-	    if (!legacy_lineage_blocked(t)
+	for (t = 0; t < NUM_LINEAGE; t++)
+	    if (LIN_OPEN(t) && !legacy_lineage_blocked(t)
 		    && (best < 0 || legacy_lineage_cost(t, lprof.lineage[t] + 1)
 			< legacy_lineage_cost(best, lprof.lineage[best] + 1)))
 		best = t;

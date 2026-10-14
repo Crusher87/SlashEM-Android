@@ -1130,6 +1130,7 @@ register int pm;
 			You("seem slower.");
 		} else {
 			HFast |= FROMOUTSIDE;
+			lrun.fleet_until = 0;	/* keep it after Fleet */
 			You("seem faster.");
 		}
 		break;
