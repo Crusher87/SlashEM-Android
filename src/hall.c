@@ -14,7 +14,9 @@ static int opt_role, opt_race, opt_gend, opt_align;	/* from the options */
 
 #define NUM_HEIRS	3
 
-STATIC_DCL boolean FDECL(prepare_legacy, (BOOLEAN_P));
+STATIC_DCL boolean FDECL(prepare_legacy, (BOOLEAN_P, int, unsigned long));
+STATIC_DCL boolean NDECL(custom_seed);
+STATIC_DCL boolean FDECL(start_classic, (unsigned long));
 STATIC_DCL boolean NDECL(choose_own);
 STATIC_DCL boolean FDECL(random_hero, (int *));
 STATIC_DCL void NDECL(lineage_toggles);
@@ -24,7 +26,8 @@ STATIC_DCL void NDECL(show_feats);
 STATIC_DCL void NDECL(show_ancestors);
 STATIC_DCL void FDECL(show_ancestor, (struct legacy_ancestor *));
 STATIC_DCL void NDECL(hall_settings);
-STATIC_DCL int FDECL(read_restart, (int *));
+STATIC_DCL int FDECL(read_restart, (int *, unsigned long *));
+STATIC_DCL void FDECL(set_mode, (int, unsigned long));
 STATIC_DCL void FDECL(write_restart, (const char *));
 STATIC_DCL void FDECL(add_text, (winid, const char *));
 STATIC_DCL void FDECL(add_choice, (winid, int, CHAR_P, const char *));
@@ -165,13 +168,40 @@ lineage_toggles()
 	legacy_write(FALSE);
 }
 
+/* set the mode and seed of the next game; a seed makes it a custom game */
+STATIC_OVL void
+set_mode(mode, seed)
+int mode;
+unsigned long seed;
+{
+	lrun.mode = mode;
+	lrun.seed = seed;
+	lrun.custom = (seed != 0);
+}
+
+/* a Classic game, chosen the usual way */
+STATIC_OVL boolean
+start_classic(seed)
+unsigned long seed;
+{
+	set_mode(LMODE_CLASSIC, seed);
+	legacy_selecting = FALSE;
+	if (!choose_own())
+	    return FALSE;
+	legacy_setup_run();
+	return TRUE;
+}
+
 /*
- * The Prepare screen for a Legacy game.  Returns TRUE once a character
- * is chosen (flags.initrole etc. are set), FALSE to go back to the Hall.
+ * The Prepare screen for a Legacy game or an Expedition.  Returns TRUE
+ * once a character is chosen (flags.initrole etc. are set), FALSE to go
+ * back to the Hall.
  */
 STATIC_OVL boolean
-prepare_legacy(fresh_heirs)
+prepare_legacy(fresh_heirs, mode, seed)
 boolean fresh_heirs;
+int mode;
+unsigned long seed;
 {
 	static int heirs[NUM_HEIRS][4];
 	static int nheirs = 0;
@@ -180,7 +210,7 @@ boolean fresh_heirs;
 	char buf[BUFSZ], help[BUFSZ];
 	int i, n, choice;
 
-	lrun.mode = LMODE_LEGACY;
+	set_mode(mode, seed);
 	legacy_selecting = TRUE;
 	if (fresh_heirs || !nheirs)
 	    for (nheirs = 0; nheirs < NUM_HEIRS; nheirs++)
@@ -202,8 +232,19 @@ boolean fresh_heirs;
 	    add_choice(win, 10, 'd', "Choose your own character");
 	    add_choice(win, 11, 'e', "New heirs");
 	    add_text(win, "");
+	    if (mode == LMODE_EXPEDITION) {
+		add_text(win, "Three acts: Mines' End, Medusa, the Castle. After");
+		add_text(win, "each, retire to bank the pot or press on for more.");
+	    }
+	    if (seed) {
+		Sprintf(buf, "Custom seed %lu: the same maps every time, but", seed);
+		add_text(win, buf);
+		add_text(win, "no Renown or feats.");
+	    }
+	    if (mode == LMODE_EXPEDITION || seed)
+		add_text(win, "");
 	    if (legacy_unaided_possible()) {
-		lrun.mode = LMODE_LEGACY;
+		set_mode(mode, seed);
 		legacy_setup_run();
 		legacy_help_text(help, FALSE);
 		Sprintf(buf, "Help for this game: %s", help);
@@ -219,8 +260,12 @@ boolean fresh_heirs;
 		Sprintf(buf, "Heirloom: %s", help);
 		add_choice(win, 15, 'h', buf);
 	    }
+	    pact_text(help, TRUE);
+	    Sprintf(buf, "Pacts: %s", help);
+	    add_choice(win, 16, 'i', buf);
 	    add_choice(win, 13, '<', "Back to the Hall");
-	    end_menu(win, "Prepare a Legacy game");
+	    end_menu(win, mode == LMODE_EXPEDITION ? "Prepare an Expedition"
+						   : "Prepare a Legacy game");
 	    n = select_menu(win, PICK_ONE, &pick);
 	    destroy_nhwindow(win);
 	    choice = (n > 0) ? pick[0].item.a_int : 13;
@@ -243,6 +288,8 @@ boolean fresh_heirs;
 		fate_vow_menu();
 	    } else if (choice == 15) {
 		fate_heir_menu();
+	    } else if (choice == 16) {
+		pact_menu();
 	    } else {
 		legacy_selecting = FALSE;
 		return FALSE;
@@ -250,9 +297,50 @@ boolean fresh_heirs;
 	}
 	nheirs = 0;	/* the next Prepare screen gets new heirs */
 	fate_kit_menu();	/* kit B or C, once mastery opens them */
-	lrun.mode = LMODE_LEGACY;
+	set_mode(mode, seed);
 	legacy_setup_run();
 	return TRUE;
+}
+
+/* type a seed, then pick the mode to play it in */
+STATIC_OVL boolean
+custom_seed()
+{
+	winid win;
+	menu_item *pick = 0;
+	char buf[BUFSZ];
+	unsigned long seed;
+	int n, choice;
+
+	getlin("Seed (a number, or any word):", buf);
+	(void) mungspaces(buf);
+	if (!*buf || *buf == '\033')
+	    return FALSE;
+	seed = legacy_hash_seed(buf);
+	win = create_nhwindow(NHW_MENU);
+	start_menu(win);
+	Sprintf(buf, "Seed %lu builds the same maps every time. A custom", seed);
+	add_text(win, buf);
+	add_text(win, "game earns no Renown or feats, but the Codex learns.");
+	add_text(win, "");
+	add_choice(win, 1, 'a', "Legacy");
+	add_choice(win, 2, 'b', "Expedition");
+	add_choice(win, 3, 'c', "Classic");
+	end_menu(win, "Play the seed as");
+	n = select_menu(win, PICK_ONE, &pick);
+	destroy_nhwindow(win);
+	choice = (n > 0) ? pick[0].item.a_int : 0;
+	if (pick)
+	    free((genericptr_t) pick);
+	switch (choice) {
+	case 1:
+	    return prepare_legacy(TRUE, LMODE_LEGACY, seed);
+	case 2:
+	    return prepare_legacy(TRUE, LMODE_EXPEDITION, seed);
+	case 3:
+	    return start_classic(seed);
+	}
+	return FALSE;
 }
 
 /* buy Lineage upgrades */
@@ -387,7 +475,8 @@ STATIC_OVL void
 show_feats()
 {
 	static const char *const groups[] = {
-	    "Descent", "Branches", "Skill", "Knowledge", "Ancestry"
+	    "Descent", "Branches", "Skill", "Knowledge", "Ancestry",
+	    "Expedition", "Daily"
 	};
 	winid win;
 	char buf[BUFSZ];
@@ -431,8 +520,7 @@ struct legacy_ancestor *a;
 	Sprintf(buf, "%s the %s, generation %d", a->name, a->role, a->gen);
 	putstr(win, ATR_BOLD, buf);
 	Sprintf(buf, "A %s %s %s %s, played in %s mode.", a->align, a->gender,
-		a->race, a->role, a->mode == LMODE_LEGACY ? "Legacy"
-							    : "Classic");
+		a->race, a->role, legacy_mode_name(a->mode));
 	putstr(win, 0, buf);
 	Sprintf(buf, "Ended: %s.", a->death);
 	putstr(win, 0, buf);
@@ -562,24 +650,30 @@ const char *what;
 	}
 }
 
-/* read and remove the restart marker; 'mode' gets the game mode */
+/* read and remove the restart marker; 'mode' and 'seed' get the game
+   mode and a custom game's seed */
 STATIC_OVL int
-read_restart(mode)
+read_restart(mode, seed)
 int *mode;
+unsigned long *seed;
 {
 	FILE *fp;
 	char line[BUFSZ], what[BUFSZ];
 	int m = LMODE_LEGACY, h[4], n, result = RS_NONE;
+	unsigned long s = 0;
 	const char *fq = fqname(LEGACY_RESTART, SCOREPREFIX, 0);
 
 	if (!(fp = fopen(fq, "r")))
 	    return RS_NONE;
 	if (fgets(line, sizeof line, fp)) {
-	    n = sscanf(line, "%s %d %d %d %d %d", what, &m, &h[0], &h[1],
-		       &h[2], &h[3]);
-	    if (!strcmp(what, "again") && n == 6) {
+	    n = sscanf(line, "%s %d %d %d %d %d %lu", what, &m, &h[0], &h[1],
+		       &h[2], &h[3], &s);
+	    m = max(0, min(m, NUM_LMODES - 1));
+	    if (!strcmp(what, "again") && n >= 6) {
 		lrun.mode = m;
-		legacy_selecting = TRUE;
+		lrun.seed = s;
+		lrun.custom = (s != 0);
+		legacy_selecting = (m != LMODE_DAILY);
 		if (ok_role(h[0], h[1], h[2], h[3])
 			&& ok_race(h[0], h[1], h[2], h[3])
 			&& ok_gend(h[0], h[1], h[2], h[3])
@@ -588,14 +682,16 @@ int *mode;
 		    result = RS_AGAIN;
 		} else
 		    result = RS_PREPARE;
-	    } else if (!strcmp(what, "prepare") && n >= 2)
+	    } else if (!strcmp(what, "prepare") && n >= 2) {
 		result = RS_PREPARE;
-	    else if (!strcmp(what, "hall"))
+		(void) sscanf(line, "%*s %*d %lu", &s);	/* "prepare mode seed" */
+	    } else if (!strcmp(what, "hall"))
 		result = RS_HALL;
 	}
 	(void) fclose(fp);
 	(void) unlink(fq);
-	*mode = m ? LMODE_LEGACY : LMODE_CLASSIC;
+	*mode = m;
+	*seed = s;
 	return result;
 }
 
@@ -623,6 +719,7 @@ legacy_startup()
 	menu_item *pick = 0;
 	char buf[BUFSZ], goals[3][BUFSZ];
 	int n, i, choice, mode = LMODE_LEGACY, restart;
+	unsigned long seed = 0;
 
 	legacy_init();
 	opt_role = flags.initrole;
@@ -631,28 +728,31 @@ legacy_startup()
 	opt_align = flags.initalign;
 	hall_active = TRUE;
 
-	restart = read_restart(&mode);
+	restart = read_restart(&mode, &seed);
 	if (restart == RS_AGAIN) {
-	    legacy_setup_run();	/* keeps lrun.mode */
+	    if (mode == LMODE_DAILY)
+		(void) daily_prepare(FALSE);	/* today's, maybe practice */
+	    else
+		legacy_setup_run();	/* keeps the mode and seed */
 	    hall_active = FALSE;
 	    return;
 	}
 	if (restart == RS_PREPARE || (restart == RS_NONE && lprof.skip_hall)) {
 	    if (restart == RS_NONE)
-		mode = lprof.last_mode;
-	    if (mode == LMODE_LEGACY) {
-		if (prepare_legacy(TRUE)) {
+		mode = lprof.last_mode, seed = 0;
+	    if (mode == LMODE_LEGACY || mode == LMODE_EXPEDITION) {
+		if (prepare_legacy(TRUE, mode, seed)) {
 		    hall_active = FALSE;
 		    return;
 		}
-	    } else {
-		lrun.mode = LMODE_CLASSIC;
-		legacy_selecting = FALSE;
-		if (choose_own()) {
-		    legacy_setup_run();
+	    } else if (mode == LMODE_DAILY) {
+		if (daily_prepare(TRUE)) {
 		    hall_active = FALSE;
 		    return;
 		}
+	    } else if (start_classic(seed)) {
+		hall_active = FALSE;
+		return;
 	    }
 	}
 
@@ -676,16 +776,27 @@ legacy_startup()
 	    add_text(win, "");
 	    add_choice(win, 1, 'a',
 		       "Play Legacy: a hard start that eases as your line grows");
-	    add_choice(win, 2, 'b', "Play Classic: the original game, no help");
-	    add_choice(win, 3, 'c', "Lineage: spend Renown on upgrades");
-	    add_choice(win, 10, 'd', "Blessings: grow the pool Favor draws from");
-	    add_choice(win, 4, 'e', "Roles and races");
-	    add_choice(win, 11, 'f', "Role mastery and kits");
-	    add_choice(win, 5, 'g', "Feats");
-	    add_choice(win, 6, 'h', "Ancestors");
-	    add_choice(win, 12, 'i', "The heirloom vault");
-	    add_choice(win, 9, 'j', "The Codex and Insight");
-	    add_choice(win, 7, 'k', "Settings");
+	    add_choice(win, 13, 'b',
+		       "Play an Expedition: three acts, bank the pot or press on");
+	    if (lprof.daily_last == yyyymmdd((time_t) 0))
+		Strcpy(buf, "Play the Daily: today's is done; practice it");
+	    else if (lprof.daily_streak)
+		Sprintf(buf, "Play the Daily: today's seed (streak %d)",
+			lprof.daily_streak);
+	    else
+		Strcpy(buf, "Play the Daily: the same seed for everyone today");
+	    add_choice(win, 14, 'c', buf);
+	    add_choice(win, 2, 'd', "Play Classic: the original game, no help");
+	    add_choice(win, 15, 'e', "Play a custom seed");
+	    add_choice(win, 3, 'f', "Lineage: spend Renown on upgrades");
+	    add_choice(win, 10, 'g', "Blessings: grow the pool Favor draws from");
+	    add_choice(win, 4, 'h', "Roles and races");
+	    add_choice(win, 11, 'i', "Role mastery and kits");
+	    add_choice(win, 5, 'j', "Feats");
+	    add_choice(win, 6, 'k', "Ancestors");
+	    add_choice(win, 12, 'l', "The heirloom vault");
+	    add_choice(win, 9, 'm', "The Codex and Insight");
+	    add_choice(win, 7, 'n', "Settings");
 	    add_choice(win, 8, 'q', "Quit");
 	    Sprintf(buf, "The Hall of %s's line", plname);
 	    end_menu(win, buf);
@@ -697,16 +808,27 @@ legacy_startup()
 
 	    switch (choice) {
 	    case 1:
-		if (prepare_legacy(FALSE)) {
+	    case 13:
+		if (prepare_legacy(FALSE, choice == 1 ? LMODE_LEGACY
+					: LMODE_EXPEDITION, 0UL)) {
+		    hall_active = FALSE;
+		    return;
+		}
+		break;
+	    case 14:
+		if (daily_prepare(TRUE)) {
+		    hall_active = FALSE;
+		    return;
+		}
+		break;
+	    case 15:
+		if (custom_seed()) {
 		    hall_active = FALSE;
 		    return;
 		}
 		break;
 	    case 2:
-		lrun.mode = LMODE_CLASSIC;
-		legacy_selecting = FALSE;
-		if (choose_own()) {
-		    legacy_setup_run();
+		if (start_classic(0UL)) {
 		    hall_active = FALSE;
 		    return;
 		}
@@ -833,9 +955,10 @@ int how;
 	    return;
 
 	win = create_nhwindow(NHW_TEXT);
-	Sprintf(buf, "%s the %s, generation %d (%s)", plname,
+	Sprintf(buf, "%s the %s, generation %d (%s%s)", plname,
 		(flags.female && urole.name.f) ? urole.name.f : urole.name.m,
-		lrun.gen, lrun.mode == LMODE_LEGACY ? "Legacy" : "Classic");
+		lrun.gen, legacy_mode_name(lrun.mode),
+		lrun.custom ? ", custom seed" : "");
 	putstr(win, ATR_BOLD, buf);
 	Sprintf(buf, "%s on turn %ld.", upstart(strcpy(line, lres.death)),
 		moves);
@@ -854,8 +977,25 @@ int how;
 	    legacy_put_wrapped(win, codex_lesson_tip(key));
 	}
 
+	if (lrun.mode == LMODE_DAILY) {
+	    putstr(win, 0, "");
+	    daily_line(buf);
+	    putstr(win, 0, buf);
+	}
+
 	putstr(win, 0, "");
 	putstr(win, ATR_BOLD, "Renown from this game");
+	if (lrun.mode == LMODE_DAILY) {
+	    if (lres.daily_pts) {
+		Sprintf(line, "Today's Daily%s, streak %d",
+			lrun.gauntlet ? " (Gauntlet, doubled)" : "",
+			lprof.daily_streak);
+		money_line(buf, line, lres.daily_pts);
+	    } else
+		Strcpy(buf, "  A practice Daily earns no Renown, only feats.");
+	    putstr(win, 0, buf);
+	    goto totals;
+	}
 	if (lres.credited < lres.deepest)
 	    Sprintf(line, "Depth: level %d (deepest %d, capped by XL)",
 		    lres.credited, lres.deepest);
@@ -878,6 +1018,14 @@ int how;
 	    money_line(buf, "New Lesson", lres.lesson_pts);
 	    putstr(win, 0, buf);
 	}
+	if (lres.pot_pts) {
+	    Sprintf(line, "Expedition pot, Act %s%s",
+		    lrun.act >= 3 ? "III" : lrun.act == 2 ? "II" : "I",
+		    (lrun.retired || lrun.act >= NUM_ACTS) ? ""
+		    : " (half: died pressing on)");
+	    money_line(buf, line, lres.pot_pts);
+	    putstr(win, 0, buf);
+	}
 	if (lres.mult != 100) {
 	    *line = '\0';
 	    if (lrun.unaided)
@@ -885,16 +1033,22 @@ int how;
 	    if (lres.vow_pct)
 		Sprintf(eos(line), "%svows kept +%d%%", *line ? ", " : "",
 			lres.vow_pct);
+	    if (lres.pact_pct)
+		Sprintf(eos(line), "%spacts +%d%%", *line ? ", " : "",
+			lres.pact_pct);
 	    Sprintf(buf, "  %s: everything above x%d.%02d", line,
 		    lres.mult / 100, lres.mult % 100);
 	    putstr(win, 0, buf);
 	}
 	if (discover)
 	    putstr(win, 0, "  Explore mode earns no Renown.");
+	else if (lrun.custom)
+	    putstr(win, 0, "  A custom seed earns no Renown or feats.");
 	else if (lres.floored)
 	    putstr(win, 0, "  Every finished game pays at least 10.");
 	money_line(buf, "This game", lres.total);
 	putstr(win, 0, buf);
+ totals:
 	for (f = 0; f < NUM_FEATS; f++)
 	    if (lrun.feats[f / 32] & (1L << (f % 32))) {
 		if (!anyfeat)
@@ -930,7 +1084,9 @@ int how;
 	for (;;) {
 	    win = create_nhwindow(NHW_MENU);
 	    start_menu(win);
-	    add_choice(win, 1, 'a', "Play again with the same kind of character");
+	    add_choice(win, 1, 'a', lrun.mode == LMODE_DAILY
+				    ? "Play today's Daily again (practice)"
+				    : "Play again with the same kind of character");
 	    add_choice(win, 2, 'b', "New character");
 	    add_choice(win, 3, 'c', "Go to the Hall");
 	    add_choice(win, 4, 'd', "Write an epitaph");
@@ -951,12 +1107,14 @@ int how;
 	}
 	switch (choice) {
 	case 1:
-	    Sprintf(buf, "again %d %d %d %d %d", lrun.mode, flags.initrole,
-		    flags.initrace, flags.female ? 1 : 0, flags.initalign);
+	    Sprintf(buf, "again %d %d %d %d %d %lu", lrun.mode, flags.initrole,
+		    flags.initrace, flags.female ? 1 : 0, flags.initalign,
+		    lrun.custom ? lrun.seed : 0UL);
 	    write_restart(buf);
 	    break;
 	case 2:
-	    Sprintf(buf, "prepare %d", lrun.mode);
+	    Sprintf(buf, "prepare %d %lu", lrun.mode,
+		    lrun.custom ? lrun.seed : 0UL);
 	    write_restart(buf);
 	    break;
 	case 3:

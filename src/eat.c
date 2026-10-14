@@ -2701,8 +2701,12 @@ gethungry()	/* as time goes by - called by moveloop() and domove() */
 
 	if ((!u.usleep || !rn2(10))	/* slow metabolic rate while asleep */
 		&& (carnivorous(youmonst.data) || herbivorous(youmonst.data))
-		&& !Slow_digestion)
+		&& !Slow_digestion) {
 	    u.uhunger--;		/* ordinary food consumption */
+	    /* Slash'EM Legacy: Famine */
+	    if (pact_rank(PACT_FAMINE) && rn2(4) < pact_rank(PACT_FAMINE))
+		u.uhunger--;
+	}
 
 	if (moves % 2) {	/* odd turns */
 	    /* Regeneration uses up food, unless due to an artifact */

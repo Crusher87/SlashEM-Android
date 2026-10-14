@@ -100,6 +100,8 @@ static const char *const insight_keys[NUM_INSIGHT] = {
 #define FG_SKILL	2
 #define FG_KNOWLEDGE	3
 #define FG_ANCESTRY	4
+#define FG_EXPEDITION	5
+#define FG_DAILY	6
 
 static const struct feat_def {
 	const char *key, *name;
@@ -170,6 +172,22 @@ static const struct feat_def {
 	{ "heirloom3", "Carry one heirloom through three games", 75,
 	  FG_ANCESTRY, 0 },
 	{ "mastery5", "Reach mastery 5 with any role", 200, FG_ANCESTRY, 0 },
+	{ "act1", "Clear Expedition Act I", 50, FG_EXPEDITION,
+	  "the Hexed and Fragile pacts" },
+	{ "act2", "Clear Expedition Act II", 100, FG_EXPEDITION,
+	  "the Swift foes and Unwritten pacts" },
+	{ "act3", "Clear Expedition Act III", 300, FG_EXPEDITION,
+	  "the Starless pact" },
+	{ "retire250", "Retire with a pot of 250 or more", 50, FG_EXPEDITION, 0 },
+	{ "vowact1", "Keep a vow through Act I", 50, FG_EXPEDITION,
+	  "the vegan, weaponless, foodless and pacifist vows" },
+	{ "act1pact5", "Clear Act I at pact level 5 or higher", 100,
+	  FG_EXPEDITION, 0 },
+	{ "act1unaided", "Clear Act I Unaided", 100, FG_EXPEDITION, 0 },
+	{ "streak7", "A seven-day Daily streak", 50, FG_DAILY, 0 },
+	{ "streak30", "A thirty-day Daily streak", 150, FG_DAILY, 0 },
+	{ "gauntlet10", "Reach dungeon level 10 in a Sunday Gauntlet", 75,
+	  FG_DAILY, 0 },
 };
 
 /* roles and races that are not open from the start of a Legacy profile */
@@ -353,7 +371,7 @@ const char *name;
 	    } else if (!strcmp(key, "generation")) {
 		lprof.generation = atoi(rest);
 	    } else if (!strcmp(key, "lastmode")) {
-		lprof.last_mode = atoi(rest) ? LMODE_LEGACY : LMODE_CLASSIC;
+		lprof.last_mode = max(0, min(atoi(rest), NUM_LMODES - 1));
 	    } else if (!strcmp(key, "setting")) {
 		int val = 0;
 		char sname[BUFSZ];
@@ -418,7 +436,7 @@ const char *name;
 		for (i = 0; i < NUM_INSIGHT; i++)
 		    if (!strcmp(rest, insight_keys[i]))
 			lprof.ins_off[i] = TRUE;
-	    } else if (!fate_read(key, rest))
+	    } else if (!fate_read(key, rest) && !modes_read(key, rest))
 		(void) codex_read(key, rest);
 	    /* anything else was written by a newer version: skip it */
 	}
@@ -479,6 +497,7 @@ boolean force;
 		fprintf(fp, "insightoff %s\n", insight_keys[i]);
 	codex_write(fp);
 	fate_write(fp);
+	modes_write(fp);
 
 	/* ancestors, oldest first, at most MAX_ANCESTORS of them */
 	for (n = 0, a = lprof.ancestors; a; a = a->next)
@@ -656,7 +675,7 @@ boolean
 legacy_role_locked(idx)
 int idx;
 {
-	if (!legacy_selecting || lrun.mode != LMODE_LEGACY || lprof.unlock_all)
+	if (!legacy_selecting || !LINEAGE_RULES() || lprof.unlock_all)
 	    return FALSE;
 	return !unlock_open(TRUE, idx);
 }
@@ -665,7 +684,7 @@ boolean
 legacy_race_locked(idx)
 int idx;
 {
-	if (!legacy_selecting || lrun.mode != LMODE_LEGACY || lprof.unlock_all)
+	if (!legacy_selecting || !LINEAGE_RULES() || lprof.unlock_all)
 	    return FALSE;
 	return !unlock_open(FALSE, idx);
 }
@@ -718,7 +737,15 @@ int idx;
 boolean
 legacy_mode()
 {
-	return (boolean) (lrun.mode == LMODE_LEGACY);
+	return (boolean) LEGACY_RULES();
+}
+
+/* does this game pay Renown and feats?  not in Explore mode or from a
+   typed-in seed */
+boolean
+legacy_counts()
+{
+	return (boolean) (!discover && !lrun.custom);
 }
 
 long
@@ -809,11 +836,14 @@ void
 legacy_setup_run()
 {
 	int t, mode = lrun.mode;
-	boolean any_owned = FALSE, any_on = FALSE;
+	unsigned long seed = lrun.seed;
+	boolean any_owned = FALSE, any_on = FALSE, custom = lrun.custom;
 
 	(void) memset((genericptr_t) &lrun, 0, sizeof lrun);
 	lrun.mode = mode;
-	if (mode != LMODE_LEGACY)
+	lrun.seed = seed;
+	lrun.custom = custom;
+	if (!LINEAGE_RULES())
 	    return;
 	for (t = 0; t < NUM_LINEAGE; t++) {
 	    if (!LIN_OPEN(t) || !lprof.lineage[t])
@@ -826,6 +856,7 @@ legacy_setup_run()
 	}
 	lrun.unaided = (any_owned && !any_on);
 	fate_setup_run();	/* vows, kit and heirloom; may clear unaided */
+	modes_setup_run();	/* pacts */
 }
 
 /* the help a game has, such as "Vigor II, Ward I" */
@@ -838,11 +869,13 @@ boolean shortform;
 	int t;
 
 	*buf = '\0';
-	if (lrun.mode != LMODE_LEGACY) {
+	if (!LEGACY_RULES()) {
 	    Strcpy(buf, discover ? "Explore mode" : "Classic");
 	    return;
 	}
-	if (lrun.unaided)
+	if (lrun.mode == LMODE_DAILY)
+	    Strcpy(buf, lrun.gauntlet ? "Daily Gauntlet" : "Daily");
+	else if (lrun.unaided)
 	    Strcpy(buf, shortform ? "Unaided" : "Unaided (+25% Renown)");
 	else
 	    for (t = 0; t < NUM_LINEAGE; t++)
@@ -851,6 +884,11 @@ boolean shortform;
 			    lineage_tracks[t].name, roman[lrun.lineage[t]]);
 	/* blessings, kit, heirloom and vows; kept short enough for BUFSZ */
 	fate_help_text(buf, BUFSZ - 40);
+	if (pact_level() && strlen(buf) < BUFSZ - 60)
+	    Sprintf(eos(buf), "%spact level %d", *buf ? ", " : "",
+		    pact_level());
+	if (lrun.custom)
+	    Sprintf(eos(buf), "%scustom seed", *buf ? ", " : "");
 	if (!*buf)
 	    Strcpy(buf, "no Lineage yet");
 	if (discover)
@@ -938,7 +976,8 @@ struct monst *pet;
 	lrun.ids_start = codex_armory_count();
 	if (pet)
 	    lrun.first_pet = pet->m_id;
-	if (lrun.mode == LMODE_LEGACY) {
+	lrun.inv_made = FALSE;	/* what Legacy adds is never Hexed */
+	if (LEGACY_RULES()) {
 	    fate_kit();		/* kit B or C, before Arms improves it */
 	    if ((r = lrun.lineage[LIN_VIGOR]) > 0) {
 		u.uhpmax += 2 * r;
@@ -986,6 +1025,8 @@ struct monst *pet;
 	    fate_newgame(pet);	/* blessings, heirloom and vows */
 	    flags.botl = 1;
 	}
+	modes_newgame();	/* the Daily streak */
+	lrun.inv_made = TRUE;
 	legacy_write(FALSE);
 }
 
@@ -997,7 +1038,8 @@ legacy_welcome()
 
 	int t;
 
-	if (lrun.mode != LMODE_LEGACY)
+	modes_welcome();
+	if (!LEGACY_RULES())
 	    return;
 	if (lrun.unaided)
 	    pline("You set out unaided, for 25%% more Renown.");
@@ -1011,7 +1053,9 @@ legacy_welcome()
 	    if (*buf)
 		pline("Your lineage gives you: %s.", buf);
 	}
+	lrun.inv_made = FALSE;
 	fate_welcome();	/* blessings, heirloom, vows, mastery */
+	lrun.inv_made = TRUE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1072,7 +1116,7 @@ void
 legacy_feat(f)
 int f;
 {
-	if (f < 0 || f >= NUM_FEATS || discover || !legacy_loaded)
+	if (f < 0 || f >= NUM_FEATS || !legacy_counts() || !legacy_loaded)
 	    return;
 	if (lprof.feat_done[f])
 	    return;
@@ -1209,6 +1253,7 @@ boolean newbranch;
 
 	codex_arrived();	/* the Atlas */
 	fate_arrived();		/* mastery and the Cartographer */
+	modes_arrived(dep);	/* the Daily's depth */
 	if (In_sokoban(&u.uz))
 	    legacy_soko_arrived();	/* Sokoban memory */
 
@@ -1252,6 +1297,7 @@ boolean byhero;
 	    landmark(LM_MEDUSA);
 	    legacy_feat(F_MEDUSA);
 	    fate_mastery(4);
+	    modes_act_cleared(2);
 	}
 	if (!byhero || mtmp->mtame)
 	    return;
@@ -1470,10 +1516,14 @@ struct obj *obj;
 	s_level *slev;
 
 	if (obj->otyp == LUCKSTONE && (slev = Is_special(&u.uz)) != 0
-		&& !strcmp(slev->proto, "minend"))
+		&& !strcmp(slev->proto, "minend")) {
 	    legacy_feat(F_LUCKSTONE);
-	else if (obj->otyp == WAN_WISHING)
+	    modes_act_cleared(1);	/* Expedition Act I */
+	} else if (obj->otyp == WAN_WISHING) {
 	    legacy_feat(F_WISHWAND);
+	    if (Is_stronghold(&u.uz))
+		modes_act_cleared(3);
+	}
 	else if (obj->otyp == AMULET_OF_YENDOR)
 	    legacy_feat(F_AMULET);
 	fate_got_object(obj);
@@ -1510,6 +1560,7 @@ legacy_turn()
 		    codex_saw(mtmp->data);
 	insight_turn();
 	fate_turn();	/* vows and timed blessings */
+	modes_turn();	/* an Expedition act's choice */
 
 	/* lycanthropy caught and later cured (the race doesn't count) */
 	if (!Race_if(PM_HUMAN_WEREWOLF)) {
@@ -1542,7 +1593,7 @@ int how;
 {
 	int rank = lrun.lineage[LIN_WARD];
 
-	if (lrun.mode != LMODE_LEGACY || !rank || lrun.ward_used
+	if (!LINEAGE_RULES() || !rank || lrun.ward_used
 		|| how >= GENOCIDED)
 	    return FALSE;
 	if ((rank == 1 && depth(&u.uz) > 4) || (rank == 2 && depth(&u.uz) > 10))
@@ -1637,15 +1688,19 @@ const char *death;
 	    }
 	}
 
+	modes_game_over(how);	/* pacts, the act pot and the Daily */
 	lres.subtotal = lres.depth_pts + lres.landmark_pts + lres.soko_pts
-			+ lres.lesson_pts;
+			+ lres.lesson_pts + lres.pot_pts;
 	lres.vow_pct = fate_vow_bonus();
-	lres.mult = 100 + (lrun.unaided ? 25 : 0) + lres.vow_pct;
+	lres.mult = 100 + (lrun.unaided ? 25 : 0) + lres.vow_pct
+		    + lres.pact_pct;
 	if (lres.mult > 300)
 	    lres.mult = 300;
 	lres.total = lres.subtotal * lres.mult / 100;
-	if (discover)
-	    lres.total = 0;
+	if (mode == LMODE_DAILY)	/* a flat reward, or none for practice */
+	    lres.total = lres.daily_pts;
+	if (!legacy_counts() || mode == LMODE_DAILY)
+	    lres.total = legacy_counts() ? lres.total : 0;
 	else if (how != QUIT && lres.total < RENOWN_MINIMUM) {
 	    lres.total = RENOWN_MINIMUM;
 	    lres.floored = TRUE;

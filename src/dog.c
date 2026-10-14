@@ -172,6 +172,8 @@ makedog()
 	static int petname_used = 0;
 
 	if (preferred_pet == 'n') return((struct monst *) 0);
+	if (pact_rank(PACT_LONELY))	/* Slash'EM Legacy: Lonely */
+		return((struct monst *) 0);
 
 	pettype = pet_type();
 	petsym = mons[pettype].mlet;

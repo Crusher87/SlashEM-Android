@@ -950,6 +950,9 @@ die:
 	if (how == ESCAPED || how == ASCENDED || how == QUIT)
 	    Strcpy(pbuf, how == ASCENDED ? "ascended" :
 			 how == ESCAPED ? "escaped the dungeon" : "quit");
+	if (how == ESCAPED && lrun.retired)
+	    Sprintf(pbuf, "retired after Act %s",
+		    lrun.act >= 3 ? "III" : lrun.act == 2 ? "II" : "I");
 	legacy_game_over(how, pbuf);
 
 	if (strcmp(flags.end_disclose, "none") && how != PANICKED)
@@ -1100,6 +1103,7 @@ die:
 	    }
 	    Sprintf(eos(pbuf), "%s with %ld point%s,",
 		    how==ASCENDED ? "went to your reward" :
+		    lrun.retired ? "retired from the Expedition" :
 				    "escaped from the dungeon",
 		    u.urexp, plur(u.urexp));
 	    end_putstr(endwin, pbuf);
