@@ -1545,9 +1545,11 @@ level_difficulty()
 		return((xchar)(depth(&sanctum_level) + u.ulevel/2));
 	else
 		if (u.uhave.amulet)
-			return(deepest_lev_reached(FALSE));
-		else
-			return((xchar) depth(&u.uz));
+			return((xchar) (deepest_lev_reached(FALSE)
+					+ 2 * pact_rank(PACT_ELITE)));
+		else	/* Slash'EM Legacy: Elite */
+			return((xchar) (depth(&u.uz)
+					+ 2 * pact_rank(PACT_ELITE)));
 }
 
 /* Take one word and try to match it to a level.

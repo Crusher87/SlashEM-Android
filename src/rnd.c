@@ -8,11 +8,13 @@
 extern int NDECL(rand);
 #define RND(x)	(rand() % x)
 #else /* LINT */
+/* Slash'EM Legacy: legacy_rand() switches to a seeded generator while a
+   seeded level is built (modes.c) */
 # if defined(UNIX) || defined(RANDOM)
-#define RND(x)	(int)(Rand() % (long)(x))
+#define RND(x)	(int)(legacy_rand() % (long)(x))
 # else
 /* Good luck: the bottom order bits are cyclic. */
-#define RND(x)	(int)((Rand()>>3) % (x))
+#define RND(x)	(int)((legacy_rand()>>3) % (x))
 # endif
 #endif /* LINT */
 

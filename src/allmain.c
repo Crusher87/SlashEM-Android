@@ -112,8 +112,8 @@ moveloop()
 		    for (mtmp = fmon; mtmp; mtmp = mtmp->nmon)
 			mtmp->movement += mcalcmove(mtmp);
 
-		    if(!rn2(u.uevent.udemigod ? 25 :
-			    (depth(&u.uz) > depth(&stronghold_level)) ? 50 : 70))
+		    if(!rn2(legacy_spawn_rate(u.uevent.udemigod ? 25 :
+			    (depth(&u.uz) > depth(&stronghold_level)) ? 50 : 70)))
 			(void) makemon((struct permonst *)0, 0, 0, NO_MM_FLAGS);
 
 		    /* calculate how much time passed. */
@@ -179,7 +179,11 @@ moveloop()
 		    dgn_growths(TRUE, TRUE);
 #endif
 
-		    if (u.ublesscnt)  u.ublesscnt--;
+		    /* Slash'EM Legacy: Silent gods slows the countdown */
+		    if (u.ublesscnt
+			    && !(pact_rank(PACT_SILENT) == 1 && moves % 3 == 0)
+			    && !(pact_rank(PACT_SILENT) == 2 && moves % 2 == 0))
+			u.ublesscnt--;
 		    
 		    if(flags.time && !flags.run)
 			flags.botl = 1;
@@ -580,6 +584,8 @@ newgame()
 	for (i = 0; i < NUMMONS; i++)
 		mvitals[i].mvflags = mons[i].geno & G_NOCORPSE;
 
+	/* Slash'EM Legacy: a seeded game sets up the same way every time */
+	legacy_seed_push(-1L, 0L);
 	init_objects();		/* must be before u_init() */
 
 	flags.pantheon = -1;	/* role_init() will reset this */
@@ -593,6 +599,8 @@ newgame()
 				 * any artifacts */
 	u_init();
 	init_artifacts1();	/* must be after u_init() */
+	legacy_seed_pop();
+	lrun.inv_made = TRUE;	/* Hexed starts with the first level */
 
 #ifndef NO_SIGNAL
 	(void) signal(SIGINT, (SIG_RET_TYPE) done1);

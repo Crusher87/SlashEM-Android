@@ -15,6 +15,14 @@
 /* how a game is played */
 #define LMODE_CLASSIC	0	/* the original game; nothing carries in */
 #define LMODE_LEGACY	1	/* Lineage, locked roles and the Ward */
+#define LMODE_EXPEDITION 2	/* Legacy cut into three acts with a pot */
+#define LMODE_DAILY	3	/* today's seed; everyone starts equal */
+#define NUM_LMODES	4
+/* Lineage, vows and heirlooms apply */
+#define LINEAGE_RULES()	(lrun.mode == LMODE_LEGACY \
+			 || lrun.mode == LMODE_EXPEDITION)
+/* kits, blessings and pacts apply */
+#define LEGACY_RULES()	(LINEAGE_RULES() || lrun.mode == LMODE_DAILY)
 
 /* Lineage tracks, bought with Renown.  LIN_OPEN() says which are in the
    game so far; Fortune arrives with fate drafts. */
@@ -99,7 +107,17 @@
 #define F_BELONGINGS	47	/* recover an ancestor's belongings */
 #define F_HEIRLOOM3	48	/* carry one heirloom through three runs */
 #define F_MASTERY5	49	/* mastery 5 with any role */
-#define NUM_FEATS	50
+#define F_ACT1		50	/* Expedition: clear Act I */
+#define F_ACT2		51
+#define F_ACT3		52
+#define F_RETIRE250	53	/* retire with a pot of 250 or more */
+#define F_VOWACT1	54	/* keep a vow through Act I */
+#define F_ACT1PACT5	55	/* clear Act I at pact level 5 or higher */
+#define F_ACT1UNAIDED	56	/* clear Act I Unaided */
+#define F_STREAK7	57	/* Daily streaks */
+#define F_STREAK30	58
+#define F_GAUNTLET10	59	/* dungeon level 10 in a Sunday Gauntlet */
+#define NUM_FEATS	60
 
 /* counters kept across games */
 #define LC_SPELLS	0	/* spells cast */
@@ -183,6 +201,24 @@
 #define NUM_VOWS	12
 #define MAX_VOWS	2	/* taken in one game */
 
+/* pacts: a harder game for more Renown */
+#define PACT_FAMINE	0
+#define PACT_HORDE	1
+#define PACT_DARKNESS	2
+#define PACT_LONELY	3
+#define PACT_DEAR	4
+#define PACT_HEXED	5
+#define PACT_FRAGILE	6
+#define PACT_SWIFT	7
+#define PACT_UNWRITTEN	8
+#define PACT_ELITE	9
+#define PACT_SILENT	10
+#define PACT_STARLESS	11
+#define NUM_PACTS	12
+
+/* Expedition acts */
+#define NUM_ACTS	3
+
 /* role mastery and kits */
 #define MAX_ROLES	32
 #define MASTERY_MAX	5
@@ -249,6 +285,11 @@ struct legacy_profile {
 	struct legacy_heirloom vault[MAX_VAULT];
 	int nvault;
 	int heir_pick;			/* vault index + 1 to take, or 0 */
+	/* modes and pacts (Phase 4) */
+	xchar pacts[NUM_PACTS];		/* ranks for the next game */
+	long daily_last;		/* yyyymmdd of the last counted Daily */
+	int daily_streak;
+	int daily_best;			/* deepest level in a counted Daily */
 	boolean dirty;		/* changed since it was written */
 };
 
@@ -314,6 +355,18 @@ struct legacy_run {
 	long fleet_until;	/* the Fleet blessing's speed ends, or 0 */
 	int anc_ledger;		/* an ancestor's bones level, or 0 */
 	boolean mastery_asked;	/* the mastery 2 skill was offered */
+	/* modes and pacts (Phase 4) */
+	xchar pact[NUM_PACTS];	/* ranks taken */
+	unsigned long seed;	/* seeded levels, or 0 */
+	boolean custom;		/* a typed-in seed: no Renown, no feats */
+	long daily_date;	/* yyyymmdd of a Daily */
+	boolean daily_counts;	/* the day's first attempt */
+	boolean gauntlet;	/* a Sunday Daily */
+	int act;		/* Expedition acts cleared */
+	int act_pending;	/* an act just cleared, asked at turn end */
+	long pot;		/* the held act bonus, already multiplied */
+	boolean retired;
+	boolean inv_made;	/* the starting inventory exists */
 };
 
 /* what the last game paid, for the recap */
@@ -326,6 +379,9 @@ struct legacy_result {
 	long subtotal;		/* before the multiplier */
 	int mult;		/* multiplier, in percent */
 	int vow_pct;		/* the part of it from vows kept */
+	int pact_pct;		/* and from pacts */
+	long pot_pts;		/* Expedition pot banked */
+	long daily_pts;		/* the Daily's flat reward */
 	long total;		/* what the game paid, feats aside */
 	boolean floored;	/* raised to the minimum */
 	int lesson;		/* 0: none, 1: new, 2: met before */
@@ -346,6 +402,7 @@ extern const char *legacy_frozen_by;	/* why the hero is helpless, or 0 */
 E void NDECL(legacy_init);
 E void FDECL(legacy_write, (BOOLEAN_P));
 E boolean NDECL(legacy_mode);
+E boolean NDECL(legacy_counts);
 E boolean FDECL(legacy_role_locked, (int));
 E boolean FDECL(legacy_race_locked, (int));
 E const char *FDECL(legacy_unlock_text, (BOOLEAN_P, int));
@@ -469,6 +526,35 @@ E void NDECL(fate_vault_menu);
 E void NDECL(fate_mastery_menu);
 E int NDECL(fate_shop_cha);
 E void FDECL(fate_got_object, (struct obj *));
+
+/* modes.c */
+E boolean FDECL(modes_read, (const char *, char *));
+E void FDECL(modes_write, (FILE *));
+E int FDECL(pact_rank, (int));
+E int NDECL(pact_level);
+E int NDECL(pact_bonus);
+E void FDECL(pact_text, (char *, BOOLEAN_P));
+E void NDECL(pact_menu);
+E boolean FDECL(vow_hard_open, (int));
+E const char *FDECL(legacy_mode_name, (int));
+E void FDECL(legacy_seed_push, (long, long));
+E void NDECL(legacy_seed_pop);
+E long NDECL(legacy_rand);
+E unsigned long FDECL(legacy_hash_seed, (const char *));
+E void NDECL(modes_setup_run);
+E void NDECL(modes_newgame);
+E void NDECL(modes_turn);
+E void FDECL(modes_act_cleared, (int));
+E void FDECL(modes_arrived, (int));
+E void FDECL(modes_game_over, (int));
+E boolean FDECL(daily_prepare, (BOOLEAN_P));
+E void NDECL(modes_welcome);
+E void FDECL(daily_line, (char *));
+E int FDECL(legacy_spawn_rate, (int));
+E boolean FDECL(legacy_dark_room, (BOOLEAN_P));
+E int FDECL(legacy_hp_gain, (int));
+E long FDECL(legacy_shop_price, (long));
+E void FDECL(legacy_hex, (struct obj *));
 
 /* weapon.c */
 E const char *FDECL(legacy_skill_name, (int));

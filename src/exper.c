@@ -277,7 +277,7 @@ boolean incr;	/* true iff via incremental experience growth */
 	register int num;
 
 	if (!incr) You_feel("more experienced.");
-	num = newhp();
+	num = legacy_hp_gain(newhp());	/* Slash'EM Legacy: Fragile */
 	u.uhpmax += num;
 	u.uhp += num;
 	/* remember the gain so that losing this level takes back exactly it */

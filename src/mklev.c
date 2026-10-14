@@ -135,6 +135,7 @@ do_room_or_subroom(croom, lowx, lowy, hix, hiy, lit, rtype, special, is_room)
 	if(hix >= COLNO-1) hix = COLNO-2;
 	if(hiy >= ROWNO-1) hiy = ROWNO-2;
 
+	lit = legacy_dark_room(lit);	/* Slash'EM Legacy: Darkness */
 	if(lit) {
 		for(x = lowx-1; x <= hix+1; x++) {
 			lev = &levl[x][max(lowy-1,0)];
@@ -991,9 +992,12 @@ mklev()
 	init_mapseen(&u.uz);
 	if(getbones()) return;
 	in_mklev = TRUE;
+	/* Slash'EM Legacy: a seeded game builds each level from its own seed */
+	legacy_seed_push((long) u.uz.dnum, (long) u.uz.dlevel);
 	makelevel();
 	bound_digging();
 	mineralize();
+	legacy_seed_pop();
 	in_mklev = FALSE;
 	/* has_morgue gets cleared once morgue is entered; graveyard stays
 	   set (graveyard might already be set even when has_morgue is clear

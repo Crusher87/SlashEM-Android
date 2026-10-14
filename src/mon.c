@@ -612,6 +612,9 @@ struct monst *mon;
 	}
     }
 #endif
+    /* Slash'EM Legacy: Swift foes */
+    if (mmove && !mon->mpeaceful && !mon->mtame)
+	mmove += 2 * pact_rank(PACT_SWIFT);
 
     return mmove;
 }

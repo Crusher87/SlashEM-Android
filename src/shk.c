@@ -2494,6 +2494,7 @@ register struct monst *shkp;	/* if angry, impose a surcharge */
 	if (Role_if(PM_ROGUE)) tmp *= 2L;
 	/* samurais are from out of town... */
 	if (Role_if(PM_SAMURAI)) tmp *= 2L;
+	tmp = legacy_shop_price(tmp);	/* Slash'EM Legacy: Dear prices */
 
 	/* anger surcharge should match rile_shk's */
 	if (shkp && ESHK(shkp)->surcharge) tmp += (tmp + 2L) / 3L;

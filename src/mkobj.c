@@ -742,6 +742,8 @@ boolean artif;
 	/* unique objects may have an associated artifact entry */
 	if (objects[otyp].oc_unique && !otmp->oartifact)
 	    otmp = mk_artifact(otmp, (aligntyp)A_NONE);
+	if (init && !objects[otyp].oc_unique)
+	    legacy_hex(otmp);	/* Slash'EM Legacy: Hexed */
 	otmp->owt = weight(otmp);
 	return(otmp);
 }

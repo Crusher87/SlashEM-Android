@@ -185,6 +185,8 @@ can_make_bones()
 	    return FALSE;
 	if (no_bones_level(&u.uz))
 	    return FALSE;		/* no bones for specific levels */
+	if (lrun.seed)
+	    return FALSE;		/* Slash'EM Legacy: not from seeded games */
 	if (u.uswallow) {
 	    return FALSE;		/* no bones when swallowed */
 	}
@@ -430,6 +432,8 @@ getbones()
 #endif
 
 	if(discover)		/* save bones files for real games */
+		return(0);
+	if (lrun.seed)		/* Slash'EM Legacy: seeded maps stay the same */
 		return(0);
 
 	/* wizard check added by GAN 02/05/87 */

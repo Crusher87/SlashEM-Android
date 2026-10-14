@@ -386,7 +386,7 @@ boolean
 fate_blessed(b)
 int b;
 {
-	return (boolean) (lrun.mode == LMODE_LEGACY
+	return (boolean) (LEGACY_RULES()
 			  && (lrun.blessings & (1L << b)) != 0);
 }
 
@@ -615,7 +615,7 @@ fate_draw()
 	int rank = lrun.lineage[LIN_FAVOR], npool = 0, ndraw, keep, b, i, n;
 	char buf[BUFSZ];
 
-	if (lrun.mode != LMODE_LEGACY || rank <= 0)
+	if (!LINEAGE_RULES() || rank <= 0)
 	    return;
 	ndraw = rank + 1;
 	keep = (rank >= 3) ? 2 : 1;
@@ -699,12 +699,13 @@ int v;
 	return 0L;
 }
 
-/* may this vow be taken?  The four hard ones open with Expedition */
+/* may this vow be taken?  The four hard ones open with the feat "Keep a
+   vow through Act I" */
 STATIC_OVL boolean
 vow_open(v)
 int v;
 {
-	return (boolean) !vows[v].hard;
+	return (boolean) (!vows[v].hard || vow_hard_open(v));
 }
 
 /* the Renown bonus, in percent, from vows kept so far */
@@ -713,7 +714,7 @@ fate_vow_bonus()
 {
 	int v, pct = 0;
 
-	if (lrun.mode != LMODE_LEGACY)
+	if (!LINEAGE_RULES())
 	    return 0;
 	for (v = 0; v < NUM_VOWS; v++)
 	    if ((lrun.vows & (1 << v)) && !(lrun.vows_broken & (1 << v))
@@ -763,7 +764,7 @@ fate_vow_menu()
 		Sprintf(buf, "%s (+%d%%): never %s", vows[v].name,
 			vows[v].bonus, vows[v].never);
 		if (!vow_open(v)) {
-		    Sprintf(eos(buf), " [opens with Expedition]");
+		    Sprintf(eos(buf), " [locked: keep a vow through Act I]");
 		    add_text(win, buf);
 		} else
 		    add_choice(win, v + 1, 'a' + v, buf,
@@ -799,7 +800,7 @@ fate_setup_run()
 {
 	int v, r = flags.initrole;
 
-	if (lrun.mode != LMODE_LEGACY)
+	if (!LINEAGE_RULES())
 	    return;
 	for (v = 0; v < NUM_VOWS; v++)
 	    if ((lprof.vows & (1 << v)) && vow_open(v))
@@ -869,9 +870,17 @@ fate_welcome()
 	struct obj *obj;
 	const struct kit_def *k;
 	char buf[BUFSZ];
+	int b;
 
-	if (lrun.mode != LMODE_LEGACY)
+	if (!LEGACY_RULES())
 	    return;
+	if (lrun.mode == LMODE_DAILY)	/* the Daily's blessing */
+	    for (b = 0; b < NUM_BLESSINGS; b++)
+		if (lrun.blessings & (1L << b)) {
+		    lrun.blessings &= ~(1L << b);
+		    bless_apply(b);
+		    pline("Today's blessing: %s.", fate_bless_name(b));
+		}
 	if (lrun.kit != KIT_A && (k = find_kit(flags.initrole)) != 0)
 	    pline("You set out with kit %c, the %s.",
 		  lrun.kit == KIT_B ? 'B' : 'C', k->name[min(lrun.kit, 2)]);
@@ -886,7 +895,8 @@ fate_welcome()
 	    fate_vow_text(buf, FALSE);
 	    You("have vowed: %s.", buf);
 	}
-	mastery_skill();
+	if (LINEAGE_RULES())
+	    mastery_skill();
 	fate_draw();
 	legacy_write(FALSE);
 }
@@ -897,7 +907,7 @@ fate_turn()
 {
 	int v;
 
-	if (lrun.mode != LMODE_LEGACY)
+	if (!LEGACY_RULES())
 	    return;
 	for (v = 0; v < NUM_VOWS; v++)
 	    if ((lrun.vows & (1 << v)) && !(lrun.vows_broken & (1 << v))
@@ -1035,7 +1045,8 @@ int n;
 	int r = flags.initrole;
 
 	legacy_init();
-	if (discover || r < 0 || r >= MAX_ROLES || lprof.mastery[r] >= n)
+	if (!legacy_counts() || r < 0 || r >= MAX_ROLES
+		|| lprof.mastery[r] >= n)
 	    return;
 	lprof.mastery[r] = n;
 	lprof.dirty = TRUE;
@@ -1247,7 +1258,7 @@ fate_kit()
 	struct obj *obj;
 	int kit = lrun.kit, n;
 
-	if (lrun.mode != LMODE_LEGACY || kit == KIT_A)
+	if (!LEGACY_RULES() || kit == KIT_A)
 	    return;
 	switch (Role_switch) {
 	case PM_ARCHEOLOGIST:
@@ -1807,7 +1818,7 @@ int how;
 	char buf[BUFSZ], name[BUFSZ];
 	int n, i, slot = -2, r = flags.initrole, ench, chg, ir;
 
-	if (lrun.mode != LMODE_LEGACY || discover || how == PANICKED
+	if (!LINEAGE_RULES() || discover || how == PANICKED
 		|| how == TRICKED || deepest_lev_reached(FALSE) < 5)
 	    return;
 	for (obj = invent; obj; obj = obj->nobj)
