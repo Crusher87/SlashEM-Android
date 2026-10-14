@@ -15,7 +15,7 @@
  * PATCHLEVEL is updated for each release.
  */
 #define PATCHLEVEL      7
-#define EDITLEVEL	12
+#define EDITLEVEL	13
 #define FIXLEVEL        3
 
 #define COPYRIGHT_BANNER_A \

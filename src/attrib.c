@@ -260,6 +260,9 @@ change_luck(n)
 	u.uluck += n;
 	if (u.uluck < 0 && u.uluck < LUCKMIN)	u.uluck = LUCKMIN;
 	if (u.uluck > 0 && u.uluck > LUCKMAX)	u.uluck = LUCKMAX;
+	/* Slash'EM Legacy: the telepathy Bargain caps Luck at 8 */
+	if (lrun.fate_luckcap && u.uluck + u.moreluck > 8)
+		u.uluck = 8 - u.moreluck;
 }
 
 int

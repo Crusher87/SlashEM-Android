@@ -25,7 +25,7 @@
 #define LEGACY_RULES()	(LINEAGE_RULES() || lrun.mode == LMODE_DAILY)
 
 /* Lineage tracks, bought with Renown.  LIN_OPEN() says which are in the
-   game so far; Fortune arrives with fate drafts. */
+   game; all of them are, now that fate drafts exist. */
 #define LIN_VIGOR	0
 #define LIN_PROVISIONS	1
 #define LIN_REMEDIES	2
@@ -39,7 +39,7 @@
 #define LIN_FORTUNE	10
 #define LIN_INHERITANCE	11
 #define NUM_LINEAGE	12
-#define LIN_OPEN(t)	((t) != LIN_FORTUNE)
+#define LIN_OPEN(t)	((t) >= 0 && (t) < NUM_LINEAGE)
 #define LIN_MAXRANK	3
 
 /* landmarks: each pays Renown once per game */
@@ -219,6 +219,21 @@
 /* Expedition acts */
 #define NUM_ACTS	3
 
+/* fate drafts: the milestones that offer one */
+#define DM_ORACLE	0
+#define DM_MINETOWN	1	/* Fortune II and up */
+#define DM_SOKOBAN	2	/* Fortune II and up */
+#define DM_MINESEND	3
+#define DM_QPORTAL	4
+#define DM_MEDUSA	5	/* Fortune II and up */
+#define DM_CASTLE	6
+#define DM_VALLEY	7	/* Fortune II and up */
+#define NUM_DMILESTONES	8
+#define DT_EARLY	0	/* draft tiers */
+#define DT_MIDDLE	1
+#define DT_LATE		2
+#define MAX_FATES	64
+
 /* role mastery and kits */
 #define MAX_ROLES	32
 #define MASTERY_MAX	5
@@ -269,6 +284,7 @@ struct legacy_profile {
 	unsigned long roles_bought, races_bought;	/* by index, with Renown */
 	boolean unlock_all;	/* every role and race open in Legacy */
 	boolean skip_hall;	/* start at character selection */
+	boolean drafts_off;	/* no fate drafts */
 	int last_mode;		/* LMODE_xxx of the last game */
 	int generation;		/* games started */
 	char **lessons;		/* causes of death met so far */
@@ -367,6 +383,17 @@ struct legacy_run {
 	long pot;		/* the held act bonus, already multiplied */
 	boolean retired;
 	boolean inv_made;	/* the starting inventory exists */
+	/* fate drafts (Phase 5) */
+	long draft_seen;	/* milestones whose draft was offered */
+	long draft_pending;	/* milestones waiting for the end of the turn */
+	int act_drafts;		/* Expedition act drafts waiting, as a bitmask */
+	xchar fate[MAX_FATES];	/* fates taken */
+	int nfates;
+	int draft_skips;	/* drafts skipped, 15 Renown each */
+	boolean fate_hunger;	/* Bargain: hunger 25% faster */
+	schar fate_luck;	/* Bargain: Luck's base level moves */
+	boolean fate_luckcap;	/* Bargain: Luck can't pass 8 */
+	boolean fate_nopray;	/* Bargain: no more prayer */
 };
 
 /* what the last game paid, for the recap */
@@ -382,6 +409,7 @@ struct legacy_result {
 	int pact_pct;		/* and from pacts */
 	long pot_pts;		/* Expedition pot banked */
 	long daily_pts;		/* the Daily's flat reward */
+	long skip_pts;		/* fate drafts skipped */
 	long total;		/* what the game paid, feats aside */
 	boolean floored;	/* raised to the minimum */
 	int lesson;		/* 0: none, 1: new, 2: met before */
@@ -403,6 +431,8 @@ E void NDECL(legacy_init);
 E void FDECL(legacy_write, (BOOLEAN_P));
 E boolean NDECL(legacy_mode);
 E boolean NDECL(legacy_counts);
+E void NDECL(legacy_dump_section);
+E void FDECL(legacy_run_log, (int));
 E boolean FDECL(legacy_role_locked, (int));
 E boolean FDECL(legacy_race_locked, (int));
 E const char *FDECL(legacy_unlock_text, (BOOLEAN_P, int));
@@ -526,6 +556,14 @@ E void NDECL(fate_vault_menu);
 E void NDECL(fate_mastery_menu);
 E int NDECL(fate_shop_cha);
 E void FDECL(fate_got_object, (struct obj *));
+
+/* draft.c */
+E void FDECL(draft_milestone, (int));
+E void FDECL(draft_act, (int));
+E void NDECL(draft_turn);
+E boolean NDECL(drafts_on);
+E void FDECL(draft_fate_text, (char *, int));
+E void FDECL(draft_change_luck, (int));
 
 /* modes.c */
 E boolean FDECL(modes_read, (const char *, char *));

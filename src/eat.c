@@ -2706,6 +2706,8 @@ gethungry()	/* as time goes by - called by moveloop() and domove() */
 	    /* Slash'EM Legacy: Famine */
 	    if (pact_rank(PACT_FAMINE) && rn2(4) < pact_rank(PACT_FAMINE))
 		u.uhunger--;
+	    if (lrun.fate_hunger && !rn2(4))	/* the Strength Bargain */
+		u.uhunger--;
 	}
 
 	if (moves % 2) {	/* odd turns */

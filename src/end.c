@@ -535,6 +535,7 @@ time_t when;	/* date+time at end of game */
 	putstr(0, 0, "");
 	show_gamelog(final);
 	putstr(0, 0, "");
+	legacy_dump_section();	/* Slash'EM Legacy: mode, pacts, fates, Renown */
 
 	/*
 	 * More end-of-game sections go here.  A function that shows its
@@ -962,6 +963,7 @@ die:
 	if (how != PANICKED)
 		dump_everything(how, endtime);
 #endif
+	legacy_run_log(how);	/* Slash'EM Legacy: one line per game */
 	/* finish_paybill should be called after disclosure but before bones */
 	if (bones_ok && taken) finish_paybill();
 	/* Slash'EM Legacy: an item may go to the heirloom vault, so it

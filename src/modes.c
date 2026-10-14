@@ -648,6 +648,7 @@ int n;
 	lrun.act = n;
 	lrun.pot = act_pot();
 	lrun.act_pending = n;
+	draft_act(n);		/* one more fate draft */
 	legacy_feat(F_ACT1 + n - 1);
 	if (n == 1) {
 	    if (pact_level() >= 5)

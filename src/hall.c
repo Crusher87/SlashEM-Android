@@ -601,6 +601,9 @@ hall_settings()
 	    if (lprof.skip_hall)
 		add_text(win,
 		   "    (the end-of-game menu still leads back to the Hall)");
+	    Sprintf(buf, "[%c] Fate drafts at milestones",
+		    lprof.drafts_off ? ' ' : 'x');
+	    add_choice(win, 3, 'p', buf);
 	    add_text(win, "");
 	    add_text(win, "Insight you have earned:");
 	    for (i = 0, any = FALSE; i < NUM_INSIGHT; i++)
@@ -621,6 +624,8 @@ hall_settings()
 		lprof.unlock_all = !lprof.unlock_all;
 	    else if (pick[0].item.a_int == 2)
 		lprof.skip_hall = !lprof.skip_hall;
+	    else if (pick[0].item.a_int == 3)
+		lprof.drafts_off = !lprof.drafts_off;
 	    else if (pick[0].item.a_int >= 10)
 		lprof.ins_off[pick[0].item.a_int - 10] =
 		    !lprof.ins_off[pick[0].item.a_int - 10];
@@ -967,6 +972,11 @@ int how;
 	    Sprintf(buf, "The Ward saved you on turn %ld.", lrun.ward_turn);
 	    putstr(win, 0, buf);
 	}
+	if (lrun.nfates) {
+	    Strcpy(buf, "Fates: ");
+	    draft_fate_text(eos(buf), BUFSZ - 10);
+	    legacy_put_wrapped(win, buf);
+	}
 	if (lres.lesson) {
 	    char key[BUFSZ];
 
@@ -1016,6 +1026,11 @@ int how;
 	}
 	if (lres.lesson_pts) {
 	    money_line(buf, "New Lesson", lres.lesson_pts);
+	    putstr(win, 0, buf);
+	}
+	if (lres.skip_pts) {
+	    Sprintf(line, "Fate drafts skipped: %d", lrun.draft_skips);
+	    money_line(buf, line, lres.skip_pts);
 	    putstr(win, 0, buf);
 	}
 	if (lres.pot_pts) {
