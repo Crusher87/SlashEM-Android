@@ -13,6 +13,7 @@
 
 #include "hack.h"
 #include "dlb.h"
+#include "patchlevel.h"
 
 struct legacy_profile lprof;
 struct legacy_run lrun;
@@ -259,6 +260,7 @@ STATIC_DCL void FDECL(soko_finish, (int, BOOLEAN_P));
 STATIC_DCL boolean FDECL(lore_ok, (int));
 STATIC_DCL boolean NDECL(first_pet_alive);
 STATIC_DCL boolean NDECL(on_quest_portal_level);
+STATIC_DCL void FDECL(csv_field, (FILE *, const char *, BOOLEAN_P));
 
 /* ------------------------------------------------------------------ */
 /* the profile file */
@@ -1830,6 +1832,174 @@ int fd;
 {
 	legacy_init();
 	mread(fd, (genericptr_t) &lrun, sizeof lrun);
+}
+
+/* ------------------------------------------------------------------ */
+/* the run log: what each game did, for tuning the balance */
+
+#define LEGACY_RUNLOG	"legacy-runs.csv"
+
+static const char *const how_words[] = {
+	"died", "betrayed", "choked", "poisoned", "starved", "drowned", "burned",
+	"dissolved", "crushed", "stoned", "slimed", "genocided", "panicked",
+	"tricked", "quit", "escaped", "ascended"
+};
+
+/* the Legacy part of the dump log */
+void
+legacy_dump_section()
+{
+	char buf[BUFSZ], txt[BUFSZ];
+
+	if (!lres.valid)
+	    return;
+	Sprintf(buf, "Legacy: %s game, generation %d%s", legacy_mode_name(lrun.mode),
+		lrun.gen, lrun.custom ? ", custom seed" : "");
+	putstr(0, 0, buf);
+	legacy_help_text(txt, FALSE);
+	Sprintf(buf, "  Help: %s", txt);
+	putstr(0, 0, buf);
+	pact_text(txt, FALSE);
+	Sprintf(buf, "  Pacts: %s", txt);
+	putstr(0, 0, buf);
+	if (lrun.vows) {
+	    fate_vow_text(txt, FALSE);
+	    Sprintf(buf, "  Vows: %s (kept: +%d%%)", txt, lres.vow_pct);
+	    putstr(0, 0, buf);
+	}
+	draft_fate_text(txt, BUFSZ - 20);
+	Sprintf(buf, "  Fates: %s; drafts skipped: %d", *txt ? txt : "none",
+		lrun.draft_skips);
+	putstr(0, 0, buf);
+	if (lrun.mode == LMODE_EXPEDITION) {
+	    Sprintf(buf, "  Expedition: %d act%s cleared%s, pot %ld", lrun.act,
+		    plur(lrun.act), lrun.retired ? ", retired" : "", lrun.pot);
+	    putstr(0, 0, buf);
+	}
+	Sprintf(buf,
+		"  Renown: depth %ld, landmarks %ld, Sokoban %ld, Lesson %ld, pot %ld, skips %ld; x%d.%02d = %ld; feats %ld",
+		lres.depth_pts, lres.landmark_pts, lres.soko_pts,
+		lres.lesson_pts, lres.pot_pts, lres.skip_pts, lres.mult / 100,
+		lres.mult % 100, lres.total, lrun.feat_renown);
+	putstr(0, 0, buf);
+	putstr(0, 0, "");
+}
+
+/* a CSV field: quoted, with no quotes or line breaks inside */
+STATIC_OVL void
+csv_field(fp, s, last)
+FILE *fp;
+const char *s;
+boolean last;
+{
+	putc('"', fp);
+	for (; *s; s++)
+	    putc((*s == '"') ? '\'' : (*s == '\n' || *s == '\r') ? ' ' : *s,
+		 fp);
+	putc('"', fp);
+	putc(last ? '\n' : ',', fp);
+}
+
+/* add this game's line to legacy-runs.csv, next to the dump logs */
+void
+legacy_run_log(how)
+int how;
+{
+	FILE *fp;
+	char path[BUFSZ], txt[BUFSZ * 2], num[BUFSZ];
+	const char *dn = 0, *slash;
+	boolean fresh;
+	time_t now = getnow();
+
+	if (!lres.valid)
+	    return;
+#ifdef DUMPLOG
+	dn = dumplog_filename();
+#endif
+	if (dn && (slash = rindex(dn, '/')) != 0
+		&& (int) (slash - dn) + 2 + (int) strlen(LEGACY_RUNLOG) < BUFSZ) {
+	    (void) strncpy(path, dn, (int) (slash - dn) + 1);
+	    path[slash - dn + 1] = '\0';
+	    Strcat(path, LEGACY_RUNLOG);
+	} else
+	    Strcpy(path, fqname(LEGACY_RUNLOG, SCOREPREFIX, 0));
+	fp = fopen(path, "r");
+	fresh = (fp == 0);
+	if (fp)
+	    (void) fclose(fp);
+	if (!(fp = fopen(path, "a")))
+	    return;
+	if (fresh)
+	    fputs("date,time,version,generation,mode,custom,role,race,gender,"
+		  "alignment,kit,xl,max_hp,deepest,end_dungeon,end_level,turns,"
+		  "how,cause,help,pacts,pact_pct,vows,vow_pct,fates,"
+		  "drafts_skipped,acts,retired,pot,subtotal,multiplier,renown,"
+		  "feat_renown,ward_used,new_lesson\n", fp);
+	Sprintf(num, "%08ld", yyyymmdd(now));
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%06ld", hhmmss(now));
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%d.%d.%d-%d", VERSION_MAJOR, VERSION_MINOR,
+		PATCHLEVEL, EDITLEVEL);
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%d", lrun.gen);
+	csv_field(fp, num, FALSE);
+	csv_field(fp, legacy_mode_name(lrun.mode), FALSE);
+	csv_field(fp, lrun.custom ? "yes" : "no", FALSE);
+	csv_field(fp, urole.name.m, FALSE);
+	csv_field(fp, urace.noun, FALSE);
+	csv_field(fp, flags.female ? "female" : "male", FALSE);
+	csv_field(fp, aligns[flags.initalign >= 0 ? flags.initalign : 0].adj,
+		  FALSE);
+	csv_field(fp, lrun.kit == KIT_A ? "A" : lrun.kit == KIT_B ? "B" : "C",
+		  FALSE);
+	Sprintf(num, "%d", max(u.ulevel, u.ulevelmax));
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%d", u.uhpmax);
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%d", lres.deepest);
+	csv_field(fp, num, FALSE);
+	csv_field(fp, dungeons[u.uz.dnum].dname, FALSE);
+	Sprintf(num, "%d", depth(&u.uz));
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%ld", moves);
+	csv_field(fp, num, FALSE);
+	csv_field(fp, (how >= 0 && how < SIZE(how_words)) ? how_words[how]
+							   : "?", FALSE);
+	csv_field(fp, lres.death, FALSE);
+	legacy_help_text(txt, TRUE);
+	csv_field(fp, txt, FALSE);
+	pact_text(txt, FALSE);
+	csv_field(fp, txt, FALSE);
+	Sprintf(num, "%d", lres.pact_pct);
+	csv_field(fp, num, FALSE);
+	if (lrun.vows)
+	    fate_vow_text(txt, FALSE);
+	else
+	    Strcpy(txt, "none");
+	csv_field(fp, txt, FALSE);
+	Sprintf(num, "%d", lres.vow_pct);
+	csv_field(fp, num, FALSE);
+	draft_fate_text(txt, BUFSZ);
+	csv_field(fp, *txt ? txt : "none", FALSE);
+	Sprintf(num, "%d", lrun.draft_skips);
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%d", lrun.act);
+	csv_field(fp, num, FALSE);
+	csv_field(fp, lrun.retired ? "yes" : "no", FALSE);
+	Sprintf(num, "%ld", lres.pot_pts);
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%ld", lres.subtotal);
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%d", lres.mult);
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%ld", lres.total);
+	csv_field(fp, num, FALSE);
+	Sprintf(num, "%ld", lrun.feat_renown);
+	csv_field(fp, num, FALSE);
+	csv_field(fp, lrun.ward_used ? "yes" : "no", FALSE);
+	csv_field(fp, lres.lesson == 1 ? "yes" : "no", TRUE);
+	(void) fclose(fp);
 }
 
 /*legacy.c*/

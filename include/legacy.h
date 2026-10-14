@@ -431,6 +431,8 @@ E void NDECL(legacy_init);
 E void FDECL(legacy_write, (BOOLEAN_P));
 E boolean NDECL(legacy_mode);
 E boolean NDECL(legacy_counts);
+E void NDECL(legacy_dump_section);
+E void FDECL(legacy_run_log, (int));
 E boolean FDECL(legacy_role_locked, (int));
 E boolean FDECL(legacy_race_locked, (int));
 E const char *FDECL(legacy_unlock_text, (BOOLEAN_P, int));
