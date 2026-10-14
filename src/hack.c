@@ -2966,6 +2966,8 @@ weight_cap()
 	register long carrcap;
 
 	carrcap = 25*(ACURRSTR + ACURR(A_CON)) + 50;
+	if (fate_blessed(BL_STRONGBACK))	/* Slash'EM Legacy */
+		carrcap += carrcap / 4;
 	if (Upolyd) {
 		/* consistent with can_carry() in mon.c */
 		if (youmonst.data->mlet == S_NYMPH)

@@ -961,6 +961,9 @@ die:
 #endif
 	/* finish_paybill should be called after disclosure but before bones */
 	if (bones_ok && taken) finish_paybill();
+	/* Slash'EM Legacy: an item may go to the heirloom vault, so it
+	   never reaches the bones file */
+	fate_enshrine(how);
 
 	/* calculate score, before creating bones [container gold] */
 	{

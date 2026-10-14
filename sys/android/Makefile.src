@@ -514,7 +514,7 @@ HACKCSRC = allmain.c alloc.c apply.c artifact.c attrib.c ball.c bones.c \
 	   spell.c steal.c steed.c teleport.c timeout.c topten.c track.c trap.c \
 	   u_init.c uhitm.c vault.c version.c vision.c weapon.c were.c wield.c \
 	   windows.c wizard.c worm.c worn.c write.c zap.c \
-	   gypsy.c tech.c legacy.c hall.c codex.c insight.c
+	   gypsy.c tech.c legacy.c hall.c codex.c insight.c fate.c
 
 # all operating-system-dependent .c (for dependencies and such)
 SYSCSRC = ../sys/atari/tos.c ../sys/share/pcmain.c ../sys/share/pcsys.c \
@@ -575,7 +575,7 @@ HOBJ = $(FIRSTOBJ) allmain.o apply.o artifact.o attrib.o ball.o \
 	steal.o steed.o teleport.o timeout.o topten.o track.o trap.o u_init.o \
 	uhitm.o vault.o vision.o vis_tab.o weapon.o were.o wield.o windows.o \
 	wizard.o worm.o worn.o write.o zap.o \
-	gypsy.o tech.o legacy.o hall.o codex.o insight.o \
+	gypsy.o tech.o legacy.o hall.o codex.o insight.o fate.o \
 	$(RANDOBJ) $(SYSOBJ) $(WINOBJ) version.o
 # the .o files from the HACKCSRC, SYSSRC, and WINSRC lists
 
@@ -1193,6 +1193,7 @@ tech.o: tech.c $(HACK_H)
 legacy.o: legacy.c $(HACK_H)
 hall.o: hall.c $(HACK_H)
 codex.o: codex.c $(HACK_H)
+fate.o: fate.c $(HACK_H)
 insight.o: insight.c $(HACK_H)
 # DEPENDENCIES MUST END AT END OF FILE
 # IF YOU PUT STUFF HERE IT WILL GO AWAY

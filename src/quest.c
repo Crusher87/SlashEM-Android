@@ -203,6 +203,7 @@ struct obj *obj;	/* quest artifact; possibly null if carrying Amulet */
 			       ldrname());
 	    u.uevent.qcompleted = 1;	/* you did it! */
 	    legacy_feat(F_QUEST);
+	    fate_mastery(5);
 	    /* behave as if leader imparts sufficient info about the
 	       quest artifact */
 	    fully_identify_obj(obj);

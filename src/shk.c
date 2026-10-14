@@ -2478,12 +2478,12 @@ register struct monst *shkp;	/* if angry, impose a surcharge */
 	if (uarmh && !uarmh->oinvis && uarmh->otyp == DUNCE_CAP)
 		tmp += tmp / 3L;
 
-	if (ACURR(A_CHA) > 18)		tmp /= 2L;
-	else if (ACURR(A_CHA) > 17)	tmp -= tmp / 3L;
-	else if (ACURR(A_CHA) > 15)	tmp -= tmp / 4L;
-	else if (ACURR(A_CHA) < 6)	tmp *= 2L;
-	else if (ACURR(A_CHA) < 8)	tmp += tmp / 2L;
-	else if (ACURR(A_CHA) < 11)	tmp += tmp / 3L;
+	if (fate_shop_cha() > 18)	tmp /= 2L;
+	else if (fate_shop_cha() > 17)	tmp -= tmp / 3L;
+	else if (fate_shop_cha() > 15)	tmp -= tmp / 4L;
+	else if (fate_shop_cha() < 6)	tmp *= 2L;
+	else if (fate_shop_cha() < 8)	tmp += tmp / 2L;
+	else if (fate_shop_cha() < 11)	tmp += tmp / 3L;
 	if (tmp <= 0L) tmp = 1L;
 	else if (obj->oartifact) tmp *= 4L;
 

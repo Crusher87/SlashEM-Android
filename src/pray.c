@@ -1082,6 +1082,7 @@ pleased(g_align)
 		if (Blind) see_monsters();
 	    } else if (!(HFast & INTRINSIC))  {
 		HFast |= FROMOUTSIDE;
+		lrun.fleet_until = 0;	/* Slash'EM Legacy: keep it */
 		pline(msg, "Speed");
 	    } else if (!(HStealth & INTRINSIC))  {
 		HStealth |= FROMOUTSIDE;

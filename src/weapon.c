@@ -140,6 +140,14 @@ STATIC_DCL void FDECL(skill_advance, (int));
 		      OBJ_NAME(objects[skill_names_indices[type]]) : \
 			odd_skill_names[-skill_names_indices[type]])
 
+/* Slash'EM Legacy: a skill's name, for role mastery */
+const char *
+legacy_skill_name(skill)
+int skill;
+{
+	return P_NAME(skill);
+}
+
 static NEARDATA const char kebabable[] = {
 	S_XORN, S_DRAGON, S_JABBERWOCK, S_NAGA, S_GIANT, '\0'
 };

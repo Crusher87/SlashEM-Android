@@ -1169,7 +1169,9 @@ u_init()
 		Rogue[R_DAGGERS].trquan = rn1(10, 6);
 		Rogue[R_DARTS].trquan = rn1(10, 25);
 #ifdef FIREARMS
-		if (rn2(100) < 30) {
+		/* Slash'EM Legacy: kit B is always the pistol, kit C never */
+		if (legacy_mode() && lrun.kit != KIT_A
+			? lrun.kit == KIT_B : rn2(100) < 30) {
 			Rogue[R_DAGGERS].trotyp = PISTOL;
 			Rogue[R_DAGGERS].trquan = 1;
 			Rogue[R_DARTS].trotyp = BULLET;
@@ -1210,7 +1212,9 @@ u_init()
 		break;
 #endif /* TOURIST */
 	case PM_UNDEAD_SLAYER:
-		switch (rn2(100) / 25) {
+		/* Slash'EM Legacy: kits B and C choose the kit */
+		switch (!legacy_mode() || lrun.kit == KIT_A ? rn2(100) / 25 :
+			lrun.kit == KIT_B ? 1 : lrun.kit == KIT_C ? 0 : 2) {
 		    case 0:	/* Pistol and silver bullets */
 #ifdef FIREARMS
 			UndeadSlayer[U_MINOR].trotyp = PISTOL;
@@ -1680,16 +1684,32 @@ STATIC_OVL void
 lineage_item(otyp, quan, spe)
 int otyp, quan, spe;
 {
-	struct obj *obj = mksobj(otyp, TRUE, FALSE);
+	(void) legacy_item(otyp, quan, spe, 0);
+}
 
+/* a starting item added by Legacy, fully known: 'quan' of them, with
+   enchantment or charges 'spe' (where the type has one) and blessed if
+   'bless' is 1 */
+struct obj *
+legacy_item(otyp, quan, spe, bless)
+int otyp, quan, spe, bless;
+{
+	struct obj *obj, dummy;
+
+	/* a container starts empty */
+	dummy.otyp = otyp;
+	obj = mksobj(otyp, !Is_container(&dummy), FALSE);
 	obj->quan = (long) quan;	/* exactly this many */
 	obj->dknown = obj->bknown = obj->rknown = 1;
 	if (objects[otyp].oc_uses_known) obj->known = 1;
-	obj->cursed = obj->blessed = 0;
+	obj->cursed = 0;
+	obj->blessed = (bless == 1);
+	obj->oeroded = obj->oeroded2 = 0;
 	if (objects[otyp].oc_charged) obj->spe = spe;
 	obj->owt = weight(obj);
-	(void) addinv(obj);
+	obj = addinv(obj);
 	discover_object(otyp, TRUE, FALSE);
+	return obj;
 }
 
 void

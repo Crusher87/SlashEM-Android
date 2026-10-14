@@ -138,8 +138,8 @@ lineage_toggles()
 	add_text(win, "Tick the upgrades to use in the next game.");
 	add_text(win, "Untick them all for an Unaided game: +25% Renown.");
 	add_text(win, "");
-	for (t = 0; t < LIN_AVAILABLE; t++) {
-	    if (!lprof.lineage[t])
+	for (t = 0; t < NUM_LINEAGE; t++) {
+	    if (!LIN_OPEN(t) || !lprof.lineage[t])
 		continue;
 	    Sprintf(buf, "%s %s: %s", legacy_lineage_name(t),
 		    roman[lprof.lineage[t]],
@@ -154,8 +154,8 @@ lineage_toggles()
 	destroy_nhwindow(win);
 	if (n < 0)
 	    return;
-	for (t = 0; t < LIN_AVAILABLE; t++)
-	    if (lprof.lineage[t])
+	for (t = 0; t < NUM_LINEAGE; t++)
+	    if (LIN_OPEN(t) && lprof.lineage[t])
 		lprof.lin_off[t] = TRUE;
 	for (i = 0; i < n; i++)
 	    lprof.lin_off[pick[i].item.a_int - 1] = FALSE;
@@ -211,6 +211,14 @@ boolean fresh_heirs;
 	    } else
 		add_text(win,
 		     "Help for this game: none yet (buy Lineage in the Hall)");
+	    fate_vow_text(help, TRUE);
+	    Sprintf(buf, "Vows: %s", help);
+	    add_choice(win, 14, 'g', buf);
+	    if (lprof.nvault) {
+		fate_heir_text(help);
+		Sprintf(buf, "Heirloom: %s", help);
+		add_choice(win, 15, 'h', buf);
+	    }
 	    add_choice(win, 13, '<', "Back to the Hall");
 	    end_menu(win, "Prepare a Legacy game");
 	    n = select_menu(win, PICK_ONE, &pick);
@@ -231,12 +239,17 @@ boolean fresh_heirs;
 			break;
 	    } else if (choice == 12) {
 		lineage_toggles();
+	    } else if (choice == 14) {
+		fate_vow_menu();
+	    } else if (choice == 15) {
+		fate_heir_menu();
 	    } else {
 		legacy_selecting = FALSE;
 		return FALSE;
 	    }
 	}
 	nheirs = 0;	/* the next Prepare screen gets new heirs */
+	fate_kit_menu();	/* kit B or C, once mastery opens them */
 	lrun.mode = LMODE_LEGACY;
 	legacy_setup_run();
 	return TRUE;
@@ -262,7 +275,9 @@ lineage_shop()
 	    add_text(win, "Upgrades help Legacy games only, and each can be");
 	    add_text(win, "switched off on the Prepare screen.");
 	    add_text(win, "");
-	    for (t = 0; t < LIN_AVAILABLE; t++) {
+	    for (t = 0; t < NUM_LINEAGE; t++) {
+		if (!LIN_OPEN(t))
+		    continue;
 		r = lprof.lineage[t];
 		if (r >= LIN_MAXRANK) {
 		    Sprintf(buf, "%s III (complete): %s",
@@ -663,11 +678,14 @@ legacy_startup()
 		       "Play Legacy: a hard start that eases as your line grows");
 	    add_choice(win, 2, 'b', "Play Classic: the original game, no help");
 	    add_choice(win, 3, 'c', "Lineage: spend Renown on upgrades");
-	    add_choice(win, 4, 'd', "Roles and races");
-	    add_choice(win, 5, 'e', "Feats");
-	    add_choice(win, 6, 'f', "Ancestors");
-	    add_choice(win, 9, 'g', "The Codex and Insight");
-	    add_choice(win, 7, 'h', "Settings");
+	    add_choice(win, 10, 'd', "Blessings: grow the pool Favor draws from");
+	    add_choice(win, 4, 'e', "Roles and races");
+	    add_choice(win, 11, 'f', "Role mastery and kits");
+	    add_choice(win, 5, 'g', "Feats");
+	    add_choice(win, 6, 'h', "Ancestors");
+	    add_choice(win, 12, 'i', "The heirloom vault");
+	    add_choice(win, 9, 'j', "The Codex and Insight");
+	    add_choice(win, 7, 'k', "Settings");
 	    add_choice(win, 8, 'q', "Quit");
 	    Sprintf(buf, "The Hall of %s's line", plname);
 	    end_menu(win, buf);
@@ -710,6 +728,15 @@ legacy_startup()
 		break;
 	    case 9:
 		codex_menu(TRUE);
+		break;
+	    case 10:
+		fate_bless_shop();
+		break;
+	    case 11:
+		fate_mastery_menu();
+		break;
+	    case 12:
+		fate_vault_menu();
 		break;
 	    default:
 		hall_active = FALSE;
@@ -852,7 +879,13 @@ int how;
 	    putstr(win, 0, buf);
 	}
 	if (lres.mult != 100) {
-	    Sprintf(buf, "  Unaided: everything above x%d.%02d",
+	    *line = '\0';
+	    if (lrun.unaided)
+		Strcpy(line, "Unaided +25%");
+	    if (lres.vow_pct)
+		Sprintf(eos(line), "%svows kept +%d%%", *line ? ", " : "",
+			lres.vow_pct);
+	    Sprintf(buf, "  %s: everything above x%d.%02d", line,
 		    lres.mult / 100, lres.mult % 100);
 	    putstr(win, 0, buf);
 	}
